@@ -1,0 +1,20 @@
+[project]
+name = "storycraft"
+version = "0.1.0"
+description = "LLMで日本語小説シリーズを最後まで書き切る道具"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "openai>=1.50",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+storycraft = "storycraft.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/storycraft"]
