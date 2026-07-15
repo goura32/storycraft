@@ -862,6 +862,125 @@ output/
 
 ## 9. KDP向けの扱い
 
-初巻を無料導入巻として扱うが、KDPでの無料配布の実現方法は、公開時点のKDP規約と販促制度に従う。
+初巻を無料導入巻として扱うが、KDPでの無料配布の実現方法は、公開時点のKDP規則と販促制度に従う。
 
 初期版はKDPへの自動入稿を行わない。出力したMarkdownを利用者が確認・整形して公開する。
+
+## 10. コマンドライン操作
+
+サブコマンドは `run`・`resume`・`step` の三つだけに絞る。対話は一切行わない。すべての入力はファイルとフラグで済ませる。
+
+### 10.1 企画ファイル
+
+初回実行時に渡す企画は、構造化したYAMLファイルである。§1の入力項目と1対1で対応する。
+
+```yaml
+# brief.yaml
+title: 仮題
+genre: ジャンルと雰囲気
+protagonist: 主人公
+key_people: 重要人物
+want: 起きてほしいこと
+avoid: 避けたいこと
+ending: 最後にどう終えたいか
+volumes: 5        # 省略可。省略時はLLMが4〜10から選ぶ
+```
+
+`volumes`を省略した場合、LLMが5巻を第一候補に4〜10巻から選ぶ（§1）。
+
+### 10.2 設定ファイル
+
+`llm`・`retry`・`quality`の各値はデフォルトを同梱する。必要なときだけ設定ファイルで上書きする。
+
+```yaml
+# config.yaml（オプション）
+llm:
+  base_url: http://ws1.local:11434/v1
+  model: qwen3.6:35b-a3b-mtp-q4_K_M
+retry:
+  max_attempts: 4
+quality:
+  max_improvement_passes: 1
+  content_length_target_chars: 2200
+  content_length_tolerance_chars: 400
+output:
+  dir: ./storycraft-out
+```
+
+### 10.3 作業・出力ディレクトリ
+
+`--out`は作業状態とMarkdown出力の両方を格納するルートである（§7の保存対象と§8の出力を同一ディレクトリ配下で管理する）。既定値の決定順は次である。
+
+1. コマンドラインの`--out`フラグ
+2. 設定ファイルの`output.dir`
+3. いずれも無い場合は `./storycraft-out`
+
+### 10.4 サブコマンド
+
+| コマンド | 役割 | 必須引数 |
+|---|---|---|
+| `storycraft run` | 企画から全パイプラインを一括実行する | `--brief` |
+| `storycraft resume` | 作業ディレクトリから、最後に完了した場面の次へ再開する | `--out` |
+| `storycraft step` | 次の未完了ステージを1つだけ実行する（動作確認用） | `--out` |
+
+共通の任意引数：
+
+- `--out DIR`：作業・出力ディレクトリ（既定は§10.3）
+- `--config CFG`：設定ファイル（省略時は同梱デフォルト）
+
+### 10.5 run
+
+企画から最終巻の出力までを連続実行する。
+
+```
+storycraft run --brief brief.yaml --out output/ --config config.yaml
+```
+
+`--brief`は初回実行時に必須。`--out`に既存の作業ディレクトリを指定した場合は、未完了の状態から続行する（実行前に確認はしない）。
+
+### 10.6 resume
+
+停止した実行を続ける。最後に完了した場面の次の場面から再開し、その巻の残りと以降の巻を順に実行する。
+
+```
+storycraft resume --out output/
+```
+
+`--brief`は不要。`--out`に指定したディレクトリの保存状態（§7）から再開する。
+
+### 10.7 step
+
+動作確認用に、次の未完了ステージを1つだけ実行して停止する。`run`の前に各ステージの動作を個別に確認したい場合に使う。
+
+```
+storycraft step --out output/
+storycraft step --out output/ --stage scenes
+```
+
+- 引数なし：`run`と同じ順序で、まだ完了していない最初のステージを1つ実行する。
+- `--stage NAME`：指定したステージを強制的に1つ実行する。既に完了済みのステージでも再実行する。
+
+ステージの列挙（§5 の依頼単位に対応）：
+
+1. `plan`：全巻計画
+2. `characters`：登場人物・関係カード
+3. `world`：世界・場所・組織・重要物の台帳
+4. `timeline`：時間・期限台帳
+5. `threads`：伏線・重要イベント台帳
+6. `volume-plan`：巻の章一覧
+7. `scene-cards`：章の場面カード
+8. `scenes`：場面執筆と改善（1章分または指定範囲）
+9. `volume-summary`：巻の要約
+10. `closure-check`：完結前の台帳確認
+11. `output`：Markdown出力
+
+`step`は各ステージの前にLLM呼び出しの入出力を標準出力へ詳しく出し、1ステージごとにユーザーが結果を確認できる。
+
+### 10.8 first-release の範囲
+
+凝らないため、first-release は次の範囲に留める。
+
+- 1つの企画ファイルから全パイプラインを一括実行（`run`）
+- 改善ステージ（標準）を含む
+- `resume`・`step`は同時に実装し、動作確認と中断再開をカバーする
+- モデル切り替えUI、並列実行、Web UI、EPUB生成、KDP入稿は入れない
