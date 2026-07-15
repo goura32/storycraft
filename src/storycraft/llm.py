@@ -77,12 +77,12 @@ class LLMClient:
         )
         try:
             stream = self.client.chat.completions.create(
-                model=llm["model"],
-                messages=[m for m in messages if not (isinstance(m, dict) and "__" in "".join(m.keys()))],  # type: ignore[list-item]
-                response_format=response_format,
-                stream=True,
-                extra_body={"think": bool(llm.get("thinking", True)), "seed": seed},
-            )
+                            model=llm["model"],
+                            messages=[m for m in messages if not (isinstance(m, dict) and "__" in "".join(m.keys()))],  # type: ignore[list-item]
+                            response_format=response_format,
+                            stream=True,
+                            extra_body={"think": bool(llm.get("thinking", True)), "seed": seed},
+                        )
             first_event_timeout = llm.get("first_event_timeout_seconds", 3600)
             idle_timeout = llm.get("idle_timeout_seconds", 600)
             last_recv = time.time()

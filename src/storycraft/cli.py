@@ -52,9 +52,14 @@ def cmd_run(args) -> None:
 
 def cmd_resume(args) -> None:
     settings, out_root, state, pipe = _build(None, args.out, args.config)
-    if not state.data.get("brief") and "brief" not in state.data:
-        # brief が無い場合は state.json から復元を試みる
-        pass
+    if not state.data.get("brief"):
+        # state.json から brief を復元
+        brief = state.load_json("brief")
+        if not brief:
+            logger.error("企画(brief)が見つかりません。--brief を指定して run してください。")
+            return
+        state.data["brief"] = brief
+        state.save()
     _run_full(pipe, state, out_root, args)
 
 
@@ -150,16 +155,17 @@ def cmd_step(args) -> None:
 
 
 def _run_scenes_forced(pipe, state, args) -> None:
-    vol = args.chapter or 1
+    vol = args.volume or 1
+    ch = args.chapter
     chapters = state.load_json(f"volume_{vol:02d}_chapters")
-    ch_nums = [c["chapter_number"] for c in chapters.get("chapters", [])]
-    if not ch_nums:
+    if not chapters or not chapters.get("chapters"):
         logger.error("巻 %d の章がありません。", vol)
         return
-    ch = ch_nums[0]
+    if ch is None:
+        ch = chapters["chapters"][0]["chapter_number"]
     rng = None
-    if args.chapter_range:
-        lo, hi = (int(x) for x in args.chapter_range.split("-"))
+    if args.scene_range:
+        lo, hi = (int(x) for x in args.scene_range.split("-"))
         rng = (lo, hi)
     pipe.stage_scenes(vol, ch, rng)
 
@@ -209,8 +215,9 @@ def main() -> None:
     p_step.add_argument("--brief", default=None, help="初回企画JSON（初回のみ）")
     p_step.add_argument("--config", default=None, help="config.yaml")
     p_step.add_argument("--stage", default=None, help="強制実行するステージ名")
-    p_step.add_argument("--chapter", type=int, default=None, help="対象巻 (scenes用)")
-    p_step.add_argument("--chapter-range", default=None, help="場面範囲 M-N (scenes用)")
+    p_step.add_argument("--volume", type=int, default=None, help="対象巻 (scenes用)")
+    p_step.add_argument("--chapter", type=int, default=None, help="対象章 (scenes用)")
+    p_step.add_argument("--scene-range", default=None, help="場面範囲 M-N (scenes用)")
     p_step.set_defaults(func=cmd_step)
 
     args = ap.parse_args()

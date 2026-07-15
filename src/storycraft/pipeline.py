@@ -72,27 +72,28 @@ class Pipeline:
         if max_attempts is None:
             max_attempts = self.s.retry.get("max_attempts", 4)
         full_user = f"{user_p}\n\n【この呼び出し専用JSON Schema】\n{schema}\n\n必ずJSONオブジェクトだけを返してください。"
-        for i in range(max_attempts):
-            self.attempt += 1
-            seed = self.base_seed + self.attempt
-            meta = {"__kind": kind, "__phase": phase, "__ref": ref, "__attempt": i + 1}
+        # refごとに決定論的なシード系列を生成
+        ref_seed_base = self.base_seed + (abs(hash(ref)) % 1000000)
+        for attempt in range(max_attempts):
+            seed = ref_seed_base + attempt
+            meta = {"__kind": kind, "__phase": phase, "__ref": ref, "__attempt": attempt + 1}
             messages = [{"role": "system", "content": sys_p}, meta, {"role": "user", "content": full_user}]
-            logger.info("[%s] %s 試行%d (seed=%d)", phase, ref, i + 1, seed)
+            logger.info("[%s] %s 試行%d (seed=%d)", phase, ref, attempt + 1, seed)
             rec = self.llm.call_once(messages, {"type": "json_object"}, seed)
             self.llm.save_raw(rec, messages)
             if rec.error:
-                logger.warning("  -> 呼び出し失敗: %s", rec.error)
+                logger.warning("  -> 呼び出し失敗 (seed=%d): %s", seed, rec.error)
                 continue
             try:
                 obj = _parse_json(rec.content)
             except json.JSONDecodeError as e:
-                logger.warning("  -> JSON解析失敗: %s", e)
+                logger.warning("  -> JSON解析失敗 (seed=%d): %s", seed, e)
                 continue
             if validator:
                 try:
                     validator(obj, allowed_ids or set())
                 except Exception as e:  # noqa: BLE001
-                    logger.warning("  -> 検証失敗: %s", e)
+                    logger.warning("  -> 検証失敗 (seed=%d): %s", seed, e)
                     continue
             return obj
         return None
@@ -275,11 +276,18 @@ class Pipeline:
                                 validator=validate_scene_response, allowed_ids=allowed_ids)
                 if imp is None:
                     continue
-                # 計測可能な軸で悪化していないか簡易判定: 必須イベント含む・文字数目安
+                # 計測可能な軸で悪化していないか判定（仕様 §3.13）
+                # 1. 文字数目安
                 target = self.s.quality.get("content_length_target_chars", 2200)
                 tol = self.s.quality.get("content_length_tolerance_chars", 400)
-                if (target - tol) <= len(imp.get("content", "")) <= (target + tol):
-                    best = imp
+                content = imp.get("content", "")
+                if not (target - tol) <= len(content) <= (target + tol):
+                    continue
+                # 2. 必須イベント（required_events）の含有
+                required = card.get("required_events", [])
+                if required and not all(ev in content for ev in required if ev):
+                    continue
+                best = imp
             self.state.save_scene(vol, ch, sc_num, best)
             self.state.data["last_handoff"] = best.get("handoff_summary", "")
             self.state.mark_last_scene(ref)
@@ -291,8 +299,7 @@ class Pipeline:
         chapters = self.state.load_json(f"volume_{vol:02d}_chapters")
         for ch in chapters.get("chapters", []):
             ch_num = ch.get("chapter_number")
-            scenes = self.state.load_scene(vol, ch_num, 1)
-            # 最後の場面の handoff を取得（簡易: 章内全場面の最後）
+            # 最後の場面の handoff を取得
             d = self.state.scene_dir / f"volume-{vol:02d}" / f"chapter-{ch_num:02d}"
             if d.exists():
                 files = sorted(d.glob("scene-*.json"))

@@ -3,7 +3,7 @@ name = "storycraft"
 version = "0.1.0"
 description = "LLMで日本語小説シリーズを最後まで書き切る道具"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "openai>=1.50",
     "pyyaml>=6.0",

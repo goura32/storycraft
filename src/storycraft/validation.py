@@ -51,10 +51,11 @@ def check_enum(value: str, allowed: set[str]) -> str:
 THREAD_ACTION_ENUM = {"導入", "進展", "回収"}
 THREAD_STATUS_ENUM = {"未導入", "進行中", "回収済み"}
 TIMELINE_STATUS_ENUM = {"予定", "進行中", "完了", "失効"}
-UPDATE_FIELD_ENUM = {
+CHARACTER_UPDATE_FIELD_ENUM = {
     "current_goal", "current_pressure", "current_location",
-    "current_condition", "current_knowledge", "current_state",
+    "current_condition", "current_knowledge",
 }
+ENTITY_UPDATE_FIELD_ENUM = {"current_state"}
 
 
 def validate_scene_response(obj: Any, allowed_ids: set[str]) -> None:
@@ -69,12 +70,12 @@ def validate_scene_response(obj: Any, allowed_ids: set[str]) -> None:
         check_enum(u["action"], THREAD_ACTION_ENUM)
     for u in obj["character_updates"]:
         check_id_in(u["character_id"], allowed_ids)
-        check_enum(u["field"], UPDATE_FIELD_ENUM)
+        check_enum(u["field"], CHARACTER_UPDATE_FIELD_ENUM)
     for u in obj["relationship_updates"]:
         check_id_in(u["relationship_id"], allowed_ids)
     for u in obj["entity_updates"]:
         check_id_in(u["entity_id"], allowed_ids)
-        check_enum(u["field"], UPDATE_FIELD_ENUM)
+        check_enum(u["field"], ENTITY_UPDATE_FIELD_ENUM)
     for u in obj["timeline_updates"]:
         check_id_in(u["timeline_id"], allowed_ids)
         check_enum(u["status"], TIMELINE_STATUS_ENUM)
