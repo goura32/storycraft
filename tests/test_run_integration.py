@@ -14,10 +14,12 @@ from pathlib import Path
 # テスト対象を import する前に stub を当てるため、ここでパッチを仕込む
 FIX = {
     "plan": {
-        "volume_count": 1,
+        "volume_count": 2,
         "volumes": [
             {"number": 1, "title": "霧の端点の灯", "premise": "灯台守の娘の物語",
-             "main_threads": ["thread-01"], "arc": "喪失と再構築"}
+             "main_threads": ["thread-01"], "arc": "喪失と再構築"},
+            {"number": 2, "title": "霧晴れの灯", "premise": "真実の受容",
+             "main_threads": ["thread-01"], "arc": "再構築と平和"},
         ],
     },
     "characters": {
@@ -145,7 +147,9 @@ def main() -> int:
     # 検証
     state = State.load(out / "state")
     required_done = ["plan", "characters", "world", "timeline", "threads",
-                     "volplan-1", "cards-1.1", "scenes-1.1", "volsum-1", "closure", "output"]
+                     "volplan-1", "cards-1.1", "scenes-1.1", "volsum-1",
+                     "volplan-2", "cards-2.1", "scenes-2.1", "volsum-2",
+                     "closure", "output"]
     missing = [s for s in required_done if not state.is_stage_done(s)]
     if missing:
         print(f"FAIL: 未完了ステージ: {missing}")
@@ -153,13 +157,15 @@ def main() -> int:
         return 1
 
     vol_md = out / "volume-01.md"
+    vol2_md = out / "volume-02.md"
     series_md = out / "series.md"
-    if not vol_md.exists() or not series_md.exists():
-        print(f"FAIL: 出力なし vol={vol_md.exists()} series={series_md.exists()}")
+    if not vol_md.exists() or not vol2_md.exists() or not series_md.exists():
+        print(f"FAIL: 出力なし vol1={vol_md.exists()} vol2={vol2_md.exists()} series={series_md.exists()}")
         return 1
 
     content = vol_md.read_text(encoding="utf-8")
-    if "潮の香り" not in content:
+    content2 = vol2_md.read_text(encoding="utf-8")
+    if "潮の香り" not in content or "潮の香り" not in content2:
         print("FAIL: 場面本文が Markdown に含まれない")
         return 1
 
