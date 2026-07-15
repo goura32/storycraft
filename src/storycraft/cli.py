@@ -77,6 +77,9 @@ def _run_full(pipe: Pipeline, state: State, out_root: Path, args) -> None:
                 return
             state.set_stage_done(st)
 
+    # plan 実行後に巻数を再評価（from-scratch run ではここで初めて確定）
+    plan = state.load_json("series_plan")
+    vol_count = plan.get("volume_count", 0) if plan else 0
     if not vol_count:
         logger.error("全巻計画が未作成です。")
         return
