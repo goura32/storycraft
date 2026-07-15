@@ -51,7 +51,8 @@ def write_output(state: Any, out_root: Path) -> None:
     vol_count = plan.get("volume_count", 0)
     chapters_by_vol: dict[int, list] = {}
     for vol in range(1, vol_count + 1):
-        chapters_by_vol[vol] = state.load_json(f"volume_{vol:02d}_chapters") or []
+        chapters = state.load_json(f"volume_{vol:02d}_chapters")
+        chapters_by_vol[vol] = chapters.get("chapters", []) if isinstance(chapters, dict) else []
     out_root.mkdir(parents=True, exist_ok=True)
     for vol in range(1, vol_count + 1):
         md = build_volume_markdown(plan, chapters_by_vol.get(vol, []), state.scene_dir, vol)

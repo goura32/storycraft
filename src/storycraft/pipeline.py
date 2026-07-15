@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,23 @@ BASE_SEED = 1000
 
 
 def _parse_json(rec_content: str) -> dict:
-    return json.loads(rec_content)
+    text = rec_content.strip()
+    # コードブロック (```json ... ```) を除去
+    if text.startswith("```"):
+        # 最初の改行までと最後の ``` を削る
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        text = text.strip()
+    # 前後に余計な文字があれば最初の { と最後の } で挟む
+    if not text.startswith("{"):
+        start = text.find("{")
+        if start >= 0:
+            text = text[start:]
+    if not text.endswith("}"):
+        end = text.rfind("}")
+        if end >= 0:
+            text = text[: end + 1]
+    return json.loads(text)
 
 
 STAGES = [
