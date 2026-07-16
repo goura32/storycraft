@@ -98,6 +98,7 @@ FIX = {
 def _fake_ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None, log_prefix=None):
     # 実際の _ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None)
     # ref は unit 名: "series" / "all" / "chapters" / "cards" / "sc1" / "summary" / "check"
+    # 改善パス: "series.crit1" / "series.fix1" 等
     if ref == "series":
         return FIX["plan"]
     if ref == "all":
@@ -116,6 +117,34 @@ def _fake_ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, all
         return FIX["volsum"]
     if ref == "check":
         return FIX["closure"]
+    # 改善パス用: critique/fix の ref は "xxx.crit1", "xxx.fix1" 等
+    if ".crit" in ref:
+        # 批評用のフィクスチャを返す（簡易版）
+        return {"issues": [], "overall_assessment": "問題なし"}
+    if ".fix" in ref:
+        # 修正用のフィクスチャを返す（元のFIXと同じ構造で良い）
+        # kindに応じて適切なFIXを返す
+        if "plan" in ref or "series" in ref:
+            return FIX["plan"]
+        if "characters" in ref:
+            return FIX["characters"]
+        if "world" in ref:
+            return FIX["world"]
+        if "timeline" in ref:
+            return FIX["timeline"]
+        if "threads" in ref:
+            return FIX["threads"]
+        if "volplan" in ref or "chapters" in ref:
+            return FIX["volplan"]
+        if "cards" in ref:
+            return FIX["cards"]
+        if "scenes" in ref or "sc" in ref:
+            return FIX["scenes"]
+        if "volsum" in ref or "summary" in ref:
+            return FIX["volsum"]
+        if "closure" in ref or "check" in ref:
+            return FIX["closure"]
+        return FIX["plan"]
     raise AssertionError(f"no fixture for kind={kind!r} phase={phase!r} ref={ref!r}")
 
 

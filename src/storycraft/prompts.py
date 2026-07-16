@@ -281,23 +281,22 @@ def closure_check(threads: dict, scene_updates: list, handoffs: list) -> tuple[s
     return sys_p, user_p, RESPONSE_FORMAT, schema
 
 
-# §3.13 二段階改善: 批評
+# §3.13 二段階改善: 批評（汎用版・全ステージ対応）
 def critique(current: dict, card: dict, directions: list) -> tuple[str, str, dict, str]:
-    sys_p = "あなたは小説の批評家です。与えられた場面本文の問題点を抽出し、改善提案を出します。JSONオブジェクトだけを返してください。"
+    sys_p = "あなたはJSON構造の品質評価者です。与えられたJSONオブジェクトの自由文フィールドを批評し、問題点と改善提案を出します。JSONオブジェクトだけを返してください。"
     user_p = (
-        f"次の場面本文（草稿）を批評してください。\n\n草稿: {_fmt(current)}\n場面カード: {_fmt(card)}\n"
+        f"次のJSONオブジェクト（草稿）を批評してください。\n\n草稿: {_fmt(current)}\n"
+        f"文脈情報: {_fmt(card)}\n"
         f"改善の方向: {_fmt(directions)}\n"
-        "以下の観点で問題点を列挙してください:\n"
+        "以下の観点で自由文フィールドの問題点を列挙してください:\n"
         "- 日本語として自然か（中国語的表現・不要な外来語の混入・用語の揺れ）\n"
-        "- 視点人物・読者への開示範囲・秘密の隠し方を守っているか\n"
-        "- 人物の話し方と一貫した行動を保っているか\n"
-        "- 情報は行動・対立・会話・観察を通じて示され、地の文だけで説明していないか\n"
-        "- 必須イベントが含まれているか\n"
-        "- 文字数は目安帯（1,800〜2,600字）に収まっているか\n"
+        "- 情報の正確性・一貫性・具体性\n"
+        "- 論理的整合性・矛盾の有無\n"
+        "- 表現の明確さ・冗長さ\n"
         "返すJSON:\n"
         "{\n"
-        '  "issues": [{"severity": "致命的|重要|軽微", "category": "台詞|地文|構成|情報制御|その他", '
-        '"location": "該当箇所の目安", "problem": "何が問題か", "suggestion": "どう直すべきか"}],\n'
+        '  "issues": [{"severity": "致命的|重要|軽微", "category": "表現|論理|用語|構成|その他", '
+        '"location": "該当フィールド名や箇所の目安", "problem": "何が問題か", "suggestion": "どう直すべきか"}],\n'
         '  "overall_assessment": "全体的な所見（良い点・悪い点の要約")}\n'
     )
     schema = (
@@ -308,20 +307,19 @@ def critique(current: dict, card: dict, directions: list) -> tuple[str, str, dic
     return sys_p, user_p, RESPONSE_FORMAT, schema
 
 
-# §3.13 二段階改善: 修正
+# §3.13 二段階改善: 修正（汎用版・全ステージ対応）
 def fix(current: dict, critique_result: dict, card: dict, directions: list) -> tuple[str, str, dict, str]:
-    sys_p = "あなたは小説家です。批評結果に従って場面本文を修正します。同じJSON構造で返してください。JSONオブジェクトだけを返してください。"
+    sys_p = "あなたはJSON構造の改善者です。批評結果に従ってJSONオブジェクトを修正します。同じJSON構造で返してください。JSONオブジェクトだけを返してください。"
     user_p = (
-        f"次の場面本文（草稿）を、批評結果に従って修正してください。\n\n草稿: {_fmt(current)}\n批評結果: {_fmt(critique_result)}\n"
-        f"場面カード: {_fmt(card)}\n改善の方向: {_fmt(directions)}\n"
+        f"次のJSONオブジェクト（草稿）を、批評結果に従って修正してください。\n\n草稿: {_fmt(current)}\n批評結果: {_fmt(critique_result)}\n"
+        f"文脈情報: {_fmt(card)}\n改善の方向: {_fmt(directions)}\n"
         "草稿を床として、計測可能な軸で悪化しない範囲で修正してください。\n"
-        "本文・handoff_summary・各更新のJSON構造はそのまま維持してください。\n"
-        "批評で指摘された問題点を優先的に解決し、構造項目（ID・enum・必須項目）は絶対に変更しないでください。\n"
+        "全フィールドのJSON構造はそのまま維持してください。\n"
+        "批評で指摘された問題点を優先的に解決し、構造項目（ID・enum・必須項目・キー構造）は絶対に変更しないでください。\n"
         "返すJSONは草稿と同じ構造で返してください。"
     )
     schema = (
-        "必須: content(str), handoff_summary(str), thread_updates(list), character_updates(list), "
-        "relationship_updates(list), entity_updates(list), timeline_updates(list)\n"
-        "※ 批評で指摘された問題を解消し、構造・ID・enumは変更しないこと"
+        "必須: 元の草稿と同じキー構造\n"
+        "※ 批評で指摘された問題を解消し、構造・ID・enum・キー構造は変更しないこと"
     )
     return sys_p, user_p, RESPONSE_FORMAT, schema

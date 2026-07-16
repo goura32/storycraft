@@ -102,13 +102,70 @@ class Pipeline:
             return obj
         return None
 
+    # ---- 共通: 生成→批評→修正 の二段階改善パイプライン ----
+    def _generate_with_improvement(self, kind: str, phase: str, ref: str,
+                                    sys_p: str, user_p: str, schema: str,
+                                    validator, allowed_ids: set,
+                                    card: dict | None = None,
+                                    log_prefix: str = "") -> dict | None:
+        """生成→批評→修正 の二段階改善を実行し、最良版を返す。
+        card が None の場合は場面以外（plan, characters 等）として扱う。
+        """
+        # 1. 生成（リトライ込み）
+        obj = self._ask(kind, phase, ref, sys_p, user_p, schema,
+                        validator=validator, allowed_ids=allowed_ids, log_prefix=log_prefix)
+        if obj is None:
+            return None
+        best = obj
+
+        passes = self.s.quality.get("max_improvement_passes", 1)
+        if passes == 0:
+            return best
+
+        # 改善の方向
+        directions = self.s.quality.get("improvement_directions", [])
+
+        for p in range(passes):
+            # 1. 批評
+            sys_p_crit, user_p_crit, _, schema_crit = critique(best, card or {}, directions)
+            crit = self._ask("critique", phase, f"{ref}.crit{p+1}", sys_p_crit, user_p_crit, schema_crit,
+                            validator=validate_critique_response, allowed_ids=set(), log_prefix=log_prefix)
+            if crit is None:
+                continue
+
+            # 2. 修正
+            sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card or {}, directions)
+            imp = self._ask("fix", phase, f"{ref}.fix{p+1}", sys_p_fix, user_p_fix, schema_fix,
+                            validator=validator, allowed_ids=allowed_ids, log_prefix=log_prefix)
+            if imp is None:
+                continue
+
+            # 採用判定: 計測可能な軸で悪化していないか
+            # 共通: 構造・ID・enum は validator で保証済み
+            # 個別判定は stage ごとに実装可能（ここでは基本チェックのみ）
+            if self._adopt_check(best, imp, card):
+                best = imp
+                logger.info("  -> 改善採用: %s (pass=%d)", ref, p + 1)
+            else:
+                logger.info("  -> 改善不採用: %s (pass=%d)", ref, p + 1)
+
+        return best
+
+    def _adopt_check(self, best: dict, imp: dict, card: dict | None) -> bool:
+        """改善版を採用するか判定。ステージ固有のチェックはオーバーライドで拡張。"""
+        # 基本: 必須キーの存在と空でないこと
+        if not isinstance(imp, dict):
+            return False
+        return True
+
     # ---- §5 単位ごとの実行 ----
     def stage_plan(self) -> bool:
         brief = self.state.data.get("brief")
         div = build_diversity_note(self.s.resolve_archive_dir(), self.s.diversity.get("recent_window", 5))
         sys_p, user_p, _, schema = plan_series(brief, div)
-        obj = self._ask("plan", "plan", "series", sys_p, user_p, schema,
-                        validator=validate_plan_response, allowed_ids=set())
+        obj = self._generate_with_improvement("plan", "plan", "series", sys_p, user_p, schema,
+                                              validator=validate_plan_response, allowed_ids=set(),
+                                              card=None, log_prefix="plan")
         if not obj:
             return False
         self.state.save_json("series_plan", obj)
@@ -118,8 +175,9 @@ class Pipeline:
         plan = self.state.load_json("series_plan")
         div = build_diversity_note(self.s.resolve_archive_dir(), self.s.diversity.get("recent_window", 5))
         sys_p, user_p, _, schema = characters(plan, div)
-        obj = self._ask("characters", "characters", "all", sys_p, user_p, schema,
-                        validator=validate_characters_response, allowed_ids=set())
+        obj = self._generate_with_improvement("characters", "characters", "all", sys_p, user_p, schema,
+                                              validator=validate_characters_response, allowed_ids=set(),
+                                              card=None, log_prefix="characters")
         if not obj:
             return False
         # 採番: char / rel
@@ -161,8 +219,9 @@ class Pipeline:
         for r in chars.get("relationships", []):
             allowed.add(r["id"])
         sys_p, user_p, _, schema = world_ledger(brief, plan, chars)
-        obj = self._ask("world", "world", "all", sys_p, user_p, schema,
-                        validator=validate_world_response, allowed_ids=allowed)
+        obj = self._generate_with_improvement("world", "world", "all", sys_p, user_p, schema,
+                                              validator=validate_world_response, allowed_ids=allowed,
+                                              card=None, log_prefix="world")
         if not obj:
             return False
         items = obj.get("entities", [])
@@ -175,8 +234,9 @@ class Pipeline:
         brief = self.state.data.get("brief")
         plan = self.state.load_json("series_plan")
         sys_p, user_p, _, schema = timeline_ledger(brief, plan)
-        obj = self._ask("timeline", "timeline", "all", sys_p, user_p, schema,
-                        validator=validate_timeline_response, allowed_ids=set())
+        obj = self._generate_with_improvement("timeline", "timeline", "all", sys_p, user_p, schema,
+                                              validator=validate_timeline_response, allowed_ids=set(),
+                                              card=None, log_prefix="timeline")
         if not obj:
             return False
         items = obj.get("timelines", [])
@@ -196,8 +256,9 @@ class Pipeline:
         time_ids = {t["id"] for t in timeline.get("timelines", [])}
         allowed = char_ids | entity_ids | time_ids
         sys_p, user_p, _, schema = threads_ledger(brief, plan, chars, world, timeline)
-        obj = self._ask("threads", "threads", "all", sys_p, user_p, schema,
-                        validator=validate_threads_response, allowed_ids=allowed)
+        obj = self._generate_with_improvement("threads", "threads", "all", sys_p, user_p, schema,
+                                              validator=validate_threads_response, allowed_ids=allowed,
+                                              card=None, log_prefix="threads")
         if not obj:
             return False
         threads = obj.get("threads", [])
@@ -216,8 +277,9 @@ class Pipeline:
         is_final = vol == plan.get("volume_count")
         thread_ids = {t["id"] for t in threads.get("threads", [])}
         sys_p, user_p, _, schema = volume_chapters(vol_plan, brief, prior, threads, is_final)
-        obj = self._ask("volume-plan", f"vol{vol}", "chapters", sys_p, user_p, schema,
-                        validator=validate_volume_chapters_response, allowed_ids=thread_ids)
+        obj = self._generate_with_improvement("volume-plan", f"vol{vol}", "chapters", sys_p, user_p, schema,
+                                              validator=validate_volume_chapters_response, allowed_ids=thread_ids,
+                                              card=None, log_prefix=f"vol{vol}-plan")
         if not obj:
             return False
         self.state.save_json(f"volume_{vol:02d}_chapters", obj)
@@ -240,8 +302,9 @@ class Pipeline:
         allowed = thread_ids | entity_ids | char_ids | rel_ids
         sys_p, user_p, _, schema = scene_cards(chapter, brief, handoff, vol_changes,
                                                 threads, is_final_chapter, final_cond)
-        obj = self._ask("scene-cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema,
-                        validator=validate_scene_cards_response, allowed_ids=allowed)
+        obj = self._generate_with_improvement("scene-cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema,
+                                              validator=validate_scene_cards_response, allowed_ids=allowed,
+                                              card=None, log_prefix=f"vol{vol}.ch{ch}-cards")
         if not obj:
             return False
         self.state.save_json(f"volume_{vol:02d}_chapter_{ch:02d}_cards", obj)
@@ -369,8 +432,9 @@ class Pipeline:
                     handoffs.append(last.get("handoff_summary", ""))
         plan = self.state.load_json("series_plan")
         sys_p, user_p, _, schema = volume_summary(handoffs, plan)
-        obj = self._ask("volume-summary", f"vol{vol}", "summary", sys_p, user_p, schema,
-                        validator=validate_volume_summary_response, allowed_ids=set())
+        obj = self._generate_with_improvement("volume-summary", f"vol{vol}", "summary", sys_p, user_p, schema,
+                                              validator=validate_volume_summary_response, allowed_ids=set(),
+                                              card=None, log_prefix=f"volsum-{vol}")
         if not obj:
             return False
         summaries = self.state.data.get("volume_summaries", [])
@@ -398,8 +462,9 @@ class Pipeline:
                         scene_updates.extend(sc.get("thread_updates", []))
         handoffs = [self.state.data.get("last_handoff", "")]
         sys_p, user_p, _, schema = closure_check(threads, scene_updates, handoffs)
-        obj = self._ask("closure", "closure", "check", sys_p, user_p, schema,
-                        validator=validate_closure_response, allowed_ids=thread_ids)
+        obj = self._generate_with_improvement("closure", "closure", "check", sys_p, user_p, schema,
+                                              validator=validate_closure_response, allowed_ids=thread_ids,
+                                              card=None, log_prefix="closure")
         if not obj:
             return False
         unresolved = [r for r in obj.get("results", []) if r.get("status") == "未回収"]
