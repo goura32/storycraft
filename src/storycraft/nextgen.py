@@ -142,12 +142,17 @@ class SeriesService:
         index = state["next_scene_index"]
         while index < len(scene_specs):
             spec = scene_specs[index]
-            card_context = self._card_context(state, spec)
+            is_final_scene = index == len(scene_specs) - 1
+            unresolved_thread_ids = [
+                thread_id for thread_id, thread in state["threads"].items() if thread["status"] != "resolved"
+            ]
+            required_final_resolved_ids = unresolved_thread_ids if is_final_scene else []
+            card_context = self._card_context(state, spec, is_final_scene, unresolved_thread_ids)
             card = self._improve(
                 "scene_card", card_context, model, state,
-                lambda value: self._validate_card(value, spec, state["threads"]),
+                lambda value: self._validate_card(value, spec, state["threads"], required_final_resolved_ids),
             )
-            self._validate_card(card, spec, state["threads"])
+            self._validate_card(card, spec, state["threads"], required_final_resolved_ids)
 
             scene_context = {
                 "brief": state["brief"],
@@ -158,12 +163,15 @@ class SeriesService:
                     for thread_id in card["visible_thread_ids"]
                 },
                 "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "",
+                "is_final_scene": is_final_scene,
+                "required_ending": state["brief"]["ending"] if is_final_scene else "",
+                "required_resolved_ids": unresolved_thread_ids if is_final_scene else [],
             }
             scene = self._improve(
                 "scene", scene_context, model, state,
-                lambda value: self._validate_scene(value, card, state["threads"]),
+                lambda value: self._validate_scene(value, card, state["threads"], required_final_resolved_ids),
             )
-            self._validate_scene(scene, card, state["threads"])
+            self._validate_scene(scene, card, state["threads"], required_final_resolved_ids)
             self._apply_updates(state["threads"], scene["state_updates"], card["scene_id"])
             state["scenes"].append(
                 {
@@ -236,8 +244,10 @@ class SeriesService:
             state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": str(exc)})
             self.store.save(state)
             return candidate
-        if not isinstance(critique, dict) or not isinstance(critique.get("issues"), list):
-            state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": "批評形式不正"})
+        try:
+            self._validate_critique(critique)
+        except ContractError as exc:
+            state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": str(exc)})
             self.store.save(state)
             return candidate
         state["attempts"].append({"stage": stage, "kind": "critique", "critique": critique})
@@ -329,7 +339,12 @@ class SeriesService:
         return specs
 
     @staticmethod
-    def _card_context(state: dict[str, Any], spec: dict[str, int | str]) -> dict[str, Any]:
+    def _card_context(
+        state: dict[str, Any],
+        spec: dict[str, int | str],
+        is_final_scene: bool,
+        unresolved_thread_ids: list[str],
+    ) -> dict[str, Any]:
         return {
             "brief": state["brief"],
             "plan": state["plan"],
@@ -338,19 +353,37 @@ class SeriesService:
             "chapter": spec["chapter"],
             "scene": spec["scene"],
             "available_thread_ids": sorted(state["threads"]),
+            "is_final_scene": is_final_scene,
+            "unresolved_thread_ids": unresolved_thread_ids,
         }
 
     @staticmethod
-    def _validate_card(card: dict[str, Any], spec: dict[str, int | str], threads: dict[str, Any]) -> None:
+    def _validate_card(
+        card: dict[str, Any],
+        spec: dict[str, int | str],
+        threads: dict[str, Any],
+        required_update_ids: list[str] | None = None,
+    ) -> None:
         if card.get("scene_id") != spec["scene_id"]:
             raise ContractError("場面カードのIDが実行対象と一致しません")
         for field in ("visible_thread_ids", "allowed_update_ids"):
             values = card.get(field)
             if not isinstance(values, list) or not all(value in threads for value in values):
                 raise ContractError(f"場面カードに未知の台帳IDがあります: {field}")
+            if len(values) != len(set(values)):
+                raise ContractError(f"場面カードのIDが重複しています: {field}")
+        if not set(card["allowed_update_ids"]).issubset(card["visible_thread_ids"]):
+            raise ContractError("状態更新の許可IDは可視IDの部分集合でなければなりません")
+        if required_update_ids and not set(required_update_ids).issubset(card["allowed_update_ids"]):
+            raise ContractError("最終場面は未回収の主要な問いをすべて更新許可しなければなりません")
 
     @staticmethod
-    def _validate_scene(scene: dict[str, Any], card: dict[str, Any], threads: dict[str, Any]) -> None:
+    def _validate_scene(
+        scene: dict[str, Any],
+        card: dict[str, Any],
+        threads: dict[str, Any],
+        required_resolved_ids: list[str] | None = None,
+    ) -> None:
         if not isinstance(scene.get("content"), str) or not scene["content"].strip():
             raise ContractError("場面本文が空です")
         if not isinstance(scene.get("handoff_summary"), str) or not scene["handoff_summary"].strip():
@@ -359,13 +392,23 @@ class SeriesService:
         if not isinstance(updates, list):
             raise ContractError("状態更新が配列ではありません")
         allowed = set(card["allowed_update_ids"])
+        updated_ids: set[str] = set()
         for update in updates:
             if not isinstance(update, dict) or update.get("id") not in threads:
                 raise ContractError("未知IDの状態更新です")
             if update["id"] not in allowed:
                 raise ContractError("場面カードで許可されていない状態更新です")
+            if update["id"] in updated_ids:
+                raise ContractError("同じ問いを一場面で複数回更新できません")
+            updated_ids.add(update["id"])
             if update.get("status") not in {"open", "in_progress", "resolved"}:
                 raise ContractError("状態更新のstatusが不正です")
+        if required_resolved_ids:
+            unresolved = set(required_resolved_ids) - {
+                update["id"] for update in updates if update.get("status") == "resolved"
+            }
+            if unresolved:
+                raise ContractError("最終場面で回収されていない主要な問いがあります")
 
     @staticmethod
     def _apply_updates(threads: dict[str, Any], updates: list[dict[str, Any]], scene_id: str) -> None:
@@ -377,13 +420,30 @@ class SeriesService:
     @staticmethod
     def _validate_closure(closure: dict[str, Any], threads: dict[str, Any]) -> None:
         resolved_ids = closure.get("resolved_ids")
-        if not isinstance(resolved_ids, list) or set(resolved_ids) != set(threads):
+        if (
+            not isinstance(resolved_ids, list)
+            or len(resolved_ids) != len(set(resolved_ids))
+            or set(resolved_ids) != set(threads)
+        ):
             raise ContractError("主要な問いの回収結果が台帳と一致しません")
-        if not closure.get("ending_reached"):
+        if closure.get("ending_reached") is not True:
             raise ContractError("結末が確認できません")
         unresolved = [thread_id for thread_id, thread in threads.items() if thread["status"] != "resolved"]
         if unresolved:
             raise ContractError(f"未回収の主要な問いがあります: {', '.join(unresolved)}")
+
+    @staticmethod
+    def _validate_critique(critique: Any) -> None:
+        if not isinstance(critique, dict) or not isinstance(critique.get("issues"), list):
+            raise ContractError("批評の issues が配列ではありません")
+        for issue in critique["issues"]:
+            if not isinstance(issue, dict):
+                raise ContractError("批評 issue がオブジェクトではありません")
+            if issue.get("severity") not in {"critical", "major", "minor"}:
+                raise ContractError("批評 issue の severity が不正です")
+            for field in ("field", "description", "suggestion"):
+                if not isinstance(issue.get(field), str) or not issue[field].strip():
+                    raise ContractError(f"批評 issue の {field} がありません")
 
     def _write_output(self, state: dict[str, Any]) -> list[Path]:
         output_dir = self.workspace / "output"
