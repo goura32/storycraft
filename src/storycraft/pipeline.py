@@ -18,12 +18,15 @@ from .llm import LLMClient
 from .log import logger
 from .output import write_output
 from .prompts import (
-    closure_check, improve, plan_series, characters, world_ledger,
+    closure_check, critique, fix, improve, plan_series, characters, world_ledger,
     timeline_ledger, threads_ledger, volume_chapters, scene_cards, scene_write,
     volume_summary,
 )
 from .state import State
-from .validation import validate_scene_response
+from .validation import (validate_plan_response, validate_characters_response, validate_world_response,
+                         validate_timeline_response, validate_threads_response, validate_volume_chapters_response,
+                         validate_scene_cards_response, validate_scene_response, validate_volume_summary_response,
+                         validate_closure_response, validate_critique_response, validate_fix_response)
 
 BASE_SEED = 1000
 
@@ -68,7 +71,7 @@ class Pipeline:
     # ---- 共通: LLM呼び出し + 生データ保存 ----
     def _ask(self, kind: str, phase: str, ref: str, sys_p: str, user_p: str,
              schema: str, validator=None, allowed_ids: set | None = None,
-             max_attempts: int | None = None) -> dict | None:
+             max_attempts: int | None = None, log_prefix: str = "") -> dict | None:
         if max_attempts is None:
             max_attempts = self.s.retry.get("max_attempts", 4)
         full_user = f"{user_p}\n\n【この呼び出し専用JSON Schema】\n{schema}\n\n必ずJSONオブジェクトだけを返してください。"
@@ -78,7 +81,8 @@ class Pipeline:
             seed = ref_seed_base + attempt
             meta = {"__kind": kind, "__phase": phase, "__ref": ref, "__attempt": attempt + 1}
             messages = [{"role": "system", "content": sys_p}, meta, {"role": "user", "content": full_user}]
-            logger.info("[%s] %s 試行%d (seed=%d)", phase, ref, attempt + 1, seed)
+            prefix = f"{log_prefix} " if log_prefix else ""
+            logger.info("[%s] %s%s 試行%d (seed=%d)", phase, prefix, ref, attempt + 1, seed)
             rec = self.llm.call_once(messages, {"type": "json_object"}, seed)
             self.llm.save_raw(rec, messages)
             if rec.error:
@@ -103,7 +107,8 @@ class Pipeline:
         brief = self.state.data.get("brief")
         div = build_diversity_note(self.s.resolve_archive_dir(), self.s.diversity.get("recent_window", 5))
         sys_p, user_p, _, schema = plan_series(brief, div)
-        obj = self._ask("plan", "plan", "series", sys_p, user_p, schema)
+        obj = self._ask("plan", "plan", "series", sys_p, user_p, schema,
+                        validator=validate_plan_response, allowed_ids=set())
         if not obj:
             return False
         self.state.save_json("series_plan", obj)
@@ -113,7 +118,8 @@ class Pipeline:
         plan = self.state.load_json("series_plan")
         div = build_diversity_note(self.s.resolve_archive_dir(), self.s.diversity.get("recent_window", 5))
         sys_p, user_p, _, schema = characters(plan, div)
-        obj = self._ask("characters", "characters", "all", sys_p, user_p, schema)
+        obj = self._ask("characters", "characters", "all", sys_p, user_p, schema,
+                        validator=validate_characters_response, allowed_ids=set())
         if not obj:
             return False
         # 採番: char / rel
@@ -149,12 +155,35 @@ class Pipeline:
         brief = self.state.data.get("brief")
         plan = self.state.load_json("series_plan")
         chars = self.state.load_json("characters")
-        return self._ledger_stage("world", world_ledger, "world", "entity", "id", brief, plan, chars)
+        allowed = set()
+        for c in chars.get("characters", []):
+            allowed.add(c["id"])
+        for r in chars.get("relationships", []):
+            allowed.add(r["id"])
+        sys_p, user_p, _, schema = world_ledger(brief, plan, chars)
+        obj = self._ask("world", "world", "all", sys_p, user_p, schema,
+                        validator=validate_world_response, allowed_ids=allowed)
+        if not obj:
+            return False
+        items = obj.get("entities", [])
+        for it in items:
+            it["id"] = self.seq.next("entity")
+        self.state.save_json("world", {"entities": items})
+        return True
 
     def stage_timeline(self) -> bool:
         brief = self.state.data.get("brief")
         plan = self.state.load_json("series_plan")
-        return self._ledger_stage("timeline", timeline_ledger, "timeline", "time", "id", brief, plan)
+        sys_p, user_p, _, schema = timeline_ledger(brief, plan)
+        obj = self._ask("timeline", "timeline", "all", sys_p, user_p, schema,
+                        validator=validate_timeline_response, allowed_ids=set())
+        if not obj:
+            return False
+        items = obj.get("timelines", [])
+        for it in items:
+            it["id"] = self.seq.next("time")
+        self.state.save_json("timeline", {"timelines": items})
+        return True
 
     def stage_threads(self) -> bool:
         brief = self.state.data.get("brief")
@@ -162,12 +191,16 @@ class Pipeline:
         chars = self.state.load_json("characters")
         world = self.state.load_json("world")
         timeline = self.state.load_json("timeline")
+        char_ids = {c["id"] for c in chars.get("characters", [])}
+        entity_ids = {e["id"] for e in world.get("entities", [])}
+        time_ids = {t["id"] for t in timeline.get("timelines", [])}
+        allowed = char_ids | entity_ids | time_ids
         sys_p, user_p, _, schema = threads_ledger(brief, plan, chars, world, timeline)
-        obj = self._ask("threads", "threads", "all", sys_p, user_p, schema)
+        obj = self._ask("threads", "threads", "all", sys_p, user_p, schema,
+                        validator=validate_threads_response, allowed_ids=allowed)
         if not obj:
             return False
         threads = obj.get("threads", [])
-        char_ids = {c["id"] for c in chars.get("characters", [])}
         for t in threads:
             t["id"] = self.seq.next("thread")
             t["involved_characters"] = [c for c in t.get("involved_characters", []) if c in char_ids]
@@ -181,8 +214,10 @@ class Pipeline:
         prior = self.state.data.get("volume_summaries", [])
         threads = self.state.load_json("threads")
         is_final = vol == plan.get("volume_count")
+        thread_ids = {t["id"] for t in threads.get("threads", [])}
         sys_p, user_p, _, schema = volume_chapters(vol_plan, brief, prior, threads, is_final)
-        obj = self._ask("volume-plan", f"vol{vol}", "chapters", sys_p, user_p, schema)
+        obj = self._ask("volume-plan", f"vol{vol}", "chapters", sys_p, user_p, schema,
+                        validator=validate_volume_chapters_response, allowed_ids=thread_ids)
         if not obj:
             return False
         self.state.save_json(f"volume_{vol:02d}_chapters", obj)
@@ -198,9 +233,15 @@ class Pipeline:
         is_final_chapter = (vol == self.state.load_json("series_plan").get("volume_count")
                             and ch == len(chapters.get("chapters", [])))
         final_cond = brief.get("ending", "") if is_final_chapter else ""
+        thread_ids = {t["id"] for t in threads.get("threads", [])}
+        entity_ids = {e["id"] for e in self.state.load_json("world").get("entities", [])}
+        char_ids = {c["id"] for c in self.state.load_json("characters").get("characters", [])}
+        rel_ids = {r["id"] for r in self.state.load_json("characters").get("relationships", [])}
+        allowed = thread_ids | entity_ids | char_ids | rel_ids
         sys_p, user_p, _, schema = scene_cards(chapter, brief, handoff, vol_changes,
                                                 threads, is_final_chapter, final_cond)
-        obj = self._ask("scene-cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema)
+        obj = self._ask("scene-cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema,
+                        validator=validate_scene_cards_response, allowed_ids=allowed)
         if not obj:
             return False
         self.state.save_json(f"volume_{vol:02d}_chapter_{ch:02d}_cards", obj)
@@ -257,23 +298,38 @@ class Pipeline:
             indices = [i for i in indices if lo <= scene_cards[i].get("scene_number", i + 1) <= hi]
 
         passes = self.s.quality.get("max_improvement_passes", 1)
+        # 総巻数・総章数・総場面数を取得してログプレフィックス用にする
+        plan = self.state.load_json("series_plan")
+        total_volumes = plan.get("volume_count", 0)
+        chapters = self.state.load_json(f"volume_{vol:02d}_chapters")
+        total_chapters = len(chapters.get("chapters", []))
+        total_scenes = len(scene_cards)
         for i in indices:
             card = scene_cards[i]
             sc_num = card.get("scene_number", i + 1)
             ref = f"vol{vol}.ch{ch}.sc{sc_num}"
+            # ログプレフィックス: 進行状況を表示
+            log_prefix = f"巻{vol}/{total_volumes} 章:{ch}/{total_chapters} 場面:{sc_num}/{total_scenes}"
             context = self._scene_context(vol, ch, card)
             sys_p, user_p, _, schema = scene_write(card, context)
             obj = self._ask("scene", f"vol{vol}.ch{ch}", f"sc{sc_num}", sys_p, user_p, schema,
-                            validator=validate_scene_response, allowed_ids=allowed_ids)
+                            validator=validate_scene_response, allowed_ids=allowed_ids, log_prefix=log_prefix)
             if obj is None:
                 self.state.set_stop_reason(f"場面生成失敗: {ref}")
                 return False
             best = obj
-            # 改善ステージ
+            # 改善ステージ（二段階: 批評→修正）
             for p in range(passes):
-                sys_p2, user_p2, _, schema2 = improve(best, card, self.s.quality.get("improvement_directions", []))
-                imp = self._ask("improve", f"vol{vol}.ch{ch}", f"sc{sc_num}.p{p+1}", sys_p2, user_p2, schema2,
-                                validator=validate_scene_response, allowed_ids=allowed_ids)
+                # 1. 批評
+                sys_p_crit, user_p_crit, _, schema_crit = critique(best, card, self.s.quality.get("improvement_directions", []))
+                crit = self._ask("critique", f"vol{vol}.ch{ch}", f"sc{sc_num}.crit{p+1}", sys_p_crit, user_p_crit, schema_crit,
+                                validator=validate_critique_response, allowed_ids=set(), log_prefix=log_prefix)
+                if crit is None:
+                    continue
+                # 2. 修正
+                sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card, self.s.quality.get("improvement_directions", []))
+                imp = self._ask("fix", f"vol{vol}.ch{ch}", f"sc{sc_num}.fix{p+1}", sys_p_fix, user_p_fix, schema_fix,
+                                validator=validate_fix_response, allowed_ids=allowed_ids, log_prefix=log_prefix)
                 if imp is None:
                     continue
                 # 計測可能な軸で悪化していないか判定（仕様 §3.13）
@@ -286,6 +342,11 @@ class Pipeline:
                 # 2. 必須イベント（required_events）の含有
                 required = card.get("required_events", [])
                 if required and not all(ev in content for ev in required if ev):
+                    continue
+                # 3. thread_actions と一致する更新が保たれるか
+                best_thread_actions = [u["id"] for u in best.get("thread_updates", [])]
+                imp_thread_actions = [u["id"] for u in imp.get("thread_updates", [])]
+                if set(best_thread_actions) != set(imp_thread_actions):
                     continue
                 best = imp
             self.state.save_scene(vol, ch, sc_num, best)
@@ -308,7 +369,8 @@ class Pipeline:
                     handoffs.append(last.get("handoff_summary", ""))
         plan = self.state.load_json("series_plan")
         sys_p, user_p, _, schema = volume_summary(handoffs, plan)
-        obj = self._ask("volume-summary", f"vol{vol}", "summary", sys_p, user_p, schema)
+        obj = self._ask("volume-summary", f"vol{vol}", "summary", sys_p, user_p, schema,
+                        validator=validate_volume_summary_response, allowed_ids=set())
         if not obj:
             return False
         summaries = self.state.data.get("volume_summaries", [])
@@ -322,6 +384,7 @@ class Pipeline:
         main = [t for t in threads.get("threads", []) if t.get("importance") == "主要"]
         if not main:
             return True
+        thread_ids = {t["id"] for t in main}
         scene_updates = []
         plan = self.state.load_json("series_plan")
         for vol in range(1, plan.get("volume_count", 0) + 1):
@@ -332,10 +395,11 @@ class Pipeline:
                 if d.exists():
                     for f in sorted(d.glob("scene-*.json")):
                         sc = json.loads(f.read_text(encoding="utf-8"))
-                        scene_updates.append(sc.get("thread_updates", []))
+                        scene_updates.extend(sc.get("thread_updates", []))
         handoffs = [self.state.data.get("last_handoff", "")]
         sys_p, user_p, _, schema = closure_check(threads, scene_updates, handoffs)
-        obj = self._ask("closure", "closure", "check", sys_p, user_p, schema)
+        obj = self._ask("closure", "closure", "check", sys_p, user_p, schema,
+                        validator=validate_closure_response, allowed_ids=thread_ids)
         if not obj:
             return False
         unresolved = [r for r in obj.get("results", []) if r.get("status") == "未回収"]

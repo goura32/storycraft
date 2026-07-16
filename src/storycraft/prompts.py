@@ -185,6 +185,31 @@ def scene_write(card: dict, context: dict) -> tuple[str, str, dict, str]:
         "あなたは小説家です。与えられた場面カードと文脈から、自然な日本語で場面本文を書きます。"
         "中国語的な表現や不必要な外来語を避けてください。JSONオブジェクトだけを返してください。"
     )
+    # 許可されたIDを文脈から収集して例示に使用
+    allowed_threads = [t["id"] for t in context.get("related_threads", [])]
+    allowed_entities = [e["id"] for e in context.get("related_entities", [])]
+    allowed_timelines = [t["id"] for t in context.get("related_timelines", [])]
+    char_ids = [c["id"] for c in context.get("characters", {}).get("characters", [])]
+    rel_ids = [r["id"] for r in context.get("characters", {}).get("relationships", [])]
+    # カードが参照するIDも追加
+    for t in card.get("thread_actions", []):
+        if t.get("id") not in allowed_threads:
+            allowed_threads.append(t["id"])
+    for e in card.get("entity_ids", []):
+        if e not in allowed_entities:
+            allowed_entities.append(e)
+    if card.get("location_id") and card["location_id"] not in allowed_entities:
+        allowed_entities.append(card["location_id"])
+    # 例示用に最初の1つずつ使用（空ならプレースホルダ）
+    ex_thread = allowed_threads[0] if allowed_threads else "thread-XX"
+    ex_char = char_ids[0] if char_ids else "char-XX"
+    ex_entity = allowed_entities[0] if allowed_entities else "entity-XX"
+    ex_timeline = allowed_timelines[0] if allowed_timelines else "time-XX"
+    ex_rel = rel_ids[0] if rel_ids else "rel-XX"
+    thread_action_enum = "導入|進展|回収"
+    char_field_enum = "current_goal|current_pressure|current_location|current_condition|current_knowledge|current_state"
+    entity_field_enum = "current_state"
+    timeline_status_enum = "進行中|完了|予定|失効"
     user_p = (
         f"次の場面カードから場面本文を書いてください。\n\n場面カード: {_fmt(card)}\n\n"
         f"文脈（視点人物の知識・読者の知識・許可された台帳情報・時刻・場所・人物情報・前場面の引継ぎ要約）:\n{_fmt(context)}\n\n"
@@ -192,21 +217,24 @@ def scene_write(card: dict, context: dict) -> tuple[str, str, dict, str]:
         "情報は行動・対立・会話・観察を通じて示し、地の文だけで説明し続けないでください。\n"
         "返すJSON:\n"
         "{\n"
-        '  "content": "場面本文",\n'
-        '  "handoff_summary": "次の場面に渡す要約",\n'
-        '  "thread_updates": [{"id":"thread-01","action":"導入|進展|回収"}],\n'
-        '  "character_updates": [{"character_id":"char-01","field":"current_knowledge","value":""}],\n'
-        '  "relationship_updates": [{"relationship_id":"rel-01","new_state":""}],\n'
-        '  "entity_updates": [{"entity_id":"entity-01","field":"current_state","value":""}],\n'
-        '  "timeline_updates": [{"timeline_id":"time-01","status":"進行中|完了","actual_scene":"volume-01/chapter-01/scene-01"}]\n'
-        "}"
+        f'  "content": "場面本文",\n'
+        f'  "handoff_summary": "次の場面に渡す要約",\n'
+        f'  "thread_updates": [{{"id":"{ex_thread}","action":"{thread_action_enum}"}}],\n'
+        f'  "character_updates": [{{"character_id":"{ex_char}","field":"{char_field_enum}","value":""}}],\n'
+        f'  "relationship_updates": [{{"relationship_id":"{ex_rel}","new_state":""}}],\n'
+        f'  "entity_updates": [{{"entity_id":"{ex_entity}","field":"{entity_field_enum}","value":""}}],\n'
+        f'  "timeline_updates": [{{"timeline_id":"{ex_timeline}","status":"{timeline_status_enum}","actual_scene":"volume-01/chapter-01/scene-01"}}]\n'
+        "}\n"
+        "※ 上記のIDは例示です。必ず文脈で許可された実在IDのみを使用してください。\n"
     )
     schema = (
         "必須: content(str), handoff_summary(str), thread_updates(list), character_updates(list), "
         "relationship_updates(list), entity_updates(list), timeline_updates(list)\n"
-        "thread_updates: id(str), action('導入'|'進展'|'回収')\n"
-        "character_updates: character_id(str), field('current_goal'|'current_pressure'|'current_location'|'current_condition'|'current_knowledge'|'current_state'), value(str)\n"
-        "timeline_updates: timeline_id(str), status('進行中'|'完了'|'予定'|'失効'), actual_scene(str)"
+        f"thread_updates: id(str), action('{thread_action_enum}')\n"
+        f"character_updates: character_id(str), field('{char_field_enum}'), value(str)\n"
+        f"entity_updates: entity_id(str), field('{entity_field_enum}'), value(str)\n"
+        f"timeline_updates: timeline_id(str), status('{timeline_status_enum}'), actual_scene(str)\n"
+        "※ 許可されていないID、不正なenum値は検証で拒否されます。"
     )
     return sys_p, user_p, RESPONSE_FORMAT, schema
 
@@ -250,4 +278,50 @@ def closure_check(threads: dict, scene_updates: list, handoffs: list) -> tuple[s
         "返すJSON: {\"results\":[{\"thread_id\":\"thread-01\",\"status\":\"回収済み|未回収\",\"scene\":\"\"}]}"
     )
     schema = "必須: results(list). 各要素: thread_id(str), status('回収済み'|'未回収'), scene(str)"
+    return sys_p, user_p, RESPONSE_FORMAT, schema
+
+
+# §3.13 二段階改善: 批評
+def critique(current: dict, card: dict, directions: list) -> tuple[str, str, dict, str]:
+    sys_p = "あなたは小説の批評家です。与えられた場面本文の問題点を抽出し、改善提案を出します。JSONオブジェクトだけを返してください。"
+    user_p = (
+        f"次の場面本文（草稿）を批評してください。\n\n草稿: {_fmt(current)}\n場面カード: {_fmt(card)}\n"
+        f"改善の方向: {_fmt(directions)}\n"
+        "以下の観点で問題点を列挙してください:\n"
+        "- 日本語として自然か（中国語的表現・不要な外来語の混入・用語の揺れ）\n"
+        "- 視点人物・読者への開示範囲・秘密の隠し方を守っているか\n"
+        "- 人物の話し方と一貫した行動を保っているか\n"
+        "- 情報は行動・対立・会話・観察を通じて示され、地の文だけで説明していないか\n"
+        "- 必須イベントが含まれているか\n"
+        "- 文字数は目安帯（1,800〜2,600字）に収まっているか\n"
+        "返すJSON:\n"
+        "{\n"
+        '  "issues": [{"severity": "致命的|重要|軽微", "category": "台詞|地文|構成|情報制御|その他", '
+        '"location": "該当箇所の目安", "problem": "何が問題か", "suggestion": "どう直すべきか"}],\n'
+        '  "overall_assessment": "全体的な所見（良い点・悪い点の要約")}\n'
+    )
+    schema = (
+        "必須: issues(list), overall_assessment(str)\n"
+        "issues 各要素: severity('致命的'|'重要'|'軽微'), category(str), location(str), problem(str), suggestion(str)\n"
+        "issues は空配列可"
+    )
+    return sys_p, user_p, RESPONSE_FORMAT, schema
+
+
+# §3.13 二段階改善: 修正
+def fix(current: dict, critique_result: dict, card: dict, directions: list) -> tuple[str, str, dict, str]:
+    sys_p = "あなたは小説家です。批評結果に従って場面本文を修正します。同じJSON構造で返してください。JSONオブジェクトだけを返してください。"
+    user_p = (
+        f"次の場面本文（草稿）を、批評結果に従って修正してください。\n\n草稿: {_fmt(current)}\n批評結果: {_fmt(critique_result)}\n"
+        f"場面カード: {_fmt(card)}\n改善の方向: {_fmt(directions)}\n"
+        "草稿を床として、計測可能な軸で悪化しない範囲で修正してください。\n"
+        "本文・handoff_summary・各更新のJSON構造はそのまま維持してください。\n"
+        "批評で指摘された問題点を優先的に解決し、構造項目（ID・enum・必須項目）は絶対に変更しないでください。\n"
+        "返すJSONは草稿と同じ構造で返してください。"
+    )
+    schema = (
+        "必須: content(str), handoff_summary(str), thread_updates(list), character_updates(list), "
+        "relationship_updates(list), entity_updates(list), timeline_updates(list)\n"
+        "※ 批評で指摘された問題を解消し、構造・ID・enumは変更しないこと"
+    )
     return sys_p, user_p, RESPONSE_FORMAT, schema

@@ -95,7 +95,7 @@ FIX = {
 }
 
 
-def _fake_ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None):
+def _fake_ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None, log_prefix=None):
     # 実際の _ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None)
     # ref は unit 名: "series" / "all" / "chapters" / "cards" / "sc1" / "summary" / "check"
     if ref == "series":
