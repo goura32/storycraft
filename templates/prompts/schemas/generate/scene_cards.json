@@ -25,7 +25,7 @@
               "required": ["id", "action"],
               "properties": {
                 "id": {"type": "string"},
-                "action": {"type": "string", "enum": ["導入", "進展", "回収"]}
+                "action": {"type": "string", "enum": ["導入", "進展", "回収", "展開"]}
               }
             }
           },

@@ -1,23 +1,37 @@
+# 章の場面カード 生成
+
 次の章から、場面カードを作ってください。
 
-章: {{ chapter | tojson(ensure_ascii=False, indent=2) }}
-企画: {{ brief | tojson(ensure_ascii=False, indent=2) }}
+## 章
+{{ chapter | tojson(ensure_ascii=False, indent=2) }}
 
-前章の引継ぎ要約: {{ handoff }}
-この巻で既に起きた変化: {{ vol_changes }}
+## 企画
+{{ brief | tojson(ensure_ascii=False, indent=2) }}
 
-この章で扱う台帳項目: {{ chapter_threads | tojson(ensure_ascii=False, indent=2) }}
+## 前章の引継ぎ要約
+{{ handoff }}
+
+## この巻で既に起きた変化
+{{ vol_changes }}
+
+## この章で扱う台帳項目
+{{ chapter_threads | tojson(ensure_ascii=False, indent=2) }}
+
 {% if is_final_chapter %}
+## 注意
 最終章です。初回企画の結末条件を必ず反映してください: {{ final_condition }}
 {% endif %}
 
-場面カードは2〜4件。各カードに viewpoint_character（役名）、start_time、end_time、location_id（entity-01 等）、
-entity_ids（IDのリスト）、purpose、opening、required_events、characters（役名リスト）、thread_actions
-（[{id, action:'導入'|'進展'|'回収'}]）、reader_disclosure、presentation_rules、end_change を含める。
+## 指示
+場面カードは2〜4件。各カードに viewpoint_character（役名）、start_time、end_time、location_id（entity-01 等）、entity_ids（IDのリスト）、purpose、opening、required_events、characters（役名リスト）、thread_actions（[{id, action:'導入'|'進展'|'回収'|'展開'}]）、reader_disclosure、presentation_rules、end_change を含める。
 
-返すJSON: {"scene_cards":[ ... ]}
+**ID命名ルール（厳守）**
+- location_id / entity_ids: 既知の world entities から選択。形式は `entity-XX`（XXは2桁数字）
+- thread_actions[].id: 既知の threads から選択。形式は `thread-XX`
+- characters: 役名（日本語可）を配列で指定。IDではない
+- **新規IDを勝手に作らないこと・日本語・記号・英単語混在のIDは不可**
 
-【この呼び出し専用JSON Schema】
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

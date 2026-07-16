@@ -8,7 +8,7 @@
         "type": "object",
         "required": ["severity", "category", "location", "problem", "suggestion"],
         "properties": {
-          "severity": {"type": "string", "enum": ["致命的", "重要", "軽微"]},
+          "severity": {"type": "string", "enum": ["致命的", "重要", "軽微", "主要"]},
           "category": {"type": "string", "enum": ["表現", "論理", "用語", "構成", "その他"]},
           "location": {"type": "string"},
           "problem": {"type": "string"},

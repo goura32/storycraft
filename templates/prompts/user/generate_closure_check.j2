@@ -1,14 +1,26 @@
+# 完結前確認 生成
+
 次の台帳の主要項目が、対応する場面で回収されたか確認してください。
 
-台帳: {{ threads | tojson(ensure_ascii=False, indent=2) }}
-場面ごとの台帳更新: {{ scene_updates | tojson(ensure_ascii=False, indent=2) }}
-引継ぎ要約: {{ handoffs | tojson(ensure_ascii=False, indent=2) }}
+## 台帳
+{{ threads | tojson(ensure_ascii=False, indent=2) }}
+
+## 場面ごとの台帳更新
+{{ scene_updates | tojson(ensure_ascii=False, indent=2) }}
+
+## 引継ぎ要約
+{{ handoffs | tojson(ensure_ascii=False, indent=2) }}
+
+## 指示
+**ID命名ルール（厳守）**
+- results[].thread_id: 既存の `thread-XX` のみ
+- results[].status: `回収済み`|`未回収` のみ
+- results[].scene: 場面識別子（例: `vol1.ch3.sc2`）を文字列で指定
+- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
 
 主要項目（importance='主要'）ごとに、回収した場面番号、または未回収を返してください。
 
-返すJSON: {"results":[{"thread_id":"thread-01","status":"回収済み|未回収","scene":""}]}
-
-【この呼び出し専用JSON Schema】
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

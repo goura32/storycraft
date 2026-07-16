@@ -1,13 +1,22 @@
+# 巻要約 生成
+
 次の各章の最後の引継ぎ要約から、一巻の短い要約を作ってください。
 
-引継ぎ要約: {{ chapters_handoffs | tojson(ensure_ascii=False, indent=2) }}
-全巻計画: {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
+## 引継ぎ要約
+{{ chapters_handoffs | tojson(ensure_ascii=False, indent=2) }}
+
+## 全巻計画
+{{ series_plan | tojson(ensure_ascii=False, indent=2) }}
+
+## 指示
+**ID命名ルール（厳守）**
+- volume_summary: 既知のID（vol-XX, ch-XX, thread-XX, char-XX, entity-XX, time-XX）のみ参照
+- unresolved_questions / character_relations: 既知のIDのみ参照
+- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
 
 次巻へ渡すため、人物関係の現在地、未解決の問い、重要な事実だけを含めてください。
 
-返すJSON: {"volume_summary":"", "unresolved_questions":[], "character_relations":""}
-
-【この呼び出し専用JSON Schema】
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

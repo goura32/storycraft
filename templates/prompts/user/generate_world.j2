@@ -1,17 +1,27 @@
+# 世界・場所・組織・重要物 台帳 生成
+
 次の情報から、世界・場所・組織・重要物の台帳を作ってください。
 
-企画: {{ brief | tojson(ensure_ascii=False, indent=2) }}
-全巻計画: {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
-人物: {{ characters | tojson(ensure_ascii=False, indent=2) }}
+## 企画
+{{ brief | tojson(ensure_ascii=False, indent=2) }}
 
-登録対象: 繰り返し登場する場所、組織、重要物、世界の規則、専門用語。
-一度だけの背景や秘密の由来（伏線台帳へ回す）は除く。
-id は仮連番（entity-01 等）で返す。
+## 全巻計画
+{{ series_plan | tojson(ensure_ascii=False, indent=2) }}
 
-返すJSON: {"entities":[{"id":"entity-01","kind":"","name":"","aliases":[],
-"stable_fact":"","use_or_access_rule":"","current_state":""}]}
+## 人物
+{{ characters | tojson(ensure_ascii=False, indent=2) }}
 
-【この呼び出し専用JSON Schema】
+## 指示
+**ID命名ルール（厳守）**
+- entities[].id: `entity-XX` 形式（2桁数字）
+- entities[].kind: 組織／施設／場所／世界規則／資料／重要物／専門用語／世界設定／法制度 のいずれか
+- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
+
+- 登録対象: 繰り返し登場する場所、組織、重要物、世界の規則、専門用語
+- 一度だけの背景や秘密の由来（伏線台帳へ回す）は除く
+- id は仮連番（entity-01 等）で返す
+
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

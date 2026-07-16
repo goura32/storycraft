@@ -32,8 +32,8 @@ def _build(brief_path: str | None, out: str | None, config_path: str | None):
         if not p.exists():
             logger.error("企画ファイルが見つかりません: %s", brief_path)
             sys.exit(1)
-        import json
-        state.data["brief"] = json.loads(p.read_text(encoding="utf-8"))
+        import yaml
+        state.data["brief"] = yaml.safe_load(p.read_text(encoding="utf-8"))
         state.save()
     return settings, out_root, state, pipe
 

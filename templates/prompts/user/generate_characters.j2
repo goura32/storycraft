@@ -1,29 +1,29 @@
+# 登場人物・関係カード 生成
+
 次の全巻計画から、人物カードと関係カードを作ってください。
 
-全巻計画:
+## 全巻計画
 {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
 
-人物カードは、主要・準主要な人物について作ってください（一時登場は除く）。
-各カードの id は仮の連番（char-01 等）で返しても構いません。プログラムが正式IDを割り当てます。
-人物カードには正体・秘密・犯行の真実・恋心の最終告白・回収が必要な約束を直接書かず、
-それらは後で伏線台帳へ置きます。
-関係カードは一組につき一枚、relationship_thread_id は後で付けます（この時点は null でよい）。
+## 指示
+**ID命名ルール（厳守）**
+- characters[].id: `char-XX` 形式
+- relationships[].id: `rel-XX` 形式
+- relationships[].character_a_id / character_b_id: 既存の `char-XX` のみ
+- relationships[].relationship_thread_id: 既存の `thread-XX` または null
+- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
+
+- 人物カードは、主要・準主要な人物について作ってください（一時登場は除く）
+- 各カードの id は仮の連番（char-01 等）で返しても構いません。プログラムが正式IDを割り当てます
+- 人物カードには正体・秘密・犯行の真実・恋心の最終告白・回収が必要な約束を直接書かず、それらは後で伏線台帳へ置きます
+- 関係カードは一組につき一枚、relationship_thread_id は後で付けます（この時点は null でよい）
 
 {% if diversity_note %}
-【過去作品との差別化目標】
+## 過去作品との差別化目標
 {{ diversity_note }}
 {% endif %}
 
-返すJSONの構造:
-{
-  "characters": [{"id":"char-01","name":"","aliases":[],"role":"","narrative_function":"",
-"voice_note":"","behavior_note":"","appearance_cues":"","initial_goal":"","initial_constraint":"",
-"current_goal":"","current_pressure":"","current_location":"","current_condition":"","current_knowledge":""}],
-  "relationships": [{"id":"rel-01","character_a_id":"char-01","character_b_id":"char-02",
-"current_state":"","reader_knowledge":"","relationship_thread_id":null}]
-}
-
-【この呼び出し専用JSON Schema】
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

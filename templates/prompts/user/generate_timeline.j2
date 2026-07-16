@@ -1,14 +1,23 @@
+# 時間・期限台帳 生成
+
 次の情報から、時間・期限台帳を作ってください。
 
-企画: {{ brief | tojson(ensure_ascii=False, indent=2) }}
-全巻計画: {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
+## 企画
+{{ brief | tojson(ensure_ascii=False, indent=2) }}
 
-登録対象: 移動、締切、回復期間、同時進行する重要出来事。すべての会話や食事は除く。
-id は仮連番（time-01 等）で返す。
+## 全巻計画
+{{ series_plan | tojson(ensure_ascii=False, indent=2) }}
 
-返すJSON: {"timelines":[{"id":"time-01","kind":"","description":"","starts_at":"","ends_at":"","status":""}]}
+## 指示
+**ID命名ルール（厳守）**
+- timelines[].id: `time-XX` 形式（2桁数字）
+- timelines[].related_ids: 既存の `time-XX` のみ配列で指定
+- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
 
-【この呼び出し専用JSON Schema】
+- 登録対象: 移動、締切、回復期間、同時進行する重要出来事。すべての会話や食事は除く
+- id は仮連番（time-01 等）で返す
+
+## 出力スキーマ
 {{ schema }}
 
 必ずJSONオブジェクトだけを返してください。

@@ -48,7 +48,7 @@ def check_enum(value: str, allowed: set[str]) -> str:
     return value
 
 
-THREAD_ACTION_ENUM = {"導入", "進展", "回収"}
+THREAD_ACTION_ENUM = {"導入", "進展", "回収", "展開"}
 THREAD_STATUS_ENUM = {"未導入", "進行中", "回収済み"}
 TIMELINE_STATUS_ENUM = {"予定", "進行中", "完了", "失効"}
 CHARACTER_UPDATE_FIELD_ENUM = {
@@ -164,7 +164,7 @@ def validate_critique_response(obj: Any, allowed_ids: set[str]) -> None:
         raise ValidationError("issues は配列でなければなりません")
     for issue in obj["issues"]:
         check_structure(issue, ["severity", "category", "location", "problem", "suggestion"])
-        check_enum(issue["severity"], {"致命的", "重要", "軽微"})
+        check_enum(issue["severity"], {"致命的", "重要", "軽微", "主要"})
     if not isinstance(obj["overall_assessment"], str):
         raise ValidationError("overall_assessment は文字列でなければなりません")
 

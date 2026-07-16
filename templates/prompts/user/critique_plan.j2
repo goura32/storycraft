@@ -1,21 +1,36 @@
+## 草稿の批評
 次のJSONオブジェクト（草稿）を批評してください。
 
 草稿:
 {{ current | tojson(ensure_ascii=False, indent=2) }}
 
+## 文脈情報
 文脈情報:
 {{ card | tojson(ensure_ascii=False, indent=2) }}
 
+## 改善の方向
 改善の方向:
 {{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
 
+## 評価観点
 以下の観点で自由文フィールドの問題点を列挙してください:
 - 日本語として自然か（中国語的表現・不要な外来語の混入・用語の揺れ）
 - 情報の正確性・一貫性・具体性
 - 論理的整合性・矛盾の有無
 - 表現の明確さ・冗長さ
 
+## 出力形式
+出力は必ず次のJSON構造で返してください（issues は空配列可、overall_assessment は必須）:
+{
+  "issues": [
+    {"severity": "致命的|重要|軽微|主要", "category": "表現|論理|用語|構成|その他", "location": "該当フィールド名や箇所の目安", "problem": "何が問題か", "suggestion": "どう直すべきか"}
+  ],
+  "overall_assessment": "全体的な所見（良い点・悪い点の要約）"
+}
+
+## JSONスキーマ
 【この呼び出し専用JSON Schema】
 {{ schema }}
 
+## 指示
 必ずJSONオブジェクトだけを返してください。
