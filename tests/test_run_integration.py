@@ -1,208 +1,123 @@
-"""統合テスト: run メインループを LLM stub で走らせ、全ステージを通して出力まで到達することを確認。
-
-実LLM呼び出しをしない。Pipeline._ask を stub し、各ステージキーに対して
-妥当な JSON フィクスチャを返す。これで _run_full の巻ループ起動〜output までの
-オーケストレーションが from-scratch で閉じることを証明する。
-"""
+"""次世代Storycraftの最小受け入れテスト。"""
 from __future__ import annotations
 
-import json
-import sys
 import tempfile
+import unittest
 from pathlib import Path
 
-# テスト対象を import する前に stub を当てるため、ここでパッチを仕込む
-FIX = {
-    "plan": {
-        "volume_count": 2,
-        "volumes": [
-            {"number": 1, "title": "霧の端点の灯", "premise": "灯台守の娘の物語",
-             "main_threads": ["thread-01"], "arc": "喪失と再構築"},
-            {"number": 2, "title": "霧晴れの灯", "premise": "真実の受容",
-             "main_threads": ["thread-01"], "arc": "再構築と平和"},
-        ],
-    },
-    "characters": {
-        "characters": [
-            {"name": "アヤ", "role": "主人公", "traits": ["慎重"], "goal": "父の真実を知る",
-             "conflict": "記憶の欠落", "relationships": []}
-        ],
-        "relationships": [],
-    },
-    "world": {
-        "entities": [
-            {"name": "灯台", "kind": "場所", "description": "島の灯台"}
-        ],
-    },
-    "timeline": {
-        "events": [
-            {"name": "祭礼", "description": "島の年中行事"}
-        ],
-    },
-    "threads": {
-        "threads": [
-            {"id": "thread-01", "name": "父の真実", "kind": "長期",
-             "setup_location": "灯台", "resolution_location": "灯台", "status": "未回収"}
-        ],
-    },
-    "volplan": {
-        "chapters": [
-            {"chapter_number": 1, "title": "白煙と灯台の影", "summary": "朝の点灯",
-             "key_events": [], "characters_present": ["char-01"], "pov": "char-01",
-             "ending_hook": ""}
-        ],
-    },
-    "cards": {
-        "scene_cards": [
-            {
-                "scene_number": 1,
-                "viewpoint_character": "アヤ",
-                "start_time": "time-01",
-                "end_time": "time-01",
-                "location_id": "entity-01",
-                "entity_ids": ["entity-01"],
-                "purpose": "朝の点灯",
-                "opening": "螺旋階段を上がる",
-                "required_events": [],
-                "characters": ["アヤ"],
-                "thread_actions": [{"id": "thread-01", "action": "導入"}],
-                "reader_disclosure": "父の手順表の存在",
-                "presentation_rules": ["過去の記憶は触れない"],
-                "end_change": "点灯完了",
-            }
-        ],
-    },
-    "scenes": {
-        "scene_number": 1, "title": "朝の点灯", "pov": "char-01",
-        "time_ref": "time-01", "location_ref": "entity-01",
-        "characters_present": ["char-01"],
-        "handoff_summary": "朝の点灯で父の手順表を提示。",
-        "thread_updates": [],
-        "character_updates": [],
-        "relationship_updates": [],
-        "entity_updates": [],
-        "timeline_updates": [],
-        "content": "潮の香りが床板の間から染み込み、灯台のレンズが回転し始める低鳴りだけが発信する朝だった。娘は鉄製の手桶を両手で抱え、螺旋階段を上がった。足音が乾いた金属に響き、層状に残る煤の粉が舞う。予備タンクの栓を外すと、錆びたネジが軋んで緩む。粘性の高い灯油が注ぎ込まれる音だけを確認する。",
-    },
-    "volsum": {
-        "handoff": "第1章では灯台の朝の点灯を描き、父の残した手順表を提示した。",
-    },
-    "closure": {
-        "results": [
-            {"thread_id": "thread-01", "status": "回収", "scene": "scenes-1.1.sc1"}
-        ],
-    },
+from storycraft.nextgen import ContractError, SeriesService
+
+
+BRIEF = {
+    "title": "霧の島の灯",
+    "premise": "灯台守の娘が父の秘密を解く物語",
+    "ending": "娘が父の真実を受け入れ、島に残る",
+    "volumes": 4,
+    "major_questions": ["父はなぜ灯台を去ったのか"],
 }
 
 
-def _fake_ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None, log_prefix=None):
-    # 実際の _ask(self, kind, phase, ref, sys_p, user_p, schema, validator=None, allowed_ids=None, max_attempts=None)
-    # ref は unit 名: "series" / "all" / "chapters" / "cards" / "sc1" / "summary" / "check"
-    # 改善パス: "series.crit1" / "series.fix1" 等
-    if ref == "series":
-        return FIX["plan"]
-    if ref == "all":
-        # characters / world / timeline / threads は kind で区別
-        return FIX.get(kind)
-    if ref == "chapters":
-        # 巻計画
-        return FIX["volplan"]
-    if ref == "cards":
-        # 場面カード
-        return FIX["cards"]
-    if ref == "sc1" or ref.startswith("sc1."):
-        # 場面生成 (改善パスも "sc1.p1" 等)
-        return FIX["scenes"]
-    if ref == "summary":
-        return FIX["volsum"]
-    if ref == "check":
-        return FIX["closure"]
-    # 改善パス用: critique/fix の ref は "xxx.crit1", "xxx.fix1" 等
-    if ".crit" in ref:
-        # 批評用のフィクスチャを返す（簡易版）
-        return {"issues": [], "overall_assessment": "問題なし"}
-    if ".fix" in ref:
-        # 修正用のフィクスチャを返す（元のFIXと同じ構造で良い）
-        # kindに応じて適切なFIXを返す
-        if "plan" in ref or "series" in ref:
-            return FIX["plan"]
-        if "characters" in ref:
-            return FIX["characters"]
-        if "world" in ref:
-            return FIX["world"]
-        if "timeline" in ref:
-            return FIX["timeline"]
-        if "threads" in ref:
-            return FIX["threads"]
-        if "volplan" in ref or "chapters" in ref:
-            return FIX["volplan"]
-        if "cards" in ref:
-            return FIX["cards"]
-        if "scenes" in ref or "sc" in ref:
-            return FIX["scenes"]
-        if "volsum" in ref or "summary" in ref:
-            return FIX["volsum"]
-        if "closure" in ref or "check" in ref:
-            return FIX["closure"]
-        return FIX["plan"]
-    raise AssertionError(f"no fixture for kind={kind!r} phase={phase!r} ref={ref!r}")
+class DeterministicModel:
+    """受け入れテストだけで使う、決定的な生成・批評・修正モデル。"""
+
+    def __init__(self, *, invalid_update: bool = False) -> None:
+        self.invalid_update = invalid_update
+        self.contexts: list[dict] = []
+        self.plan_calls = 0
+
+    def generate(self, stage: str, context: dict) -> dict:
+        if stage == "plan":
+            self.plan_calls += 1
+            return {
+                "volumes": [
+                    {
+                        "number": number,
+                        "title": f"第{number}巻",
+                        "chapters": [{"number": 1, "title": "灯の章"}],
+                        "change": f"第{number}巻の変化",
+                        "leaves_question": "次の灯は誰が守るのか" if number < 4 else "",
+                    }
+                    for number in range(1, 5)
+                ]
+            }
+        if stage == "scene_card":
+            return {
+                "scene_id": context["scene_id"],
+                "visible_thread_ids": ["question-01"],
+                "allowed_update_ids": ["question-01"],
+            }
+        if stage == "scene":
+            self.contexts.append(context)
+            scene_id = context["card"]["scene_id"]
+            update_id = "forbidden" if self.invalid_update else "question-01"
+            final_scene = scene_id == "v04-c01-s02"
+            return {
+                "content": f"本文 {scene_id}",
+                "handoff_summary": f"引継ぎ {scene_id}",
+                "state_updates": [
+                    {
+                        "id": update_id,
+                        "status": "resolved" if final_scene else "in_progress",
+                    }
+                ],
+            }
+        if stage == "closure":
+            return {"resolved_ids": ["question-01"], "ending_reached": True}
+        raise AssertionError(f"unexpected stage: {stage}")
+
+    def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+        return {"issues": []}
+
+    def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+        return candidate
 
 
-def main() -> int:
-    from storycraft import pipeline
-    from storycraft.cli import main as cli_main
-    from storycraft.state import State
+class NextGenerationAcceptanceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.workspace = Path(tempfile.mkdtemp(prefix="storycraft-nextgen-"))
+        self.service = SeriesService(self.workspace)
 
-    pipeline.Pipeline._ask = _fake_ask  # type: ignore[assignment]
+    def test_run_completes_requested_volumes_and_writes_complete_markdown(self) -> None:
+        result = self.service.run(BRIEF, DeterministicModel())
 
-    tmp = Path(tempfile.mkdtemp(prefix="sc_run_"))
-    out = tmp / "out"
-    brief = tmp / "brief.json"
-    brief.write_text(json.dumps({
-        "genre": "ファンタジー", "target_audience": "成人女性",
-        "tone": "叙情的", "themes": ["記憶"], "setting": "霧の島",
-        "logline": "灯台守の娘", "must_include": ["灯台"], "must_avoid": ["銃"],
-        "length_target": "1巻", "ending": "娘が選ぶ",
-    }, ensure_ascii=False), encoding="utf-8")
+        self.assertTrue(result.completed)
+        self.assertEqual(result.volume_count, 4)
+        self.assertEqual(
+            [path.name for path in result.volume_paths],
+            ["volume-01.md", "volume-02.md", "volume-03.md", "volume-04.md"],
+        )
+        self.assertTrue(result.series_path.exists())
+        bodies = [path.read_text(encoding="utf-8") for path in result.volume_paths]
+        self.assertTrue(all("本文" in body for body in bodies))
+        self.assertEqual(len(bodies), len(set(bodies)))
+        self.assertTrue(result.closure["ending_reached"])
+        self.assertEqual(result.closure["resolved_ids"], ["question-01"])
 
-    sys.argv = ["storycraft", "run", "--brief", str(brief), "--out", str(out)]
-    try:
-        cli_main()
-    except SystemExit as e:
-        if e.code not in (None, 0):
-            print(f"FAIL: cli exited {e.code}")
-            return 1
+    def test_scene_applies_only_allowed_updates_and_exposes_updated_state(self) -> None:
+        model = DeterministicModel()
+        self.service.run(BRIEF, model)
 
-    # 検証
-    state = State.load(out / "state")
-    required_done = ["plan", "characters", "world", "timeline", "threads",
-                     "volplan-1", "cards-1.1", "scenes-1.1", "volsum-1",
-                     "volplan-2", "cards-2.1", "scenes-2.1", "volsum-2",
-                     "closure", "output"]
-    missing = [s for s in required_done if not state.is_stage_done(s)]
-    if missing:
-        print(f"FAIL: 未完了ステージ: {missing}")
-        print("stages_done:", state.data.get("stages_done"))
-        return 1
+        second_scene_context = next(
+            context
+            for context in model.contexts
+            if context["card"]["scene_id"] == "v01-c01-s02"
+        )
+        self.assertEqual(second_scene_context["threads"]["question-01"]["status"], "in_progress")
 
-    vol_md = out / "volume-01.md"
-    vol2_md = out / "volume-02.md"
-    series_md = out / "series.md"
-    if not vol_md.exists() or not vol2_md.exists() or not series_md.exists():
-        print(f"FAIL: 出力なし vol1={vol_md.exists()} vol2={vol2_md.exists()} series={series_md.exists()}")
-        return 1
+        with self.assertRaises(ContractError):
+            SeriesService(self.workspace / "invalid").run(BRIEF, DeterministicModel(invalid_update=True))
 
-    content = vol_md.read_text(encoding="utf-8")
-    content2 = vol2_md.read_text(encoding="utf-8")
-    if "潮の香り" not in content or "潮の香り" not in content2:
-        print("FAIL: 場面本文が Markdown に含まれない")
-        return 1
+    def test_resume_continues_from_saved_adopted_state_without_repeating_brief(self) -> None:
+        model = DeterministicModel()
+        interrupted = self.service.run(BRIEF, model, stop_after_scene="v02-c01-s01")
+        self.assertFalse(interrupted.completed)
+        self.assertTrue((self.workspace / "state.json").exists())
 
-    print("PASS: run メインループが from-scratch で全ステージを通し、Markdown を出力しました。")
-    print(f"  output: {out}")
-    print(f"  volume-01.md size: {vol_md.stat().st_size}")
-    return 0
+        resumed = SeriesService(self.workspace).resume(model)
+        self.assertTrue(resumed.completed)
+        self.assertEqual(model.plan_calls, 1)
+        self.assertTrue(resumed.series_path.exists())
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    unittest.main()

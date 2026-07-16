@@ -1,227 +1,77 @@
-"""コマンドライン。§10 に従う。
-
-run    : 一括実行（続きからでも開始。完了済みステージはスキップ）
-resume : 保存状態から続きを実行（--out のみ、--brief は不要）
-step   : 未完了の最初のステージを1つ実行 / --stage で指定ステージを強制1実行
-"""
+"""次世代Storycraftのコマンドライン。"""
 from __future__ import annotations
 
 import argparse
-import sys
+import json
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from .config import Settings
-from .ids import IDSequencer
-from .log import add_file_handler, logger
-from .llm import LLMClient
-from .pipeline import Pipeline, STAGES
-from .state import State
+from .nextgen import ContractError, SeriesService
+from .nextgen_model import OpenAIStoryModel
 
 
-def _build(brief_path: str | None, out: str | None, config_path: str | None):
-    settings = Settings.load(config_path)
-    out_root = settings.resolve_output_dir(out)
-    out_root.mkdir(parents=True, exist_ok=True)
-    state = State.load(out_root / "state")
-    add_file_handler(out_root / "state" / "log" / "run.log")
-    llm = LLMClient(settings, state.raw_dir)
-    seq = IDSequencer(state.root)
-    pipe = Pipeline(settings, state, llm, seq)
-    if brief_path:
-        p = Path(brief_path)
-        if not p.exists():
-            logger.error("企画ファイルが見つかりません: %s", brief_path)
-            sys.exit(1)
-        import yaml
-        state.data["brief"] = yaml.safe_load(p.read_text(encoding="utf-8"))
-        state.save()
-    return settings, out_root, state, pipe
+def _load_brief(path: str) -> dict[str, Any]:
+    source = Path(path)
+    if not source.exists():
+        raise ContractError(f"企画ファイルが見つかりません: {source}")
+    text = source.read_text(encoding="utf-8")
+    value = json.loads(text) if source.suffix.lower() == ".json" else yaml.safe_load(text)
+    if not isinstance(value, dict):
+        raise ContractError("企画ファイルはJSONまたはYAMLのオブジェクトでなければなりません")
+    return value
 
 
-def _next_stage(state: State) -> str | None:
-    for st in STAGES:
-        if not state.is_stage_done(st):
-            return st
-    return None
+def _service_and_model(args) -> tuple[SeriesService, OpenAIStoryModel]:
+    settings = Settings.load(args.config)
+    workspace = settings.resolve_output_dir(args.out)
+    service = SeriesService(workspace)
+    return service, OpenAIStoryModel(settings, workspace / "raw")
+
+
+def _report(result) -> None:
+    if result.completed:
+        print(f"完了: {result.series_path}")
+    else:
+        print("保存しました。resume または step で続行できます。")
 
 
 def cmd_run(args) -> None:
-    settings, out_root, state, pipe = _build(args.brief, args.out, args.config)
-    _run_full(pipe, state, out_root, args)
+    service, model = _service_and_model(args)
+    _report(service.run(_load_brief(args.brief), model))
 
 
 def cmd_resume(args) -> None:
-    settings, out_root, state, pipe = _build(None, args.out, args.config)
-    if not state.data.get("brief"):
-        # state.json から brief を復元
-        brief = state.load_json("brief")
-        if not brief:
-            logger.error("企画(brief)が見つかりません。--brief を指定して run してください。")
-            return
-        state.data["brief"] = brief
-        state.save()
-    _run_full(pipe, state, out_root, args)
-
-
-def _run_full(pipe: Pipeline, state: State, out_root: Path, args) -> None:
-    # 巻ループの再開地点を決定
-    plan = state.load_json("series_plan")
-    vol_count = plan.get("volume_count", 0) if plan else 0
-    start_vol = 1
-    if vol_count:
-        for v in range(1, vol_count + 1):
-            if not state.is_stage_done(f"volplan-{v}"):
-                start_vol = v
-                break
-
-    # グローバルステージ
-    for st in ("plan", "characters", "world", "timeline", "threads"):
-        if not state.is_stage_done(st):
-            if not getattr(pipe, f"stage_{st}")():
-                logger.error("ステージ %s が失敗しました。停止。", st)
-                return
-            state.set_stage_done(st)
-
-    # plan 実行後に巻数を再評価（from-scratch run ではここで初めて確定）
-    plan = state.load_json("series_plan")
-    vol_count = plan.get("volume_count", 0) if plan else 0
-    if not vol_count:
-        logger.error("全巻計画が未作成です。")
-        return
-
-    for vol in range(start_vol, vol_count + 1):
-        if not state.is_stage_done(f"volplan-{vol}"):
-            if not pipe.stage_volume_plan(vol):
-                logger.error("巻計画 %d が失敗しました。", vol)
-                return
-            state.set_stage_done(f"volplan-{vol}")
-        chapters = state.load_json(f"volume_{vol:02d}_chapters")
-        for ch in chapters.get("chapters", []):
-            ch_num = ch.get("chapter_number")
-            if not state.is_stage_done(f"cards-{vol}.{ch_num}"):
-                if not pipe.stage_scene_cards(vol, ch_num):
-                    logger.error("場面カード vol%d ch%d が失敗しました。", vol, ch_num)
-                    return
-                state.set_stage_done(f"cards-{vol}.{ch_num}")
-            if not state.is_stage_done(f"scenes-{vol}.{ch_num}"):
-                if not pipe.stage_scenes(vol, ch_num):
-                    logger.error("場面生成 vol%d ch%d が失敗しました。停止。", vol, ch_num)
-                    return
-                state.set_stage_done(f"scenes-{vol}.{ch_num}")
-        if not state.is_stage_done(f"volsum-{vol}"):
-            if not pipe.stage_volume_summary(vol):
-                logger.error("巻要約 %d が失敗しました。", vol)
-                return
-            state.set_stage_done(f"volsum-{vol}")
-
-    if not state.is_stage_done("closure"):
-        if not pipe.stage_closure_check():
-            logger.error("完結前確認が失敗: %s", state.data.get("stop_reason"))
-            return
-        state.set_stage_done("closure")
-
-    if not state.is_stage_done("output"):
-        pipe.stage_output(out_root)
-        state.set_stage_done("output")
-    logger.info("完了しました。出力: %s", out_root)
+    service, model = _service_and_model(args)
+    _report(service.resume(model))
 
 
 def cmd_step(args) -> None:
-    settings, out_root, state, pipe = _build(args.brief, args.out, args.config)
-    target = args.stage
-    if target:
-        # 指定ステージを強制1実行
-        if target == "scenes" and (args.chapter or args.chapter_range):
-            _run_scenes_forced(pipe, state, args)
-        else:
-            ok = _run_single_stage(pipe, state, target)
-            if not ok:
-                logger.error("ステージ %s が失敗しました。", target)
-                return
-        state.set_stage_done(target)
-        logger.info("ステージ %s を実行しました。", target)
-        return
-
-    nxt = _next_stage(state)
-    if not nxt:
-        logger.info("すべてのステージが完了しています。")
-        return
-    ok = _run_single_stage(pipe, state, nxt)
-    if not ok:
-        logger.error("ステージ %s が失敗しました。", nxt)
-        return
-    state.set_stage_done(nxt)
-    logger.info("ステージ %s を実行しました。次は %s", nxt, _next_stage(state))
-
-
-def _run_scenes_forced(pipe, state, args) -> None:
-    vol = args.volume or 1
-    ch = args.chapter
-    chapters = state.load_json(f"volume_{vol:02d}_chapters")
-    if not chapters or not chapters.get("chapters"):
-        logger.error("巻 %d の章がありません。", vol)
-        return
-    if ch is None:
-        ch = chapters["chapters"][0]["chapter_number"]
-    rng = None
-    if args.scene_range:
-        lo, hi = (int(x) for x in args.scene_range.split("-"))
-        rng = (lo, hi)
-    pipe.stage_scenes(vol, ch, rng)
-
-
-def _run_single_stage(pipe: Pipeline, state: State, target: str) -> bool:
-    if target in ("plan", "characters", "world", "timeline", "threads"):
-        return getattr(pipe, f"stage_{target}")()
-    if target == "output":
-        return pipe.stage_output(state.root.parent)
-    if target == "closure":
-        return pipe.stage_closure_check()
-    if target.startswith("volplan-"):
-        vol = int(target.split("-")[1])
-        return pipe.stage_volume_plan(vol)
-    if target.startswith("cards-"):
-        _, rest = target.split("-", 1)
-        vol, ch = rest.split(".")
-        return pipe.stage_scene_cards(int(vol), int(ch))
-    if target.startswith("scenes-"):
-        _, rest = target.split("-", 1)
-        vol, ch = rest.split(".")
-        return pipe.stage_scenes(int(vol), int(ch))
-    if target.startswith("volsum-"):
-        vol = int(target.split("-")[1])
-        return pipe.stage_volume_summary(vol)
-    logger.warning("未知のステージ: %s", target)
-    return False
+    service, model = _service_and_model(args)
+    brief = _load_brief(args.brief) if args.brief else None
+    _report(service.step(model, brief))
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="storycraft", description="LLM小説シリーズ生成")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-
-    p_run = sub.add_parser("run", help="一括実行")
-    p_run.add_argument("--brief", required=True, help="初回企画JSON")
-    p_run.add_argument("--out", default=None, help="作業ディレクトリ")
-    p_run.add_argument("--config", default=None, help="config.yaml")
-    p_run.set_defaults(func=cmd_run)
-
-    p_res = sub.add_parser("resume", help="続きから再開")
-    p_res.add_argument("--out", required=True, help="作業ディレクトリ")
-    p_res.add_argument("--config", default=None, help="config.yaml")
-    p_res.set_defaults(func=cmd_resume)
-
-    p_step = sub.add_parser("step", help="1ステージ確認実行")
-    p_step.add_argument("--out", required=True, help="作業ディレクトリ")
-    p_step.add_argument("--brief", default=None, help="初回企画JSON（初回のみ）")
-    p_step.add_argument("--config", default=None, help="config.yaml")
-    p_step.add_argument("--stage", default=None, help="強制実行するステージ名")
-    p_step.add_argument("--volume", type=int, default=None, help="対象巻 (scenes用)")
-    p_step.add_argument("--chapter", type=int, default=None, help="対象章 (scenes用)")
-    p_step.add_argument("--scene-range", default=None, help="場面範囲 M-N (scenes用)")
-    p_step.set_defaults(func=cmd_step)
-
-    args = ap.parse_args()
-    args.func(args)
+    parser = argparse.ArgumentParser(prog="storycraft", description="日本語小説シリーズ生成")
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    for name, handler, brief_required in (
+        ("run", cmd_run, True),
+        ("resume", cmd_resume, False),
+        ("step", cmd_step, False),
+    ):
+        command = subcommands.add_parser(name)
+        command.add_argument("--out", required=True, help="対象シリーズの作業場所")
+        command.add_argument("--config", default=None, help="設定YAML")
+        command.add_argument("--brief", required=brief_required, help="初回企画JSONまたはYAML")
+        command.set_defaults(handler=handler)
+    args = parser.parse_args()
+    try:
+        args.handler(args)
+    except ContractError as error:
+        parser.error(str(error))
 
 
 if __name__ == "__main__":
