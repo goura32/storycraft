@@ -1,0 +1,21 @@
+次のJSONオブジェクト（草稿）を批評してください。
+
+草稿:
+{{ current | tojson(ensure_ascii=False, indent=2) }}
+
+文脈情報:
+{{ card | tojson(ensure_ascii=False, indent=2) }}
+
+改善の方向:
+{{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
+
+以下の観点で自由文フィールドの問題点を列挙してください:
+- 日本語として自然か（中国語的表現・不要な外来語の混入・用語の揺れ）
+- 情報の正確性・一貫性・具体性
+- 論理的整合性・矛盾の有無
+- 表現の明確さ・冗長さ
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。

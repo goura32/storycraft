@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "required": ["volume_count", "volumes", "final_resolution", "series_viewpoint_rule"],
+  "properties": {
+    "volume_count": {"type": "integer", "minimum": 4, "maximum": 10},
+    "volumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "title", "role", "character_changes", "resolves", "leaves", "chapter_count", "viewpoint_rule"],
+        "properties": {
+          "number": {"type": "integer"},
+          "title": {"type": "string"},
+          "role": {"type": "string"},
+          "character_changes": {"type": "string"},
+          "resolves": {"type": "string"},
+          "leaves": {"type": "string"},
+          "chapter_count": {"type": "integer", "minimum": 6, "maximum": 10},
+          "viewpoint_rule": {"type": "string"}
+        }
+      }
+    },
+    "final_resolution": {"type": "string"},
+    "series_viewpoint_rule": {"type": "string"}
+  }
+}

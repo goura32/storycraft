@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "required": ["characters", "relationships"],
+  "properties": {
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "role", "narrative_function"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "aliases": {"type": "array", "items": {"type": "string"}},
+          "role": {"type": "string"},
+          "narrative_function": {"type": "string"},
+          "voice_note": {"type": "string"},
+          "behavior_note": {"type": "string"},
+          "appearance_cues": {"type": "string"},
+          "initial_goal": {"type": "string"},
+          "initial_constraint": {"type": "string"},
+          "current_goal": {"type": "string"},
+          "current_pressure": {"type": "string"},
+          "current_location": {"type": "string"},
+          "current_condition": {"type": "string"},
+          "current_knowledge": {"type": "string"}
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "character_a_id", "character_b_id", "current_state", "reader_knowledge", "relationship_thread_id"],
+        "properties": {
+          "id": {"type": "string"},
+          "character_a_id": {"type": "string"},
+          "character_b_id": {"type": "string"},
+          "current_state": {"type": "string"},
+          "reader_knowledge": {"type": "string"},
+          "relationship_thread_id": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

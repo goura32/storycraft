@@ -1,0 +1,13 @@
+次の各章の最後の引継ぎ要約から、一巻の短い要約を作ってください。
+
+引継ぎ要約: {{ chapters_handoffs | tojson(ensure_ascii=False, indent=2) }}
+全巻計画: {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
+
+次巻へ渡すため、人物関係の現在地、未解決の問い、重要な事実だけを含めてください。
+
+返すJSON: {"volume_summary":"", "unresolved_questions":[], "character_relations":""}
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。

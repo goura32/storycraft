@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["threads"],
+  "properties": {
+    "threads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "importance", "description", "core_fact", "involved_characters", "reader_knowledge", "character_knowledge", "presentation_rule", "clue_plan", "must_not_reveal_before", "introduce_by", "resolve_by", "resolution_condition", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string"},
+          "importance": {"type": "string", "enum": ["主要", "補助"]},
+          "description": {"type": "string"},
+          "core_fact": {"type": "string"},
+          "involved_characters": {"type": "array", "items": {"type": "string"}},
+          "reader_knowledge": {"type": "string"},
+          "character_knowledge": {"type": "string"},
+          "presentation_rule": {"type": "string"},
+          "clue_plan": {"type": "string"},
+          "must_not_reveal_before": {"type": "string"},
+          "introduce_by": {"type": "string"},
+          "resolve_by": {"type": "string"},
+          "resolution_condition": {"type": "string"},
+          "status": {"type": "string", "enum": ["未導入", "進行中", "回収済み"]}
+        }
+      }
+    }
+  }
+}

@@ -18,7 +18,7 @@ from .llm import LLMClient
 from .log import logger
 from .output import write_output
 from .prompts import (
-    closure_check, critique, fix, improve, plan_series, characters, world_ledger,
+    closure_check, critique, fix, plan_series, characters, world_ledger,
     timeline_ledger, threads_ledger, volume_chapters, scene_cards, scene_write,
     volume_summary,
 )
@@ -127,14 +127,14 @@ class Pipeline:
 
         for p in range(passes):
             # 1. 批評
-            sys_p_crit, user_p_crit, _, schema_crit = critique(best, card or {}, directions)
+            sys_p_crit, user_p_crit, _, schema_crit = critique(best, card or {}, directions, kind)
             crit = self._ask("critique", phase, f"{ref}.crit{p+1}", sys_p_crit, user_p_crit, schema_crit,
                             validator=validate_critique_response, allowed_ids=set(), log_prefix=log_prefix)
             if crit is None:
                 continue
 
             # 2. 修正
-            sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card or {}, directions)
+            sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card or {}, directions, kind)
             imp = self._ask("fix", phase, f"{ref}.fix{p+1}", sys_p_fix, user_p_fix, schema_fix,
                             validator=validator, allowed_ids=allowed_ids, log_prefix=log_prefix)
             if imp is None:
@@ -277,7 +277,7 @@ class Pipeline:
         is_final = vol == plan.get("volume_count")
         thread_ids = {t["id"] for t in threads.get("threads", [])}
         sys_p, user_p, _, schema = volume_chapters(vol_plan, brief, prior, threads, is_final)
-        obj = self._generate_with_improvement("volume-plan", f"vol{vol}", "chapters", sys_p, user_p, schema,
+        obj = self._generate_with_improvement("volume_chapters", f"vol{vol}", "chapters", sys_p, user_p, schema,
                                               validator=validate_volume_chapters_response, allowed_ids=thread_ids,
                                               card=None, log_prefix=f"vol{vol}-plan")
         if not obj:
@@ -302,7 +302,7 @@ class Pipeline:
         allowed = thread_ids | entity_ids | char_ids | rel_ids
         sys_p, user_p, _, schema = scene_cards(chapter, brief, handoff, vol_changes,
                                                 threads, is_final_chapter, final_cond)
-        obj = self._generate_with_improvement("scene-cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema,
+        obj = self._generate_with_improvement("scene_cards", f"vol{vol}.ch{ch}", "cards", sys_p, user_p, schema,
                                               validator=validate_scene_cards_response, allowed_ids=allowed,
                                               card=None, log_prefix=f"vol{vol}.ch{ch}-cards")
         if not obj:
@@ -384,13 +384,13 @@ class Pipeline:
             # 改善ステージ（二段階: 批評→修正）
             for p in range(passes):
                 # 1. 批評
-                sys_p_crit, user_p_crit, _, schema_crit = critique(best, card, self.s.quality.get("improvement_directions", []))
+                sys_p_crit, user_p_crit, _, schema_crit = critique(best, card, self.s.quality.get("improvement_directions", []), "scene_write")
                 crit = self._ask("critique", f"vol{vol}.ch{ch}", f"sc{sc_num}.crit{p+1}", sys_p_crit, user_p_crit, schema_crit,
                                 validator=validate_critique_response, allowed_ids=set(), log_prefix=log_prefix)
                 if crit is None:
                     continue
                 # 2. 修正
-                sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card, self.s.quality.get("improvement_directions", []))
+                sys_p_fix, user_p_fix, _, schema_fix = fix(best, crit, card, self.s.quality.get("improvement_directions", []), "scene_write")
                 imp = self._ask("fix", f"vol{vol}.ch{ch}", f"sc{sc_num}.fix{p+1}", sys_p_fix, user_p_fix, schema_fix,
                                 validator=validate_fix_response, allowed_ids=allowed_ids, log_prefix=log_prefix)
                 if imp is None:
@@ -432,7 +432,7 @@ class Pipeline:
                     handoffs.append(last.get("handoff_summary", ""))
         plan = self.state.load_json("series_plan")
         sys_p, user_p, _, schema = volume_summary(handoffs, plan)
-        obj = self._generate_with_improvement("volume-summary", f"vol{vol}", "summary", sys_p, user_p, schema,
+        obj = self._generate_with_improvement("volume_summary", f"vol{vol}", "summary", sys_p, user_p, schema,
                                               validator=validate_volume_summary_response, allowed_ids=set(),
                                               card=None, log_prefix=f"volsum-{vol}")
         if not obj:
@@ -462,7 +462,7 @@ class Pipeline:
                         scene_updates.extend(sc.get("thread_updates", []))
         handoffs = [self.state.data.get("last_handoff", "")]
         sys_p, user_p, _, schema = closure_check(threads, scene_updates, handoffs)
-        obj = self._generate_with_improvement("closure", "closure", "check", sys_p, user_p, schema,
+        obj = self._generate_with_improvement("closure_check", "closure", "check", sys_p, user_p, schema,
                                               validator=validate_closure_response, allowed_ids=thread_ids,
                                               card=None, log_prefix="closure")
         if not obj:

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["timelines"],
+  "properties": {
+    "timelines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "description", "starts_at", "ends_at", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string"},
+          "description": {"type": "string"},
+          "starts_at": {"type": "string"},
+          "ends_at": {"type": "string"},
+          "status": {"type": "string", "enum": ["予定", "進行中", "完了", "失効"]}
+        }
+      }
+    }
+  }
+}

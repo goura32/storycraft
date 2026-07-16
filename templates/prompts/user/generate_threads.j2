@@ -1,0 +1,22 @@
+次の情報から、伏線・重要イベント台帳を作ってください。
+
+企画: {{ brief | tojson(ensure_ascii=False, indent=2) }}
+全巻計画: {{ series_plan | tojson(ensure_ascii=False, indent=2) }}
+人物: {{ characters | tojson(ensure_ascii=False, indent=2) }}
+世界台帳: {{ world | tojson(ensure_ascii=False, indent=2) }}
+時間台帳: {{ timeline | tojson(ensure_ascii=False, indent=2) }}
+
+入れるのは最終的な説明・発見・対決・約束の実現など回収が必要なものだけ。
+各項目に導入先（introduce_by）と回収先（resolve_by）を必ず決める。
+id は仮連番（thread-01 等）、involved_characters は人物の id（char-01 等）で書く。
+
+返すJSON: {"threads":[{"id":"thread-01","kind":"","importance":"主要|補助",
+"description":"","core_fact":"","involved_characters":["char-01"],
+"reader_knowledge":"","character_knowledge":"","presentation_rule":"",
+"clue_plan":"","must_not_reveal_before":"","introduce_by":"","resolve_by":"",
+"resolution_condition":"","status":"未導入"}]}
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。

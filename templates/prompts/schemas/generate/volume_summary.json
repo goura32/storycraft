@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["volume_summary", "unresolved_questions", "character_relations"],
+  "properties": {
+    "volume_summary": {"type": "string"},
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "character_relations": {"type": "string"}
+  }
+}

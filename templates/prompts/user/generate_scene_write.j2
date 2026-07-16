@@ -1,0 +1,27 @@
+次の場面カードから場面本文を書いてください。
+
+場面カード: {{ card | tojson(ensure_ascii=False, indent=2) }}
+
+文脈（視点人物の知識・読者の知識・許可された台帳情報・時刻・場所・人物情報・前場面の引継ぎ要約）:
+{{ context | tojson(ensure_ascii=False, indent=2) }}
+
+本文は1,800〜2,600字程度で書いてください。視点人物以外の内心や秘密は、その人物の知識範囲を超えて書かないでください。
+情報は行動・対立・会話・観察を通じて示し、地の文だけで説明し続けないでください。
+
+返すJSON:
+{
+  "content": "場面本文",
+  "handoff_summary": "次の場面に渡す要約",
+  "thread_updates": [{"id":"thread-01","action":"導入|進展|回収"}],
+  "character_updates": [{"character_id":"char-01","field":"current_goal|current_pressure|current_location|current_condition|current_knowledge|current_state","value":""}],
+  "relationship_updates": [{"relationship_id":"rel-01","new_state":""}],
+  "entity_updates": [{"entity_id":"entity-01","field":"current_state","value":""}],
+  "timeline_updates": [{"timeline_id":"time-01","status":"進行中|完了|予定|失効","actual_scene":"volume-01/chapter-01/scene-01"}]
+}
+
+※ 上記のIDは例示です。必ず文脈で許可された実在IDのみを使用してください。
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。

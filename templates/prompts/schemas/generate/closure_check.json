@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["thread_id", "status", "scene"],
+        "properties": {
+          "thread_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["回収済み", "未回収"]},
+          "scene": {"type": "string"}
+        }
+      }
+    }
+  }
+}

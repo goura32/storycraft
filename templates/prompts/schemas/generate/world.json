@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["entities"],
+  "properties": {
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "name", "aliases", "stable_fact", "use_or_access_rule", "current_state"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string"},
+          "name": {"type": "string"},
+          "aliases": {"type": "array", "items": {"type": "string"}},
+          "stable_fact": {"type": "string"},
+          "use_or_access_rule": {"type": "string"},
+          "current_state": {"type": "string"}
+        }
+      }
+    }
+  }
+}

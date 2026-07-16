@@ -1,0 +1,14 @@
+次の台帳の主要項目が、対応する場面で回収されたか確認してください。
+
+台帳: {{ threads | tojson(ensure_ascii=False, indent=2) }}
+場面ごとの台帳更新: {{ scene_updates | tojson(ensure_ascii=False, indent=2) }}
+引継ぎ要約: {{ handoffs | tojson(ensure_ascii=False, indent=2) }}
+
+主要項目（importance='主要'）ごとに、回収した場面番号、または未回収を返してください。
+
+返すJSON: {"results":[{"thread_id":"thread-01","status":"回収済み|未回収","scene":""}]}
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。

@@ -1,0 +1,28 @@
+次の企画から全巻計画を作ってください。
+
+企画:
+{{ brief | tojson(ensure_ascii=False, indent=2) }}
+
+巻数は5巻を第一候補に、4〜10巻から題材と物語の広がりで選んでください。
+各巻の章数は6〜10章、各章の場面数は2〜4場面、1場面の本文量は1,800〜2,600字の範囲で、
+物語の役割に合わせて選んでください。
+各巻は少なくとも18場面を持つようにしてください。
+計画はシリーズの方向、各巻の章数、視点規則だけを決め、章内の場面や本文の細部は決めないでください。
+
+{% if diversity_note %}
+【過去作品との差別化目標】
+{{ diversity_note }}
+{% endif %}
+
+返すJSONの構造:
+{
+  "volume_count": 5,
+  "volumes": [{"number":1,"title":"","role":"","character_changes":"","resolves":"","leaves":"","chapter_count":8,"viewpoint_rule":""}],
+  "final_resolution": "最終巻で回収する結末",
+  "series_viewpoint_rule": "語りの形式、視点変更を許す単位、視点人物候補"
+}
+
+【この呼び出し専用JSON Schema】
+{{ schema }}
+
+必ずJSONオブジェクトだけを返してください。
