@@ -7,7 +7,9 @@
 - [要件](docs/product/REQUIREMENTS.md): 製品として変えてはいけない約束
 - [製品仕様](docs/product/SPECIFICATION.md): 次の正式リリースで守る振る舞い
 - [現行実装の位置付け](docs/product/IMPLEMENTATION_STATUS.md): 参照実装と次世代仕様の関係
-- [次世代実装の設計方針](docs/design/next_generation_design.md): 正本状態、工程共通契約、受け入れテスト
+- [次世代実装の設計方針](docs/design/next_generation_design.md): 正本状態、再開、原子的採用、最小受け入れ確認
+- [次世代生成フロー設計](docs/design/next_generation_flow.md): 初期台帳、工程順、LLMの責務、変更権限
+- [プロンプトテンプレートと出力契約](docs/design/prompt_template_design.md): 実送信テンプレート、外部スキーマ、決定的検証
 
 ## 現在の位置付け
 
