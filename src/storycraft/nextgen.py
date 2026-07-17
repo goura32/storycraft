@@ -247,8 +247,13 @@ class SeriesService:
             for key in ("title", "change", "leaves_question", "ending_condition"):
                 if not isinstance(volume.get(key), str):
                     raise ContractError(f"全巻構成の {key} が不正です")
-            if expected < len(volumes) and not volume["leaves_question"].strip():
-                raise ContractError("最終巻以外には次巻へ続く問いが必要です")
+            if expected < len(volumes):
+                if not volume["leaves_question"].strip():
+                    raise ContractError("最終巻以外には次巻へ続く問いが必要です")
+                if volume["ending_condition"] != "未設定":
+                    raise ContractError("最終巻以外の結末条件は未設定でなければなりません")
+            elif not volume["ending_condition"].strip():
+                raise ContractError("最終巻には結末条件が必要です")
 
     @staticmethod
     def _validate_characters(value: dict[str, Any]) -> None:
