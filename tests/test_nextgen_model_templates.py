@@ -100,6 +100,15 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         for path in files:
             self.assertTrue(path.name.endswith(f"_{path.parent.name}.j2"), path)
 
+    def test_generation_schemas_are_flat_under_schemas_root(self) -> None:
+        root = Path(__file__).parents[1] / "templates" / "prompts" / "schemas"
+        self.assertFalse((root / "generate").exists())
+        stages = ["plan", "characters", "relationships", "world", "timeline", "threads", "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure"]
+        for stage in stages:
+            self.assertTrue((root / f"{stage}.json").is_file(), stage)
+            self.assertIn('"type"', get_template_loader().load_schema_text("generate", stage))
+            self.assertIn('"type"', get_template_loader().load_schema_text("fix", stage))
+
     def test_every_current_stage_has_renderable_generation_critique_and_fix_contract(self) -> None:
         stages = [
             "plan", "characters", "relationships", "world", "timeline", "threads",

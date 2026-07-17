@@ -4,7 +4,7 @@
 
 ## 正本と構築責務
 
-- 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/generate/` のJSONである。
+- 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/` のJSONである。
 - 実送信promptは工程ごとの `user/{stage}/{kind}_{stage}.j2` を正本とする。各fileはその工程の指示・入力・出力スキーマを直接記述し、`*_stage.j2` やJinja includeには依存しない。adapterは工程名で個別fileを選ぶ。
 - 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
 - `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
@@ -15,9 +15,9 @@
 
 | 用途 | テンプレート | 出力スキーマ |
 |---|---|---|
-| 生成 | `user/generate_{stage}.j2` | `schemas/generate/{stage}.json` |
-| 批評 | `user/critique_{stage}.j2` | `schemas/critique.json` |
-| 修正 | `user/fix_{stage}.j2` | 生成と同じ `schemas/generate/{stage}.json` |
+| 生成 | `user/{stage}/generate_{stage}.j2` | `schemas/{stage}.json` |
+| 批評 | `user/{stage}/critique_{stage}.j2` | `schemas/critique.json` |
+| 修正 | `user/{stage}/fix_{stage}.j2` | 生成と同じ `schemas/{stage}.json` |
 
 生成工程は以下である。
 

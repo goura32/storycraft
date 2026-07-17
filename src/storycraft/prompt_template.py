@@ -28,13 +28,11 @@ class PromptTemplate:
 
     def load_schema(self, category: str, stage: str) -> str:
         """スキーマファイルを読み込み、整形済み文字列で返す"""
-        if category == "fix":
-            # 修正スキーマ＝生成スキーマ
-            schema_path = self.template_dir / "schemas" / "generate" / f"{stage}.json"
-        elif category == "critique":
+        if category == "critique":
             schema_path = self.template_dir / "schemas" / "critique.json"
         else:
-            schema_path = self.template_dir / "schemas" / category / f"{stage}.json"
+            # 生成・修正は工程別生成スキーマを共有する。
+            schema_path = self.template_dir / "schemas" / f"{stage}.json"
 
         with schema_path.open(encoding="utf-8") as f:
             schema = json.load(f)
