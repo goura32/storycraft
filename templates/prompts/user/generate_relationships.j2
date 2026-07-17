@@ -1,2 +1,13 @@
-{% set stage = "relationships" %}
-{% include "user/generate_stage.j2" %}
+# relationships の生成
+
+## 実行指示
+
+提示済み人物IDだけを使って関係の固定意味と開始時状態を作る。永続IDは作らない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

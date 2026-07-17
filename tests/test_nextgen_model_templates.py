@@ -81,15 +81,22 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
 
     def test_active_templates_use_output_schema_placeholder_not_inline_json_schema(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts" / "user"
-        names = ["generate_stage.j2", "critique_stage.j2", "fix_stage.j2"]
-        for name in names:
-            contents = (root / name).read_text(encoding="utf-8")
-            self.assertIn("{{ output_schema }}", contents, name)
-            self.assertNotIn("```json", contents, name)
-            self.assertNotIn("ensure_ascii", contents, name)
-            self.assertNotIn("indent=2", contents, name)
-            self.assertNotIn("JSONオブジェクトだけを返すこと。", contents, name)
-            self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
+        stages = ["plan", "characters", "relationships", "world", "timeline", "threads", "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure"]
+        for kind in ("generate", "critique", "fix"):
+            for stage in stages:
+                name = f"{kind}_{stage}.j2"
+                contents = (root / name).read_text(encoding="utf-8")
+                self.assertIn("{{ output_schema }}", contents, name)
+                self.assertNotIn("{% include", contents, name)
+                self.assertNotIn("*_stage", contents, name)
+                self.assertNotIn("```json", contents, name)
+                self.assertNotIn("ensure_ascii", contents, name)
+                self.assertNotIn("indent=2", contents, name)
+                self.assertNotIn("JSONオブジェクトだけを返すこと。", contents, name)
+                self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
+        self.assertFalse((root / "generate_stage.j2").exists())
+        self.assertFalse((root / "critique_stage.j2").exists())
+        self.assertFalse((root / "fix_stage.j2").exists())
 
     def test_every_current_stage_has_renderable_generation_critique_and_fix_contract(self) -> None:
         stages = [
@@ -111,7 +118,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
 
     def test_plan_critique_checks_every_field_without_stopping_at_one_issue(self) -> None:
         prompt = OpenAIStoryModel._render("critique", "plan", candidate={}, context={})
-        self.assertIn("`title`、`change`、`leaves_question`、`ending_condition` を一つずつ", prompt)
+        self.assertIn("`title`、`change`、`leaves_question` を一つずつ", prompt)
         self.assertIn("一つの軽微な表記問題を見つけても検査を打ち切らず", prompt)
         self.assertIn("固有名詞だけでなく普通名詞句、行為、理由、状態、因果", prompt)
         self.assertIn("複合表現全体", prompt)

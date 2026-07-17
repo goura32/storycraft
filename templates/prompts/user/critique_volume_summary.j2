@@ -1,2 +1,19 @@
-{% set stage = "volume_summary" %}
-{% include "user/critique_stage.j2" %}
+# volume_summary の批評
+
+候補を入力状態と候補の出力スキーマに照らし、修正可能で根拠のある問題だけを issues に出す。問題がなければ空配列にする。称賛、点数、出版可否、候補に存在しない問題は出さない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 候補の出力契約
+
+{{ candidate_schema }}
+
+## 出力スキーマ
+
+{{ output_schema }}

@@ -1,2 +1,13 @@
-{% set stage = "continuity" %}
-{% include "user/generate_stage.j2" %}
+# continuity の生成
+
+## 実行指示
+
+凍結済み本文だけを事実源にする。各状態更新は許可IDだけを使い、本文にそのまま含まれる短い根拠文字列を付ける。本文外の事実、予告、解釈は追加しない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

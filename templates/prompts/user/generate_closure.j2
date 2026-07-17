@@ -1,2 +1,13 @@
-{% set stage = "closure" %}
-{% include "user/generate_stage.j2" %}
+# closure の生成
+
+## 実行指示
+
+登録済み主要項目と採用済み本文を照合して完結監査を行う。結末を裏付ける本文中の短い根拠文字列を返す。自己判断で未回収項目を回収済みにしない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

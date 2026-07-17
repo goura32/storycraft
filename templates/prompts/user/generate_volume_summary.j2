@@ -1,2 +1,13 @@
-{% set stage = "volume_summary" %}
-{% include "user/generate_stage.j2" %}
+# volume_summary の生成
+
+## 実行指示
+
+対象巻の採用済み本文だけを根拠に、次巻へ渡す要約と未回収主要項目を作る。台帳や本文にない事実を追加しない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

@@ -1,2 +1,13 @@
-{% set stage = "scene" %}
-{% include "user/generate_stage.j2" %}
+# scene の生成
+
+## 実行指示
+
+完成した自然な日本語の小説本文だけを `content` に書く。注釈、要約、状態更新、Markdown、執筆メモを混ぜない。writer_view外の知識を本文へ漏らさない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

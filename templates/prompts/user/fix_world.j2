@@ -1,2 +1,19 @@
-{% set stage = "world" %}
-{% include "user/fix_stage.j2" %}
+# world の修正
+
+批評issuesに従い候補を修正する。対象工程の出力契約を満たし、指摘されていない正しい事実、ID、順序、本文内容を失わない。工程の所有範囲外の情報を変更・追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

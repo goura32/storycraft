@@ -1,2 +1,13 @@
-{% set stage = "threads" %}
-{% include "user/generate_stage.j2" %}
+# threads の生成
+
+## 実行指示
+
+主要な謎・約束・重要イベントを登録する。作者の真実、人物・読者の知識、開示規則、導入・回収条件を分ける。永続IDは作らない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

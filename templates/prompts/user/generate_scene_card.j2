@@ -1,2 +1,13 @@
-{% set stage = "scene_card" %}
-{% include "user/generate_stage.j2" %}
+# scene_card の生成
+
+## 実行指示
+
+対象場面だけを設計する。提示されたIDだけを可視・更新許可対象にし、視点人物、場所、必須行動、読者への開示、見せ方を明示する。新しい主要設定や主要項目は作らない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

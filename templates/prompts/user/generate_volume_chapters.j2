@@ -1,2 +1,13 @@
-{% set stage = "volume_chapters" %}
-{% include "user/generate_stage.j2" %}
+# volume_chapters の生成
+
+## 実行指示
+
+対象巻だけの章一覧を作る。各章に目的、開始・終了状態、場面数を置く。本文や場面の詳細、将来巻の詳細は作らない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

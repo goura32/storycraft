@@ -1,2 +1,21 @@
-{% set stage = "characters" %}
-{% include "user/critique_stage.j2" %}
+# characters の批評
+
+候補を入力状態と候補の出力スキーマに照らし、修正可能で根拠のある問題だけを issues に出す。問題がなければ空配列にする。称賛、点数、出版可否、候補に存在しない問題は出さない。
+
+各人物の `name`、`role`、`narrative_function`、`fixed_profile`、`initial_state` を左から順に入力brief・採用planへ照合する。入力にない職歴、学歴、性格の由来、信念、秘密、過去の事件、資料、調査、相互関係、未来の行為、結末への役割、社会背景を確定していれば、その一まとまりを引用して必ずissueにする。`initial_state` に本人以外の内面、プロット解説、未来の行為、本文外の因果があれば必ずissueにする。入力の氏名表記との一字単位の不一致、誤字、不自然な日本語も必ずissueにする。問題ごとに `field` と候補の引用を入れ、`suggestion` は出力スキーマの固定操作だけを選ぶ。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 候補の出力契約
+
+{{ candidate_schema }}
+
+## 出力スキーマ
+
+{{ output_schema }}

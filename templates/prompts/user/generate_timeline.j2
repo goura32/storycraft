@@ -1,2 +1,13 @@
-{% set stage = "timeline" %}
-{% include "user/generate_stage.j2" %}
+# timeline の生成
+
+## 実行指示
+
+提示済みIDだけを参照して期限・移動・同時進行イベントを作る。固定規則と開始時状態を分け、永続IDは作らない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
