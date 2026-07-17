@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -589,26 +591,40 @@ class SeriesService:
 
     def _write_output(self, state: dict[str, Any]) -> list[Path]:
         self._validate_manuscript_state(state)
+        self.workspace.mkdir(parents=True, exist_ok=True)
         output = self.workspace / "output"
-        output.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".output-", dir=self.workspace))
         paths: list[Path] = []
-        for volume_number, volume in enumerate(state["plan"]["volumes"], 1):
-            chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume_number)]}
-            scenes = [scene for scene in state["scenes"] if scene["volume"] == volume_number]
-            lines = [f"# 第{volume_number}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume_number == 1 else "<!-- 販売対象巻 -->", ""]
-            current = None
-            for scene in scenes:
-                if current != scene["chapter"]:
-                    current = scene["chapter"]
-                    lines.extend([f"## 第{current}章 {chapters[current]}", ""])
-                lines.extend([scene["content"], ""])
-            path = output / f"volume-{volume_number:02d}.md"
-            path.write_text("\n".join(lines), encoding="utf-8")
-            paths.append(path)
-        series = output / "series.md"
-        series.write_text("\n\n".join(path.read_text(encoding="utf-8") for path in paths), encoding="utf-8")
-        self._validate_output(paths, series)
-        return paths
+        try:
+            for volume_number, volume in enumerate(state["plan"]["volumes"], 1):
+                chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume_number)]}
+                scenes = [scene for scene in state["scenes"] if scene["volume"] == volume_number]
+                lines = [f"# 第{volume_number}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume_number == 1 else "<!-- 販売対象巻 -->", ""]
+                current = None
+                for scene in scenes:
+                    if current != scene["chapter"]:
+                        current = scene["chapter"]
+                        lines.extend([f"## 第{current}章 {chapters[current]}", ""])
+                    lines.extend([scene["content"], ""])
+                path = staging / f"volume-{volume_number:02d}.md"
+                path.write_text("\n".join(lines), encoding="utf-8")
+                paths.append(path)
+            series = staging / "series.md"
+            series.write_text("\n\n".join(path.read_text(encoding="utf-8") for path in paths), encoding="utf-8")
+            self._validate_output(paths, series)
+            backup = self.workspace / ".output-previous"
+            if backup.exists():
+                shutil.rmtree(backup)
+            if output.exists():
+                output.replace(backup)
+            staging.replace(output)
+            if backup.exists():
+                shutil.rmtree(backup)
+            return [output / path.name for path in paths]
+        except Exception:
+            if staging.exists():
+                shutil.rmtree(staging)
+            raise
 
     @staticmethod
     def _validate_output(paths: list[Path], series: Path) -> None:

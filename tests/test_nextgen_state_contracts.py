@@ -47,6 +47,17 @@ class StateContractTests(unittest.TestCase):
             service._write_output(state)
         self.assertFalse((service.workspace / "output" / "series.md").exists())
 
+    def test_output_replacement_is_atomic_when_validation_fails(self) -> None:
+        service = SeriesService(self.workspace)
+        service.run(BRIEF, FlowModel())
+        previous = (self.workspace / "output" / "series.md").read_text(encoding="utf-8")
+        state = service.store.load()
+        state["scenes"][0]["content"] = "変更済み本文"
+        service._validate_output = lambda paths, series: (_ for _ in ()).throw(ContractError("出力検証失敗"))  # type: ignore[method-assign]
+        with self.assertRaisesRegex(ContractError, "出力検証失敗"):
+            service._write_output(state)
+        self.assertEqual((self.workspace / "output" / "series.md").read_text(encoding="utf-8"), previous)
+
     def test_step_on_completed_series_does_not_rewrite_output(self) -> None:
         service = SeriesService(self.workspace)
         service.run(BRIEF, FlowModel())
