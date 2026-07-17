@@ -1,64 +1,17 @@
 {
   "type": "object",
-  "required": ["content", "handoff_summary", "thread_updates", "character_updates", "relationship_updates", "entity_updates", "timeline_updates"],
+  "required": ["content", "handoff_summary", "state_updates"],
   "properties": {
-    "content": {"type": "string"},
-    "handoff_summary": {"type": "string"},
-    "thread_updates": {
+    "content": {"type": "string", "description": "完成した日本語小説本文"},
+    "handoff_summary": {"type": "string", "description": "本文に根拠を持つ空でない引継ぎ要約"},
+    "state_updates": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "action"],
+        "required": ["id", "status"],
         "properties": {
-          "id": {"type": "string"},
-          "action": {"type": "string", "enum": ["導入", "進展", "回収"]}
-        }
-      }
-    },
-    "character_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["character_id", "field", "value"],
-        "properties": {
-          "character_id": {"type": "string"},
-          "field": {"type": "string", "enum": ["current_goal", "current_pressure", "current_location", "current_condition", "current_knowledge", "current_state"]},
-          "value": {"type": "string"}
-        }
-      }
-    },
-    "relationship_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["relationship_id", "new_state"],
-        "properties": {
-          "relationship_id": {"type": "string"},
-          "new_state": {"type": "string"}
-        }
-      }
-    },
-    "entity_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["entity_id", "field", "value"],
-        "properties": {
-          "entity_id": {"type": "string"},
-          "field": {"type": "string", "enum": ["current_state"]},
-          "value": {"type": "string"}
-        }
-      }
-    },
-    "timeline_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["timeline_id", "status", "actual_scene"],
-        "properties": {
-          "timeline_id": {"type": "string"},
-          "status": {"type": "string", "enum": ["進行中", "完了", "予定", "失効"]},
-          "actual_scene": {"type": "string"}
+          "id": {"type": "string", "description": "card.allowed_update_idsにあるID"},
+          "status": {"type": "string", "enum": ["open", "in_progress", "resolved"]}
         }
       }
     }

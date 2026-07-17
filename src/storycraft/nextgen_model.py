@@ -49,7 +49,9 @@ class OpenAIStoryModel:
             template_stage = _TEMPLATE_STAGE[stage]
         except KeyError as exc:
             raise ContractError(f"未知の生成工程です: {stage}") from exc
-        return get_template_loader().render_user(kind, template_stage, **kwargs)
+        loader = get_template_loader()
+        output_schema = loader.load_schema_text(kind, template_stage)
+        return loader.render_user(kind, template_stage, output_schema=output_schema, **kwargs)
 
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
         last_error = ""

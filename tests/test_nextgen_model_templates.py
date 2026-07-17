@@ -1,6 +1,7 @@
 """次世代モデルが実送信ユーザープロンプトへJinjaテンプレートを使う契約。"""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,9 @@ class _TemplateLoader:
     def render_system(self) -> str:
         return "JINJAでレンダリングされたsystemプロンプト"
 
+    def load_schema_text(self, category: str, stage: str) -> str:
+        return f"外部スキーマ:{category}/{stage}"
+
     def render_user(self, kind: str, stage: str, **kwargs: object) -> str:
         self.calls.append((kind, stage, kwargs))
         return "JINJAでレンダリングされたplanプロンプト"
@@ -45,7 +49,10 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         with patch("storycraft.nextgen_model.get_template_loader", return_value=loader):
             model.generate("plan", {"brief": {"title": "雨の地図"}})
 
-        self.assertEqual(loader.calls, [("generate", "plan", {"brief": {"title": "雨の地図"}})])
+        self.assertEqual(
+            loader.calls,
+            [("generate", "plan", {"brief": {"title": "雨の地図"}, "output_schema": "外部スキーマ:generate/plan"})],
+        )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたplanプロンプト")
 
     def test_real_plan_template_renders_brief_and_current_contract(self) -> None:
@@ -60,7 +67,20 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("# 全巻計画の生成", prompt)
         self.assertIn('"chapters_per_volume": [\n    2,\n    3,\n    2,\n    3\n  ]', prompt)
         self.assertIn("巻番号 n の `chapters` 件数は配列の n 番目の数と完全に一致", prompt)
+        self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
+
+    def test_active_templates_use_output_schema_placeholder_not_inline_json_schema(self) -> None:
+        root = Path(__file__).parents[1] / "templates" / "prompts" / "user"
+        names = [
+            "generate_plan.j2", "generate_scene_cards.j2", "generate_scene_write.j2", "generate_closure_check.j2",
+            "critique_plan.j2", "critique_scene_cards.j2", "critique_scene_write.j2", "critique_closure_check.j2",
+            "fix_plan.j2", "fix_scene_cards.j2", "fix_scene_write.j2", "fix_closure_check.j2",
+        ]
+        for name in names:
+            contents = (root / name).read_text(encoding="utf-8")
+            self.assertIn("{{ output_schema }}", contents, name)
+            self.assertNotIn("```json", contents, name)
 
 
 if __name__ == "__main__":

@@ -1,26 +1,31 @@
 {
   "type": "object",
-  "required": ["volume_count", "volumes", "final_resolution", "series_viewpoint_rule"],
+  "required": ["volumes"],
   "properties": {
-    "volume_count": {"type": "integer", "minimum": 4, "maximum": 10},
     "volumes": {
       "type": "array",
+      "description": "依頼された巻数と完全に一致する巻配列",
       "items": {
         "type": "object",
-        "required": ["number", "title", "role", "character_changes", "resolves", "leaves", "chapter_count", "viewpoint_rule"],
+        "required": ["number", "title", "chapters", "change", "leaves_question"],
         "properties": {
-          "number": {"type": "integer"},
-          "title": {"type": "string"},
-          "role": {"type": "string"},
-          "character_changes": {"type": "string"},
-          "resolves": {"type": "string"},
-          "leaves": {"type": "string"},
-          "chapter_count": {"type": "integer", "minimum": 6, "maximum": 10},
-          "viewpoint_rule": {"type": "string"}
+          "number": {"type": "integer", "description": "1から始まる欠番・重複なしの連番"},
+          "title": {"type": "string", "description": "空でない巻題"},
+          "chapters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["number", "title"],
+              "properties": {
+                "number": {"type": "integer", "description": "巻内で1から始まる欠番・重複なしの連番"},
+                "title": {"type": "string", "description": "空でない章題"}
+              }
+            }
+          },
+          "change": {"type": "string", "description": "空でない変化または独立した区切り"},
+          "leaves_question": {"type": "string", "description": "最終巻以外の未解決の問い。最終巻は空文字列"}
         }
       }
-    },
-    "final_resolution": {"type": "string"},
-    "series_viewpoint_rule": {"type": "string"}
+    }
   }
 }

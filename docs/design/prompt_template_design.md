@@ -4,7 +4,7 @@
 
 ## 正本と記録
 
-- 実送信プロンプトの正本は `templates/prompts/` である。
+- 実送信プロンプトの正本は `templates/prompts/` である。出力スキーマは `templates/prompts/schemas/` のJSONを正本とし、userテンプレートは `{{ output_schema }}` プレースホルダーだけで受け取る。
 - `src/storycraft/nextgen_model.py` は工程名をテンプレート名へ対応付け、`PromptTemplate.render_system()` と `render_user()` でsystem/userメッセージを構築する。Python文字列に工程別契約を重複させない。
 - 採用可否は `src/storycraft/nextgen.py` の工程別検証器が決める。JSON object モードだけを信用して採用してはならない。
 - 生の要求と応答はシリーズ作業場所の `raw/` にJSONと同stemのMarkdownで残す。草稿・批評・修正版・失敗理由・採用済み状態は `state.json` に残す。

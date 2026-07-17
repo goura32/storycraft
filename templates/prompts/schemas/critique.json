@@ -1,21 +1,19 @@
 {
   "type": "object",
-  "required": ["issues", "overall_assessment"],
+  "required": ["issues"],
   "properties": {
     "issues": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["severity", "category", "location", "problem", "suggestion"],
+        "required": ["severity", "field", "description", "suggestion"],
         "properties": {
-          "severity": {"type": "string", "enum": ["致命的", "重要", "軽微", "主要"]},
-          "category": {"type": "string", "enum": ["表現", "論理", "用語", "構成", "その他"]},
-          "location": {"type": "string"},
-          "problem": {"type": "string"},
-          "suggestion": {"type": "string"}
+          "severity": {"type": "string", "enum": ["critical", "major", "minor"]},
+          "field": {"type": "string", "description": "問題のJSONパス"},
+          "description": {"type": "string", "description": "確認できる具体的な問題"},
+          "suggestion": {"type": "string", "description": "直接適用できる修正指示"}
         }
       }
-    },
-    "overall_assessment": {"type": "string"}
+    }
   }
 }
