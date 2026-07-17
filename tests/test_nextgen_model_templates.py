@@ -69,7 +69,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn('"chapters_per_volume": [\n      2,\n      3,\n      2,\n      3\n    ]', prompt)
         self.assertIn("全巻構成だけを作る", prompt)
         self.assertIn("中国語の漢字語・簡体字", prompt)
-        self.assertIn("前巻の結果を受け", prompt)
+        self.assertIn("手がかりを調べる", prompt)
         self.assertIn("入力にない過去の関係", prompt)
         self.assertIn("240文字以内", prompt)
         self.assertIn("各断定文を出力前に", prompt)
