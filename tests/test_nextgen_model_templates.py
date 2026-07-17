@@ -112,6 +112,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("一つの軽微な表記問題を見つけても検査を打ち切らず", prompt)
         self.assertIn("固有名詞だけでなく普通名詞句、行為、理由、状態、因果", prompt)
         self.assertIn("複合表現全体", prompt)
+        self.assertIn("自分の `description` と `suggestion`", prompt)
         revision = OpenAIStoryModel._render("fix", "plan", candidate={}, critique={"issues": []}, context={})
         self.assertIn("批評issueに出ていない違反もこの全件照合で直す", revision)
 
