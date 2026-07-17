@@ -54,6 +54,20 @@ class StateContractTests(unittest.TestCase):
         result = service.step(FlowModel())
         self.assertTrue(result.completed)
 
+    def test_continuity_update_requires_matching_source_scene_and_existing_state_field(self) -> None:
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        state["threads"] = [{
+            "id": "thread-0001", "importance": "major", "current_state": {"status": "open"},
+        }]
+        card = {"scene_id": "v01-c01-s01", "allowed_update_ids": ["thread-0001"]}
+        update = {
+            "source_scene_id": "v01-c01-s99", "id": "thread-0001", "field": "current_state",
+            "value": "resolved", "evidence": "根拠",
+        }
+        with self.assertRaisesRegex(ContractError, "場面ID|更新できないフィールド"):
+            service._validate_continuity({"handoff_summary": "次へ", "state_updates": [update]}, "根拠", card, state, False)
+
 
 class SceneCardContractTests(unittest.TestCase):
     def setUp(self) -> None:

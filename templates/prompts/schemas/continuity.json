@@ -13,12 +13,16 @@
       "items": {
         "type": "object",
         "required": [
+          "source_scene_id",
           "id",
           "field",
           "value",
           "evidence"
         ],
         "properties": {
+          "source_scene_id": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },

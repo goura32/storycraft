@@ -409,7 +409,9 @@ class SeriesService:
         unresolved = {record["id"] for record in state["threads"] if record["importance"] == "major" and record["current_state"].get("status") != "resolved"}
         resolved: set[str] = set()
         for update in value["state_updates"]:
-            self._require(update, "id", "field", "value", "evidence")
+            self._require(update, "source_scene_id", "id", "field", "value", "evidence")
+            if update["source_scene_id"] != card["scene_id"]:
+                raise ContractError("状態更新の場面IDが実行対象と一致しません")
             if update["id"] in seen or update["id"] not in card["allowed_update_ids"]:
                 raise ContractError("状態更新が重複または未許可です")
             seen.add(update["id"])
@@ -418,12 +420,13 @@ class SeriesService:
             target = self._record_for_id(state, update["id"])
             if target is None:
                 raise ContractError("状態更新が未知IDを参照しています")
-            if update["field"] == "status":
+            field = update["field"]
+            if field == "status":
                 if not update["id"].startswith("thread-") or update["value"] not in {"open", "in_progress", "resolved"}:
                     raise ContractError("主要項目以外のstatus更新または不正な状態です")
                 if update["value"] == "resolved":
                     resolved.add(update["id"])
-            elif update["field"] != "current_state" or not isinstance(update["value"], (str, dict, list)):
+            elif field == "current_state" or field not in target["current_state"]:
                 raise ContractError("更新できないフィールドです")
         if is_final_scene and not unresolved.issubset(resolved):
             raise ContractError("最終場面で主要項目がすべて回収されていません")
@@ -512,10 +515,7 @@ class SeriesService:
         for update in updates:
             target = self._record_for_id(state, update["id"])
             assert target is not None
-            if update["field"] == "status":
-                target["current_state"]["status"] = update["value"]
-            else:
-                target["current_state"] = update["value"]
+            target["current_state"][update["field"]] = update["value"]
             target["last_scene_id"] = scene_id
 
     def _card_context(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int, is_final_scene: bool) -> dict[str, Any]:

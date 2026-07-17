@@ -90,7 +90,7 @@ class FlowModel:
             return {
                 "handoff_summary": f"灯りが揺れた。{context['scene_id']}で次へ進む。",
                 "state_updates": [{
-                    "id": "thread-0001", "field": "status", "value": "resolved" if final else "in_progress",
+                    "source_scene_id": context["scene_id"], "id": "thread-0001", "field": "status", "value": "resolved" if final else "in_progress",
                     "evidence": "存在しない根拠" if self.invalid_evidence else "灯りが揺れた。",
                 }],
             }
