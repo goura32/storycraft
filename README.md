@@ -1,8 +1,8 @@
 # Storycraft
 
-利用者が最初に決めた題材と結末から、個人出版向けの日本語小説シリーズを最後まで書き切るためのCLIです。
+利用者が手入力した企画、または自由なkeywordsからLLMが生成したbriefを起点に、個人出版向けの日本語小説シリーズを最後まで書き切るCLIです。
 
-Storycraftは、全巻を一度に固定せず、全巻構成、初期台帳、対象巻の章、場面カード、本文、継続性更新の順で進めます。保存済みの正本状態から中断再開でき、検証済みの巻別・全巻Markdownだけを公開します。
+Storycraftは、人物・関係・世界・時系列・主要項目のCanonを先に確定し、その既存IDを巻別の `volume_map` へ配分してから、章、場面カード、本文、継続性更新の順で進めます。保存済みの正本状態から中断再開でき、検証済みの巻別・全巻Markdownだけを公開します。
 
 ## 文書
 
@@ -31,7 +31,9 @@ PYTHONPATH=src .venv/bin/python -m storycraft.cli --help
 
 ## 最短実行
 
-初回企画をYAMLまたはJSONで作成します。必須項目は `title`、`genre`、`protagonist`、`key_people`、`want`、`avoid`、`ending` です。
+初回briefは、人がYAML/JSONで渡すか、自由なkeywordsからLLMに生成させます。keywordsはジャンル、巻数、雰囲気、題材、人物像などを任意に混在できます。生成briefは内容を採点せず、手入力briefと同じ必須項目・型・範囲だけを検証します。
+
+手入力briefの必須項目は `title`、`genre`、`protagonist`、`key_people`、`want`、`avoid`、`ending` です。
 
 ```yaml
 # brief.yaml
@@ -46,20 +48,27 @@ volumes: 4
 ```
 
 ```bash
+# 手入力brief
 storycraft run --out ./my-series --brief ./brief.yaml
+
+# keywordsを複数指定してbriefをLLM生成
+storycraft run --out ./my-series \
+  --keywords '海洋幻想譚' \
+  --keywords '4巻、静かな希望のある結末' \
+  --keywords '霧の島と灯台'
 ```
 
 `run` は、未保存の作業場所で企画から出力まで連続実行します。実LLMの接続先・model・timeoutは設定YAMLまたは環境変数で指定できます。
 
 ## 操作
 
-| コマンド | 用途 | 企画ファイル |
+| コマンド | 用途 | 初回入力 |
 |---|---|---|
-| `storycraft run --out DIR --brief FILE` | 新規シリーズを連続実行 | 必須 |
+| `storycraft run --out DIR (--brief FILE \| --keywords TEXT ...)` | 新規シリーズを連続実行 | `brief` または1件以上の `keywords` のどちらか一方が必須 |
 | `storycraft resume --out DIR` | 保存済みシリーズの未完了単位を連続実行 | 不要 |
-| `storycraft step --out DIR [--brief FILE]` | 次の保存可能な単位だけ実行 | 初回だけ必須 |
+| `storycraft step --out DIR [--brief FILE \| --keywords TEXT ...]` | 次の保存可能な単位だけ実行 | 初回だけ、どちらか一方を指定 |
 
-共通で `--config FILE` に設定YAMLを渡せます。`resume` に `--brief` は受け付けますが、保存済み企画は置き換えません。完了済みシリーズへの `step` は出力を作り直さず、保存済みの完成結果を返します。
+共通で `--config FILE` に設定YAMLを渡せます。`resume` は初回入力を受け付けず、保存済みbriefは置き換えません。完了済みシリーズへの `step` は出力を作り直さず、保存済みの完成結果を返します。
 
 同じ `--out` への同時操作は拒否されます。別の実行が終了してから `resume` または `step` を実行してください。
 

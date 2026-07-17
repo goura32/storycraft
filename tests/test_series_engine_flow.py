@@ -30,12 +30,6 @@ class FlowModel:
 
     def generate(self, stage: str, context: dict) -> dict:
         self.calls.append((stage, context))
-        if stage == "plan":
-            return {"volumes": [
-                {"title": f"第{number}巻", "change": f"第{number}巻の変化",
-                 "leaves_question": "次巻の問い" if number < 4 else ""}
-                for number in range(1, 5)
-            ]}
         if stage == "characters":
             return {"characters": [{
                 "name": "澪", "role": "主人公", "narrative_function": "秘密を解く",
@@ -62,10 +56,14 @@ class FlowModel:
                 "kind": "謎", "importance": "major", "description": "父の失踪理由",
                 "author_truth": "父は島を守るために去った", "reader_knowledge": "父は失踪した",
                 "character_knowledge": {"char-0001": "父は戻らない"}, "presentation_rule": "直接説明しない",
-                "introduce_by": "v01", "resolve_by": "v04", "resolution_condition": "真実を受け入れる",
-                "traceability": {"brief_want": BRIEF["want"], "brief_ending": BRIEF["ending"], "leaves_question": "次巻の問い"},
+                "resolution_condition": "真実を受け入れる",
                 "initial_state": {"status": "open"},
             }]}
+        if stage == "volume_map":
+            return {"volumes": [
+                {"title": f"第{number}巻", "reader_question": "次巻の問い" if number < 4 else "", "thread_targets": [{"thread_id": "thread-0001", "required_action": ("introduce", "advance", "advance", "resolve")[number - 1]}]}
+                for number in range(1, 5)
+            ]}
         if stage == "volume_chapters":
             volume = context["volume"]
             return {"chapters": [{
@@ -77,7 +75,7 @@ class FlowModel:
                 "scene_id": context["scene_id"], "pov_character_id": "char-0001", "location_id": "entity-0001",
                 "start_time_id": "time-0001", "end_time_id": "time-0001", "character_ids": ["char-0001"],
                 "purpose": "秘密に近づく", "required_events": ["灯りを見つける"],
-                "thread_actions": [{"thread_id": "thread-0001", "action": "resolve" if context["is_final_scene"] else "advance"}],
+                "thread_actions": [{"thread_id": "thread-0001", "action": ("introduce", "advance", "advance", "resolve")[context["volume"]["number"] - 1]}],
                 "reader_disclosure": "父の不在", "withheld_information": "父の真実", "presentation_rules": "澪の観察だけで描く", "end_change": "秘密への距離が縮まる",
                 "visible_ids": ["char-0001", "entity-0001", "thread-0001"],
                 "allowed_update_ids": ["thread-0001"],
@@ -120,7 +118,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         self.assertEqual(
             [stage for stage, _ in model.calls],
             [
-                "plan", "characters", "relationships", "world", "timeline", "threads",
+                "characters", "relationships", "world", "timeline", "threads", "volume_map",
                 "volume_chapters", "scene_card", "scene", "continuity", "volume_summary",
                 "volume_chapters", "scene_card", "scene", "continuity", "volume_summary",
                 "volume_chapters", "scene_card", "scene", "continuity", "volume_summary",
@@ -128,7 +126,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
             ],
         )
         state = SeriesService(self.workspace).store.load()
-        self.assertEqual(state["version"], 3)
+        self.assertEqual(state["version"], 4)
         self.assertEqual(state["characters"][0]["id"], "char-0001")
         self.assertEqual(state["relationships"][0]["id"], "rel-0001")
         self.assertEqual(state["world"][0]["id"], "entity-0001")
@@ -139,16 +137,14 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         self.assertEqual(len(state["volume_summaries"]), 4)
         self.assertEqual(len(result.volume_paths), 4)
 
-    def test_threads_require_major_traceability_and_closure_uses_final_scene_ending_authority(self) -> None:
-        class UntraceableThreadModel(FlowModel):
-            def generate(self, stage: str, context: dict) -> dict:
-                value = super().generate(stage, context)
-                if stage == "threads":
-                    value["threads"][0].pop("traceability", None)
-                return value
-
-        with self.assertRaisesRegex(ContractError, "追跡"):
-            SeriesService(self.workspace).run(BRIEF, UntraceableThreadModel())
+    def test_volume_map_must_be_generated_after_canon_ledgers(self) -> None:
+        model = FlowModel()
+        SeriesService(self.workspace).run(BRIEF, model)
+        calls = [stage for stage, _ in model.calls]
+        self.assertGreater(calls.index("volume_map"), calls.index("threads"))
+        state = SeriesService(self.workspace).store.load()
+        self.assertNotIn("plan", state)
+        self.assertEqual(state["volume_map"]["volumes"][-1]["reader_question"], "")
 
     def test_ledger_generation_has_required_prior_local_context_and_prose_has_only_visible_records(self) -> None:
         model = FlowModel()
@@ -157,7 +153,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         self.assertEqual(calls["relationships"]["brief"], BRIEF)
         self.assertIn("relationships", calls["world"])
         self.assertIn("world", calls["timeline"])
-        self.assertIn("timeline", calls["threads"])
+        self.assertIn("threads", calls["volume_map"]["ledgers"])
         scene_contexts = [context for stage, context in model.calls if stage == "scene"]
         self.assertTrue(scene_contexts)
         self.assertNotIn("ledgers", scene_contexts[0])
@@ -166,24 +162,6 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
     def test_continuity_rejects_update_without_literal_prose_evidence(self) -> None:
         with self.assertRaisesRegex(ContractError, "本文根拠"):
             SeriesService(self.workspace).run(BRIEF, FlowModel(invalid_evidence=True))
-
-    def test_plan_rejects_overlong_detail_dump(self) -> None:
-        plan = FlowModel().generate("plan", {})
-        plan["volumes"][0]["change"] = "調査の詳細を追加する。" * 30
-        with self.assertRaisesRegex(ContractError, "change は240文字以内"):
-            SeriesService._validate_plan(plan, BRIEF)
-
-    def test_plan_rejects_generated_number_or_ending_condition(self) -> None:
-        plan = FlowModel().generate("plan", {})
-        plan["volumes"][-1]["number"] = 4
-        with self.assertRaisesRegex(ContractError, "採番または結末条件"):
-            SeriesService._validate_plan(plan, BRIEF)
-
-    def test_plan_rejects_hangul_left_by_revision(self) -> None:
-        plan = FlowModel().generate("plan", {})
-        plan["volumes"][0]["leaves_question"] = "手がかりを重点적으로探す。"
-        with self.assertRaisesRegex(ContractError, "ハングル字形"):
-            SeriesService._validate_plan(plan, BRIEF)
 
     def test_resume_does_not_regenerate_adopted_initial_ledgers(self) -> None:
         model = FlowModel()

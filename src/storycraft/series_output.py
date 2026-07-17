@@ -19,7 +19,7 @@ class OutputWriter:
 
     def validate_manuscript_state(self, state: dict[str, Any]) -> None:
         expected: set[str] = set()
-        for volume_number in range(1, len(state["plan"]["volumes"]) + 1):
+        for volume_number in range(1, len(state["volume_map"]["volumes"]) + 1):
             chapters = state["chapters"].get(str(volume_number))
             if not isinstance(chapters, list) or not chapters:
                 raise ContractError("必要な章がありません")
@@ -43,7 +43,7 @@ class OutputWriter:
         staging = Path(tempfile.mkdtemp(prefix=".output-", dir=self.workspace))
         paths: list[Path] = []
         try:
-            for volume_number, volume in enumerate(state["plan"]["volumes"], 1):
+            for volume_number, volume in enumerate(state["volume_map"]["volumes"], 1):
                 chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume_number)]}
                 scenes = [scene for scene in state["scenes"] if scene["volume"] == volume_number]
                 lines = [f"# 第{volume_number}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume_number == 1 else "<!-- 販売対象巻 -->", ""]

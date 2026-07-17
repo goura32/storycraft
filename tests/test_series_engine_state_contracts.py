@@ -47,7 +47,7 @@ class StateContractTests(unittest.TestCase):
 
             def generate(self, stage: str, context: dict) -> dict:
                 if not self._blocked:
-                    case.assertEqual(stage, "plan")
+                    case.assertEqual(stage, "characters")
                     self._blocked = True
                     started.set()
                     case.assertTrue(release.wait(timeout=5))
@@ -94,7 +94,7 @@ class StateContractTests(unittest.TestCase):
         with patch("storycraft.series_store.os.fsync") as fsync:
             service.store.save(state)
         self.assertGreaterEqual(fsync.call_count, 2)
-        self.assertEqual(service.store.load()["version"], 3)
+        self.assertEqual(service.store.load()["version"], 4)
 
     def test_output_rejects_missing_planned_scene_before_creating_files(self) -> None:
         service = SeriesService(self.workspace)

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["title", "genre", "protagonist", "key_people", "want", "avoid", "ending"],
+  "properties": {
+    "title": {"type": "string"},
+    "genre": {"type": "string"},
+    "protagonist": {"type": "string"},
+    "key_people": {"type": "string"},
+    "want": {"type": "string"},
+    "avoid": {"type": "string"},
+    "ending": {"type": "string"},
+    "volumes": {"type": "integer"},
+    "chapters_per_volume": {"type": "array", "items": {"type": "integer"}}
+  }
+}

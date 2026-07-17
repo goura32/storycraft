@@ -40,7 +40,7 @@ def _report(result) -> None:
 
 def cmd_run(args) -> None:
     service, model = _service_and_model(args)
-    _report(service.run(_load_brief(args.brief), model))
+    _report(service.run(_load_brief(args.brief) if args.brief else None, model, keywords=args.keywords))
 
 
 def cmd_resume(args) -> None:
@@ -51,21 +51,24 @@ def cmd_resume(args) -> None:
 def cmd_step(args) -> None:
     service, model = _service_and_model(args)
     brief = _load_brief(args.brief) if args.brief else None
-    _report(service.step(model, brief))
+    _report(service.step(model, brief, keywords=args.keywords))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="storycraft", description="日本語小説シリーズ生成")
     subcommands = parser.add_subparsers(dest="command", required=True)
-    for name, handler, brief_required in (
+    for name, handler, accepts_initial_input in (
         ("run", cmd_run, True),
         ("resume", cmd_resume, False),
-        ("step", cmd_step, False),
+        ("step", cmd_step, True),
     ):
         command = subcommands.add_parser(name)
         command.add_argument("--out", required=True, help="対象シリーズの作業場所")
         command.add_argument("--config", default=None, help="設定YAML")
-        command.add_argument("--brief", required=brief_required, help="初回企画JSONまたはYAML")
+        if accepts_initial_input:
+            initial = command.add_mutually_exclusive_group(required=name == "run")
+            initial.add_argument("--brief", help="人が作成した初回企画JSONまたはYAML")
+            initial.add_argument("--keywords", action="append", help="brief生成に渡す自由なキーワード。複数回指定できる")
         command.set_defaults(handler=handler)
     args = parser.parse_args()
     try:

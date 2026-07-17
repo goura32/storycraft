@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "required": ["volumes"],
+  "properties": {
+    "volumes": {
+      "type": "array",
+      "description": "Canonにある主要項目を巻順に配分する。配列位置が巻順を表す。",
+      "items": {
+        "type": "object",
+        "required": ["title", "reader_question", "thread_targets"],
+        "properties": {
+          "title": {"type": "string", "maxLength": 48, "description": "Canonの既存内容だけを表す読者向け巻題。"},
+          "reader_question": {"type": "string", "maxLength": 160, "description": "最終巻以外に残る読者向けの未解決問い。最終巻は空文字列。"},
+          "thread_targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["thread_id", "required_action"],
+              "properties": {
+                "thread_id": {"type": "string", "description": "入力Canonにある主要項目ID。"},
+                "required_action": {"type": "string", "enum": ["introduce", "advance", "resolve"], "description": "この巻で場面カードが必ず扱う操作。"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -62,27 +62,43 @@ class ContractValidator:
             raise ContractError("chapters_per_volume は全巻構成の巻数と一致しなければなりません")
 
     @staticmethod
-    def _validate_plan(plan: dict[str, Any], brief: dict[str, Any]) -> None:
-        volumes = plan.get("volumes")
+    def _validate_volume_map(volume_map: dict[str, Any], brief: dict[str, Any], threads: list[dict[str, Any]]) -> None:
+        volumes = volume_map.get("volumes")
         if not isinstance(volumes, list) or not 4 <= len(volumes) <= 10 or (brief.get("volumes") and len(volumes) != brief["volumes"]):
-            raise ContractError("全巻構成の巻数が不正です")
+            raise ContractError("巻配分の巻数が不正です")
+        known = {record["id"] for record in threads}
+        major = {record["id"] for record in threads if record.get("importance") == "major"}
+        actions_by_thread: dict[str, list[str]] = {identifier: [] for identifier in known}
         for expected, volume in enumerate(volumes, 1):
             if not isinstance(volume, dict) or "number" in volume or "ending_condition" in volume:
-                raise ContractError("全巻構成に採番または結末条件を含めてはいけません")
-            for key in ("title", "change", "leaves_question"):
-                if not isinstance(volume.get(key), str):
-                    raise ContractError(f"全巻構成の {key} が不正です")
-            limits = {"title": 48, "change": 240, "leaves_question": 160}
-            for key, limit in limits.items():
-                if len(volume[key]) > limit:
-                    raise ContractError(f"全巻構成の {key} は{limit}文字以内でなければなりません")
+                raise ContractError("巻配分に採番または結末条件を含めてはいけません")
+            for key, limit in (("title", 48), ("reader_question", 160)):
+                if not isinstance(volume.get(key), str) or len(volume[key]) > limit:
+                    raise ContractError(f"巻配分の {key} が不正です")
                 if any("\uac00" <= character <= "\ud7a3" for character in volume[key]):
-                    raise ContractError(f"全巻構成の {key} に日本語以外のハングル字形があります")
+                    raise ContractError(f"巻配分の {key} に日本語以外のハングル字形があります")
+            targets = volume.get("thread_targets")
+            if not isinstance(targets, list) or not targets:
+                raise ContractError("各巻には少なくとも一つの主要項目配分が必要です")
+            seen: set[str] = set()
+            for target in targets:
+                if not isinstance(target, dict) or target.get("thread_id") not in known:
+                    raise ContractError("巻配分が未知の主要項目を参照しています")
+                identifier = target["thread_id"]
+                action = target.get("required_action")
+                if identifier in seen or action not in {"introduce", "advance", "resolve"}:
+                    raise ContractError("巻配分の主要項目操作が不正です")
+                seen.add(identifier)
+                actions_by_thread[identifier].append(action)
             if expected < len(volumes):
-                if not volume["leaves_question"].strip():
+                if not volume["reader_question"].strip():
                     raise ContractError("最終巻以外には次巻へ続く問いが必要です")
-            elif volume["leaves_question"]:
+            elif volume["reader_question"]:
                 raise ContractError("最終巻の問いは空文字列でなければなりません")
+        for identifier in major:
+            actions = actions_by_thread[identifier]
+            if not actions or actions[0] != "introduce" or actions[-1] != "resolve" or any(action == "introduce" for action in actions[1:]) or "resolve" in actions[:-1]:
+                raise ContractError("major の主要項目は導入から回収まで巻配分しなければなりません")
 
     @staticmethod
     def _validate_characters(value: dict[str, Any]) -> None:
@@ -134,14 +150,13 @@ class ContractValidator:
                 raise ContractError("時間IDはプログラムが採番します")
 
     @staticmethod
-    def _validate_threads(value: dict[str, Any], known_ids: set[str], brief: dict[str, Any], plan: dict[str, Any]) -> None:
+    def _validate_threads(value: dict[str, Any], known_ids: set[str]) -> None:
         records = value.get("threads")
         if not isinstance(records, list) or not records:
             raise ContractError("主要項目台帳が空です")
         major_count = 0
-        questions = {volume["leaves_question"] for volume in plan["volumes"] if volume["leaves_question"]}
         for record in records:
-            ContractValidator._require(record, "kind", "importance", "description", "author_truth", "reader_knowledge", "character_knowledge", "presentation_rule", "introduce_by", "resolve_by", "resolution_condition")
+            ContractValidator._require(record, "kind", "importance", "description", "author_truth", "reader_knowledge", "character_knowledge", "presentation_rule", "resolution_condition")
             state = ContractValidator._initial_state(record)
             if record["importance"] not in {"major", "supporting"} or state.get("status") not in {"open", "in_progress", "resolved"}:
                 raise ContractError("主要項目の状態または重要度が不正です")
@@ -151,9 +166,6 @@ class ContractValidator:
                 raise ContractError("主要項目IDはプログラムが採番します")
             if record["importance"] == "major":
                 major_count += 1
-                traceability = record.get("traceability")
-                if not isinstance(traceability, dict) or traceability.get("brief_want") != brief["want"] or traceability.get("brief_ending") != brief["ending"] or traceability.get("leaves_question") not in questions:
-                    raise ContractError("主要項目に企画・結末・巻末の問いへの追跡情報がありません")
         if major_count == 0:
             raise ContractError("主要項目台帳には major が必要です")
 

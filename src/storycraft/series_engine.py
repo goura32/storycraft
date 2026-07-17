@@ -16,11 +16,11 @@ class SeriesService(SeriesWorkflow):
         self.workspace = workspace
         self.store = StateStore(workspace)
 
-    def run(self, brief: dict[str, Any], model: StoryModel, *, stop_after_scene: str | None = None) -> RunResult:
+    def run(self, brief: dict[str, Any] | None, model: StoryModel, *, keywords: list[str] | None = None, stop_after_scene: str | None = None) -> RunResult:
         with self.store.lock():
             if self.store.exists():
                 raise ContractError("この作業場所には保存済みシリーズがあります。resume を使ってください")
-            state = self._new_state(brief)
+            state = self._new_state(brief, keywords=keywords)
             self.store.save(state)
             return self._advance(state, model, stop_after_scene=stop_after_scene)
 
@@ -28,12 +28,12 @@ class SeriesService(SeriesWorkflow):
         with self.store.lock():
             return self._advance(self.store.load(), model)
 
-    def step(self, model: StoryModel, brief: dict[str, Any] | None = None) -> RunResult:
+    def step(self, model: StoryModel, brief: dict[str, Any] | None = None, *, keywords: list[str] | None = None) -> RunResult:
         with self.store.lock():
             if not self.store.exists():
-                if brief is None:
-                    raise ContractError("初回の step には企画が必要です")
-                state = self._new_state(brief)
+                if (brief is None) == (keywords is None):
+                    raise ContractError("初回の step には企画またはkeywordsのどちらか一方が必要です")
+                state = self._new_state(brief, keywords=keywords)
                 self.store.save(state)
             else:
                 state = self.store.load()

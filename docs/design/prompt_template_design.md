@@ -22,7 +22,7 @@
 生成工程は以下である。
 
 ```text
-plan / characters / relationships / world / timeline / threads
+brief / characters / relationships / world / timeline / threads / volume_map
 / volume_chapters / scene_card / scene / continuity / volume_summary / closure
 ```
 
@@ -30,7 +30,8 @@ plan / characters / relationships / world / timeline / threads
 
 | 工程 | 主な検証 |
 |---|---|
-| `plan` | 4〜10巻、指定巻数、配列順の巻順、巻ごとの変化、最終巻以外の問い。連番・結末条件はLLM出力に持たず、結末の正本はbrief |
+| `brief` | 手入力briefと同じ必須項目・型・巻数範囲だけ。keywords由来の創作内容は検証・採点しない |
+| `volume_map` | 4〜10巻、配列順の巻順、既存thread IDだけ、majorの `introduce → advance* → resolve` 配分、最終巻以外の問い、最終巻の空問い。結末の正本は `brief.ending` |
 | `characters` | 内容のみでIDなし、固定プロフィールと開始時状態 |
 | `relationships` | 既存人物IDだけを参照し、固定意味と開始時状態を持つ |
 | `world` | 内容のみでIDなし、固定事実・利用規則・開始時状態を分離 |

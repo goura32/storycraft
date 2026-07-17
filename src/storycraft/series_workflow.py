@@ -11,12 +11,18 @@ from .series_output import OutputWriter
 class SeriesWorkflow(ContractValidator):
     """状態を一工程ずつ前進させ、出力まで協調する。"""
 
-    def _new_state(self, brief: dict[str, Any]) -> dict[str, Any]:
-        self._validate_brief(brief)
+    def _new_state(self, brief: dict[str, Any] | None = None, *, keywords: list[str] | None = None) -> dict[str, Any]:
+        if (brief is None) == (keywords is None):
+            raise ContractError("初回入力には企画またはkeywordsのどちらか一方が必要です")
+        if brief is not None:
+            self._validate_brief(brief)
+        if keywords is not None and (not keywords or not all(isinstance(keyword, str) and keyword.strip() for keyword in keywords)):
+            raise ContractError("keywords は空でない文字列を一つ以上指定してください")
         return {
-            "version": 3,
+            "version": 4,
             "brief": brief,
-            "plan": None,
+            "keywords": keywords,
+            "volume_map": None,
             "characters": None,
             "relationships": None,
             "world": None,
@@ -52,23 +58,22 @@ class SeriesWorkflow(ContractValidator):
             raise
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
-        if state["plan"] is None:
-            plan = self._improve("plan", {"brief": state["brief"]}, model, state, lambda item: self._validate_plan(item, state["brief"]))
-            self._validate_chapter_count_length(state["brief"], len(plan["volumes"]))
-            state["plan"] = plan
-            state["last_completed_unit"] = {"stage": "plan", "unit": None}
+        if state["brief"] is None:
+            brief = self._improve("brief", {"keywords": state["keywords"]}, model, state, self._validate_brief, review=False)
+            state["brief"] = brief
+            state["last_completed_unit"] = {"stage": "brief", "unit": None}
             return None
         if state["characters"] is None:
-            proposed = self._improve("characters", {"brief": state["brief"], "plan": state["plan"]}, model, state, self._validate_characters)
+            proposed = self._improve("characters", {"brief": state["brief"]}, model, state, self._validate_characters)
             state["characters"] = self._assign_ids(proposed["characters"], "char")
             return None
         if state["relationships"] is None:
-            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"]}
+            context = {"brief": state["brief"], "characters": state["characters"]}
             proposed = self._improve("relationships", context, model, state, lambda item: self._validate_relationships(item, state["characters"]))
             state["relationships"] = self._assign_ids(proposed["relationships"], "rel")
             return None
         if state["world"] is None:
-            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"], "relationships": state["relationships"]}
+            context = {"brief": state["brief"], "characters": state["characters"], "relationships": state["relationships"]}
             proposed = self._improve("world", context, model, state, self._validate_world)
             state["world"] = self._assign_ids(proposed["entities"], "entity")
             return None
@@ -79,15 +84,22 @@ class SeriesWorkflow(ContractValidator):
             return None
         if state["threads"] is None:
             context = self._ledger_context(state)
-            proposed = self._improve("threads", context, model, state, lambda item: self._validate_threads(item, self._known_ids(state), state["brief"], state["plan"]))
+            proposed = self._improve("threads", context, model, state, lambda item: self._validate_threads(item, self._known_ids(state)))
             state["threads"] = self._assign_ids(proposed["threads"], "thread")
             return None
         if not state["initial_ledgers_confirmed"]:
             self._validate_initial_ledgers(state)
             state["initial_ledgers_confirmed"] = True
             return None
+        if state["volume_map"] is None:
+            context = {"brief": state["brief"], "ledgers": self._ledger_context(state)}
+            volume_map = self._improve("volume_map", context, model, state, lambda item: self._validate_volume_map(item, state["brief"], state["threads"]))
+            self._validate_chapter_count_length(state["brief"], len(volume_map["volumes"]))
+            state["volume_map"] = volume_map
+            state["last_completed_unit"] = {"stage": "volume_map", "unit": None}
+            return None
 
-        for volume_number, planned_volume in enumerate(state["plan"]["volumes"], 1):
+        for volume_number, planned_volume in enumerate(state["volume_map"]["volumes"], 1):
             volume = {**planned_volume, "number": volume_number}
             volume_key = str(volume_number)
             if volume_key not in state["chapters"]:
@@ -112,6 +124,7 @@ class SeriesWorkflow(ContractValidator):
                     state["scenes"].append({"scene_id": scene_id, "volume": volume["number"], "chapter": chapter["number"], "content": prose["content"], "handoff_summary": continuity["handoff_summary"], "state_updates": continuity["state_updates"]})
                     return scene_id
             if volume_key not in state["volume_summaries"]:
+                self._validate_volume_thread_targets(state, volume)
                 scenes = [scene for scene in state["scenes"] if scene["volume"] == volume["number"]]
                 context = {"volume": volume, "scenes": scenes, "threads": state["threads"]}
                 summary = self._improve("volume_summary", context, model, state, lambda item: self._validate_volume_summary(item, state))
@@ -126,7 +139,7 @@ class SeriesWorkflow(ContractValidator):
         state["completed"] = True
         return None
 
-    def _improve(self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any], validator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+    def _improve(self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any], validator: Callable[[dict[str, Any]], None], *, review: bool = True) -> dict[str, Any]:
         state["_active"] = {"stage": stage, "unit": context.get("scene_id")}
         candidate: dict[str, Any] | None = None
         error = ""
@@ -146,6 +159,8 @@ class SeriesWorkflow(ContractValidator):
         if candidate is None:
             raise ContractError(f"{stage} の草稿を検証できませんでした: {error}")
         self._record_attempt(state, stage, "draft", context, candidate, "accepted")
+        if not review:
+            return candidate
         try:
             critique = model.critique(stage, candidate, context)
             self._validate_critique(critique)
@@ -175,6 +190,18 @@ class SeriesWorkflow(ContractValidator):
             "response": response, "validation": validation, "raw_reference": None,
         })
 
+    def _validate_volume_thread_targets(self, state: dict[str, Any], volume: dict[str, Any]) -> None:
+        required = {(target["thread_id"], target["required_action"]) for target in volume["thread_targets"]}
+        actual = {
+            (action["thread_id"], action["action"])
+            for scene_id, card in state["cards"].items()
+            if scene_id.startswith(f"v{volume['number']:02d}-")
+            for action in card.get("thread_actions", [])
+        }
+        missing = required - actual
+        if missing:
+            raise ContractError("巻配分で必須の主要項目操作が場面カードにありません")
+
     def _validate_initial_ledgers(self, state: dict[str, Any]) -> None:
         if not all(state[key] is not None for key in ("characters", "relationships", "world", "timeline", "threads")):
             raise ContractError("初期台帳がそろっていません")
@@ -184,7 +211,7 @@ class SeriesWorkflow(ContractValidator):
                     raise ContractError("主要項目台帳の人物参照が不正です")
 
     def _ledger_context(self, state: dict[str, Any]) -> dict[str, Any]:
-        return {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"] or [], "relationships": state["relationships"] or [], "world": state["world"] or [], "timeline": state["timeline"] or [], "threads": state["threads"] or []}
+        return {"brief": state["brief"], "characters": state["characters"] or [], "relationships": state["relationships"] or [], "world": state["world"] or [], "timeline": state["timeline"] or [], "threads": state["threads"] or []}
 
     def _known_ids(self, state: dict[str, Any]) -> set[str]:
         return {record["id"] for key in ("characters", "relationships", "world", "timeline", "threads") for record in (state[key] or [])}
@@ -216,7 +243,7 @@ class SeriesWorkflow(ContractValidator):
         return f"v{volume:02d}-c{chapter:02d}-s{scene:02d}"
 
     def _is_final_scene(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int) -> bool:
-        return volume["number"] == len(state["plan"]["volumes"]) and chapter["number"] == state["chapters"][str(volume["number"])][-1]["number"] and scene_number == chapter["scene_count"]
+        return volume["number"] == len(state["volume_map"]["volumes"]) and chapter["number"] == state["chapters"][str(volume["number"])][-1]["number"] and scene_number == chapter["scene_count"]
 
     @staticmethod
     def _prior_summaries(state: dict[str, Any], volume_number: int) -> list[dict[str, Any]]:
@@ -238,4 +265,4 @@ class SeriesWorkflow(ContractValidator):
         return sorted((self.workspace / "output").glob("volume-*.md"))
 
     def _result(self, state: dict[str, Any], paths: list[Path] | None = None) -> RunResult:
-        return RunResult(completed=bool(state["completed"]), volume_count=len(state["plan"]["volumes"]) if state["plan"] else 0, volume_paths=paths or self._volume_paths(), series_path=self.workspace / "output" / "series.md", closure=state["closure"])
+        return RunResult(completed=bool(state["completed"]), volume_count=len(state["volume_map"]["volumes"]) if state["volume_map"] else 0, volume_paths=paths or self._volume_paths(), series_path=self.workspace / "output" / "series.md", closure=state["closure"])

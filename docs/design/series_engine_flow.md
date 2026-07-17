@@ -4,20 +4,20 @@
 
 ## 目的
 
-利用者が初回企画を一度だけ渡し、途中確認なしで完結した複巻小説Markdownを得る。継続性情報は本文の補助メモではなく、本文より先に確定する初期台帳と、場面ごとに更新される現在状態で管理する。
+利用者が手入力briefまたは自由keywordsを一度だけ渡し、途中確認なしで完結した複巻小説Markdownを得る。keywords時はLLMがbriefを生成し、創作内容を評価せず手入力briefと同じ構造契約だけを通す。継続性情報は本文の補助メモではなく、本文より先に確定するCanonと、場面ごとに更新される現在状態で管理する。
 
 ## 工程の流れ
 
 ```mermaid
 flowchart TD
-    Brief[企画の検証・正規化] --> Plan[全巻構成]
-    Plan --> Characters[人物初期台帳]
+    Brief[手入力brief または keywordsから生成] --> Characters[人物初期台帳]
     Characters --> Relationships[関係初期台帳]
     Relationships --> World[世界初期台帳]
     World --> Timeline[時間初期台帳]
     Timeline --> Threads[主要項目初期台帳]
-    Threads --> Canon[初期台帳の横断確認・確定]
-    Canon --> Chapters[対象巻の章一覧]
+    Threads --> Canon[Canonの横断確認・確定]
+    Canon --> VolumeMap[volume_map: existing thread IDの巻別配分]
+    VolumeMap --> Chapters[対象巻の章一覧]
     Chapters --> Cards[対象章の場面カード]
     Cards --> Prose[本文]
     Prose --> Continuity[継続性抽出・状態更新]
@@ -30,7 +30,7 @@ flowchart TD
     Closure --> Output[Markdown出力]
 ```
 
-全巻構成は巻の役割、変化、巻末の問いだけを定める。結末到達条件の正本は初回企画の `ending` とし、全巻構成へ重複保存しない。全巻の詳細章・場面・本文を最初に固定しない。各巻の章一覧は、その巻の開始時に、確定済み台帳と前巻までの採用済み要約を入力として作る。
+`volume_map` は確定Canonの既存thread IDを、各巻の `introduce`、`advance`、`resolve` 操作へ配分する。新しい人物、設定、因果、出来事、結末条件は作らない。表示用の `reader_question` は最終巻以外にだけ置き、結末到達条件の唯一の正本はbriefの `ending` とする。全巻の詳細章・場面・本文を最初に固定しない。各巻の章一覧は、その巻の開始時に、確定Canonと対象巻の操作、前巻までの採用済み要約を入力として作る。
 
 ## 正本と更新権限
 

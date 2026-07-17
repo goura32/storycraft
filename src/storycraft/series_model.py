@@ -10,7 +10,7 @@ from .prompt_template import get_template_loader
 
 
 _STAGES = {
-    "plan", "characters", "relationships", "world", "timeline", "threads",
+    "brief", "characters", "relationships", "world", "timeline", "threads", "volume_map",
     "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure",
 }
 
