@@ -39,14 +39,17 @@ class RawLogMarkdownTests(unittest.TestCase):
         self.assertEqual(json.loads(json_path.read_text(encoding="utf-8"))["content"], record.content)
         self.assertEqual(
             markdown_path.read_text(encoding="utf-8"),
-            "# 0000_generate_plan.md\n\n"
-            "## system\n\n"
+            "# 0000_generate_plan.md\n"
+            "---\n"
+            "## 送信 (system)\n\n"
             "JSONだけを返してください。\n"
-            "改行はそのままです。\n\n"
-            "## user\n\n"
+            "改行はそのままです。\n"
+            "---\n"
+            "## 送信 (user)\n\n"
             "企画:\n"
-            "雨の地図\n\n"
-            "## received\n\n"
+            "雨の地図\n"
+            "---\n"
+            "## 受信\n\n"
             '{"volumes": [\n'
             '  {"number": 1}\n'
             "]}\n",

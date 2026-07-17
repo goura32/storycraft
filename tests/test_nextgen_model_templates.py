@@ -68,6 +68,8 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("# plan の生成", prompt)
         self.assertIn('"chapters_per_volume": [\n      2,\n      3,\n      2,\n      3\n    ]', prompt)
         self.assertIn("全巻構成だけを作る", prompt)
+        self.assertIn("中国語の漢字語・簡体字", prompt)
+        self.assertIn("前巻の結果を受け", prompt)
         self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
 

@@ -123,7 +123,8 @@ class LLMClient:
 
     @staticmethod
     def _raw_markdown(filename: str, sent_messages: list, content: str) -> str:
-        """生ログの送受信本文を、JSONエスケープなしで閲覧用に整形する。"""
+        """生ログを、送受信の区切りが明確な人間確認用Markdownへ整形する。"""
+        labels = {"system": "送信 (system)", "user": "送信 (user)"}
         sections = [f"# {filename}"]
         for message in sent_messages:
             if not isinstance(message, dict):
@@ -131,9 +132,9 @@ class LLMClient:
             role = message.get("role")
             message_content = message.get("content")
             if isinstance(role, str) and isinstance(message_content, str):
-                sections.extend((f"## {role}", message_content))
-        sections.extend(("## received", content))
-        return "\n\n".join(sections) + "\n"
+                sections.append(f"---\n## {labels.get(role, f'送信 ({role})')}\n\n{message_content}")
+        sections.append(f"---\n## 受信\n\n{content}")
+        return "\n".join(sections) + "\n"
 
     def save_raw(self, rec: CallRecord, prompt_messages: list) -> None:
         """送受信生データと、人間向けMarkdownを同じstemで保存。thinking本文は除く。"""
