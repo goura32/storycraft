@@ -72,7 +72,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("前巻の結果を受け", prompt)
         self.assertIn("入力にない過去の関係", prompt)
         self.assertIn("240文字以内", prompt)
-        self.assertIn("各断定文", prompt)
+        self.assertIn("各断定文を出力前に", prompt)
         self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
 
@@ -105,6 +105,11 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         system = get_template_loader().render_system()
         self.assertIn("必ず有効なJSONオブジェクトのみを返す", system)
         self.assertIn("コードブロック", system)
+
+    def test_plan_critique_checks_every_field_without_stopping_at_one_issue(self) -> None:
+        prompt = OpenAIStoryModel._render("critique", "plan", candidate={}, context={})
+        self.assertIn("`title`、`change`、`leaves_question`、`ending_condition` を一つずつ", prompt)
+        self.assertIn("一つの軽微な表記問題を見つけても検査を打ち切らず", prompt)
 
     def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:
         loader = get_template_loader()
