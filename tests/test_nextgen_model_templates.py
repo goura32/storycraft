@@ -83,12 +83,20 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
             self.assertIn("{{ output_schema }}", contents, name)
             self.assertNotIn("```json", contents, name)
             self.assertNotIn("ensure_ascii", contents, name)
+            self.assertNotIn("indent=2", contents, name)
+            self.assertNotIn("JSONオブジェクトだけを返すこと。", contents, name)
             self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
+
+    def test_system_template_owns_json_response_protocol(self) -> None:
+        system = get_template_loader().render_system()
+        self.assertIn("必ず有効なJSONオブジェクトのみを返す", system)
+        self.assertIn("コードブロック", system)
 
     def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:
         loader = get_template_loader()
         self.assertFalse(loader.env.policies["json.dumps_kwargs"]["ensure_ascii"])
-        rendered = loader.env.from_string("{{ value | tojson(indent=2) }}").render(value={"title": "雨の地図"})
+        self.assertEqual(loader.env.policies["json.dumps_kwargs"]["indent"], 2)
+        rendered = loader.env.from_string("{{ value | tojson }}").render(value={"title": "雨の地図"})
         self.assertIn("雨の地図", rendered)
         self.assertNotIn("\\\\u96e8", rendered)
 
