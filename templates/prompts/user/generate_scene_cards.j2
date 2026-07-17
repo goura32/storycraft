@@ -1,37 +1,30 @@
-# 章の場面カード 生成
+# 場面カードの生成
 
-次の章から、場面カードを作ってください。
+一つの場面で参照・更新を許可する主要な問いを、必要最小限に決める。
 
-## 章
-{{ chapter | tojson(ensure_ascii=False, indent=2) }}
+## 実行指示
 
-## 企画
-{{ brief | tojson(ensure_ascii=False, indent=2) }}
-
-## 前章の引継ぎ要約
-{{ handoff }}
-
-## この巻で既に起きた変化
-{{ vol_changes }}
-
-## この章で扱う台帳項目
-{{ chapter_threads | tojson(ensure_ascii=False, indent=2) }}
-
-{% if is_final_chapter %}
-## 注意
-最終章です。初回企画の結末条件を必ず反映してください: {{ final_condition }}
-{% endif %}
-
-## 指示
-場面カードは2〜4件。各カードに viewpoint_character（役名）、start_time、end_time、location_id（entity-01 等）、entity_ids（IDのリスト）、purpose、opening、required_events、characters（役名リスト）、thread_actions（[{id, action:'導入'|'進展'|'回収'|'展開'}]）、reader_disclosure、presentation_rules、end_change を含める。
-
-**ID命名ルール（厳守）**
-- location_id / entity_ids: 既知の world entities から選択。形式は `entity-XX`（XXは2桁数字）
-- thread_actions[].id: 既知の threads から選択。形式は `thread-XX`
-- characters: 役名（日本語可）を配列で指定。IDではない
-- **新規IDを勝手に作らないこと・日本語・記号・英単語混在のIDは不可**
+- `scene_id` は入力の `scene_id` と完全に一致させ、新規作成・変更・推測をしない。
+- 両配列には `available_thread_ids` に提示されたIDだけを入れ、未知IDを作らない。
+- `allowed_update_ids` は `visible_thread_ids` の部分集合にする。
+- 可視化は本文で扱う主要な問いに限り、更新許可はこの場面で実際に進展または回収する問いに限る。
+- `is_final_scene` が true のとき、`unresolved_thread_ids` の全IDを両配列に含める。最終場面以外で未回収の問いを一括回収する許可を広げない。
 
 ## 出力スキーマ
-{{ schema }}
 
-必ずJSONオブジェクトだけを返してください。
+```json
+{
+  "scene_id": "入力のscene_idと完全一致する文字列",
+  "visible_thread_ids": ["available_thread_idsにあるID"],
+  "allowed_update_ids": ["visible_thread_idsの部分集合のID"]
+}
+```
+
+## 入力
+
+{{ scene_id | tojson(ensure_ascii=False) }}
+{{ available_thread_ids | tojson(ensure_ascii=False, indent=2) }}
+{{ unresolved_thread_ids | tojson(ensure_ascii=False, indent=2) }}
+{{ is_final_scene | tojson }}
+
+JSONオブジェクトだけを返すこと。

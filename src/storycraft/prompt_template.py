@@ -56,9 +56,11 @@ _template_loader: PromptTemplate | None = None
 
 
 def get_template_loader() -> PromptTemplate:
-    """テンプレートローダーのシングルトンインスタンスを取得"""
+    """パッケージ同梱テンプレートを優先してシングルトンを取得する。"""
     global _template_loader
     if _template_loader is None:
-        template_dir = Path(__file__).parent.parent.parent / "templates" / "prompts"
+        packaged = Path(__file__).parent / "templates" / "prompts"
+        source_tree = Path(__file__).parent.parent.parent / "templates" / "prompts"
+        template_dir = packaged if packaged.exists() else source_tree
         _template_loader = PromptTemplate(template_dir)
     return _template_loader

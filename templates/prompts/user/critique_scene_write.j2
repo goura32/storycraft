@@ -1,36 +1,21 @@
-## 草稿の批評
-次のJSONオブジェクト（草稿）を批評してください。
+# 場面成果物の批評
 
-草稿:
-{{ current | tojson(ensure_ascii=False, indent=2) }}
+候補を入力状態と照合する。本文が完成した日本語小説であること、引継ぎ要約の各文が本文だけに根拠を持ち本文外の事実・予測・解釈を足さないこと、状態更新が許可ID・本文上の進展・既存状態と整合することを確認する。最終場面では全未回収IDの回収と結末到達を確認する。簡体字・中国語混入、明白な誤字、人称混乱もissueにする。
 
-## 文脈情報
-文脈情報:
-{{ card | tojson(ensure_ascii=False, indent=2) }}
+## 出力スキーマ
 
-## 改善の方向
-改善の方向:
-{{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
+```json
+{"issues":[{"severity":"critical | major | minor","field":"問題のJSONパス","description":"確認できる具体的な問題","suggestion":"直接適用できる修正指示"}]}
+```
 
-## 評価観点
-以下の観点で自由文フィールドの問題点を列挙してください:
-- 日本語として自然か（中国語的表現・不要な外来語の混入・用語の揺れ）
-- 情報の正確性・一貫性・具体性
-- 論理的整合性・矛盾の有無
-- 表現の明確さ・冗長さ
+問題がなければ `issues` は空配列にする。称賛、点数、出版可否、曖昧な感想、候補に存在しない問題は出さない。各issueは4キーを必ず持つ。
 
-## 出力形式
-出力は必ず次のJSON構造で返してください（issues は空配列可、overall_assessment は必須）:
-{
-  "issues": [
-    {"severity": "致命的|重要|軽微|主要", "category": "表現|論理|用語|構成|その他", "location": "該当フィールド名や箇所の目安", "problem": "何が問題か", "suggestion": "どう直すべきか"}
-  ],
-  "overall_assessment": "全体的な所見（良い点・悪い点の要約）"
-}
+## 候補
 
-## JSONスキーマ
-【この呼び出し専用JSON Schema】
-{{ schema }}
+{{ candidate | tojson(ensure_ascii=False, indent=2) }}
 
-## 指示
-必ずJSONオブジェクトだけを返してください。
+## 入力状態
+
+{{ context | tojson(ensure_ascii=False, indent=2) }}
+
+JSONオブジェクトだけを返すこと。

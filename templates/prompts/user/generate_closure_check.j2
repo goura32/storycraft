@@ -1,26 +1,26 @@
-# 完結前確認 生成
+# 完結確認の生成
 
-次の台帳の主要項目が、対応する場面で回収されたか確認してください。
+採用済みの台帳状態だけから、主要な問いと結末の完結可否を判定する。
 
-## 台帳
-{{ threads | tojson(ensure_ascii=False, indent=2) }}
+## 実行指示
 
-## 場面ごとの台帳更新
-{{ scene_updates | tojson(ensure_ascii=False, indent=2) }}
-
-## 引継ぎ要約
-{{ handoffs | tojson(ensure_ascii=False, indent=2) }}
-
-## 指示
-**ID命名ルール（厳守）**
-- results[].thread_id: 既存の `thread-XX` のみ
-- results[].status: `回収済み`|`未回収` のみ
-- results[].scene: 場面識別子（例: `vol1.ch3.sc2`）を文字列で指定
-- **新規IDを勝手に作らない・日本語・記号混在のIDは不可**
-
-主要項目（importance='主要'）ごとに、回収した場面番号、または未回収を返してください。
+- `resolved_ids` は入力 `threads` の全IDを一度ずつ含める。追加、欠落、重複、別名は不可。
+- `ending_reached` は希望や予定ではなく、採用済み場面の状態に基づいて判定する。
+- 未回収の問いがあれば、それを `resolved_ids` に入れたり、`ending_reached` を true にしたりしない。
 
 ## 出力スキーマ
-{{ schema }}
 
-必ずJSONオブジェクトだけを返してください。
+```json
+{
+  "resolved_ids": ["入力threadsにある全IDを一度ずつ"],
+  "ending_reached": "初回企画のendingに実際に到達済みならtrue、そうでなければfalse"
+}
+```
+
+## 入力
+
+{{ brief | tojson(ensure_ascii=False, indent=2) }}
+{{ threads | tojson(ensure_ascii=False, indent=2) }}
+{{ scenes | tojson(ensure_ascii=False, indent=2) }}
+
+JSONオブジェクトだけを返すこと。

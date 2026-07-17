@@ -1,21 +1,23 @@
-次のJSONオブジェクト（草稿）と批評結果を受け、問題を修正して改善版を返してください。
+# 場面カードの修正
 
-草稿:
-{{ current | tojson(ensure_ascii=False, indent=2) }}
-
-批評結果:
-{{ critique_result | tojson(ensure_ascii=False, indent=2) }}
-
-文脈情報:
-{{ card | tojson(ensure_ascii=False, indent=2) }}
-
-改善の方向:
-{{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
-
-批評で指摘された issues をすべて解消し、overall_assessment の意図を反映した改善版を出力してください。
-スキーマに従い、JSONオブジェクトのみを返してください。
+批評issuesに従い候補を修正する。指摘されていない正しいIDと順序を失わない。`scene_id` は入力と完全一致させ、両ID配列は入力の既知IDだけにし、更新許可IDは可視IDの部分集合にする。最終場面では全未回収IDを両配列に含める。
 
 ## 出力スキーマ
-{{ schema }}
 
-必ずJSONオブジェクトだけを返してください.
+```json
+{"scene_id":"入力scene_idと完全一致する文字列","visible_thread_ids":["既知ID"],"allowed_update_ids":["可視IDの部分集合"]}
+```
+
+## 候補
+
+{{ candidate | tojson(ensure_ascii=False, indent=2) }}
+
+## 批評issues
+
+{{ critique | tojson(ensure_ascii=False, indent=2) }}
+
+## 入力状態
+
+{{ context | tojson(ensure_ascii=False, indent=2) }}
+
+JSONオブジェクトだけを返すこと。

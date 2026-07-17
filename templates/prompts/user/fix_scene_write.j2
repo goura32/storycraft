@@ -1,21 +1,23 @@
-次のJSONオブジェクト（草稿）と批評結果を受け、問題を修正して改善版を返してください。
+# 場面成果物の修正
 
-草稿:
-{{ current | tojson(ensure_ascii=False, indent=2) }}
-
-批評結果:
-{{ critique_result | tojson(ensure_ascii=False, indent=2) }}
-
-文脈情報:
-{{ card | tojson(ensure_ascii=False, indent=2) }}
-
-改善の方向:
-{{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
-
-批評で指摘された issues をすべて解消し、overall_assessment の意図を反映した改善版を出力してください。
-スキーマに従い、JSONオブジェクトのみを返してください。
+批評issuesに従い候補を修正する。指摘されていない正しい本文事実、ID、順序を失わない。完成日本語本文、本文だけに根拠を持つ引継ぎ、許可IDかつ本文事実に整合する状態更新を同時に満たす。本文外の事実・予測・解釈を引継ぎに足さない。最終場面では結末と全required IDの回収を本文で成立させる。
 
 ## 出力スキーマ
-{{ schema }}
 
-必ずJSONオブジェクトだけを返してください.
+```json
+{"content":"完成した日本語小説本文","handoff_summary":"本文に根拠を持つ空でない引継ぎ要約","state_updates":[{"id":"card.allowed_update_idsにあるID","status":"open | in_progress | resolved"}]}
+```
+
+## 候補
+
+{{ candidate | tojson(ensure_ascii=False, indent=2) }}
+
+## 批評issues
+
+{{ critique | tojson(ensure_ascii=False, indent=2) }}
+
+## 入力状態
+
+{{ context | tojson(ensure_ascii=False, indent=2) }}
+
+JSONオブジェクトだけを返すこと。
