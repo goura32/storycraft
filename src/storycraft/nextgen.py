@@ -45,6 +45,13 @@ class _Store:
             raise ContractError("保存状態が壊れています") from exc
         if data.get("version") != 3:
             raise ContractError("この保存状態は現行の次世代形式ではありません")
+        required = {
+            "brief", "plan", "characters", "relationships", "world", "timeline", "threads",
+            "chapters", "cards", "scenes", "volume_summaries", "initial_ledgers_confirmed",
+            "attempts", "closure", "completed", "last_completed_unit", "stopped_at", "stop_reason",
+        }
+        if not required.issubset(data) or not isinstance(data["attempts"], list):
+            raise ContractError("保存状態が製品契約を満たしていません")
         return data
 
     def save(self, data: dict[str, Any]) -> None:
@@ -104,19 +111,33 @@ class SeriesService:
             "attempts": [],
             "closure": {},
             "completed": False,
+            "last_completed_unit": None,
+            "stopped_at": None,
+            "stop_reason": None,
+            "_active": None,
         }
 
     def _advance(self, state: dict[str, Any], model: StoryModel, *, stop_after_scene: str | None = None) -> RunResult:
-        while not state["completed"]:
-            scene_id = self._run_one(state, model)
+        try:
+            while not state["completed"]:
+                scene_id = self._run_one(state, model)
+                self.store.save(state)
+                if scene_id is not None and scene_id == stop_after_scene:
+                    return self._result(state)
+            return self._result(state, self._volume_paths())
+        except ContractError as exc:
+            active = state.get("_active") or {"stage": "unknown", "unit": None}
+            state["stopped_at"] = active
+            state["stop_reason"] = str(exc)
             self.store.save(state)
-            if scene_id is not None and scene_id == stop_after_scene:
-                return self._result(state)
-        return self._result(state, self._volume_paths())
+            raise
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
         if state["plan"] is None:
-            state["plan"] = self._improve("plan", {"brief": state["brief"]}, model, state, lambda item: self._validate_plan(item, state["brief"]))
+            plan = self._improve("plan", {"brief": state["brief"]}, model, state, lambda item: self._validate_plan(item, state["brief"]))
+            self._validate_chapter_count_length(state["brief"], len(plan["volumes"]))
+            state["plan"] = plan
+            state["last_completed_unit"] = {"stage": "plan", "unit": None}
             return None
         if state["characters"] is None:
             proposed = self._improve("characters", {"brief": state["brief"], "plan": state["plan"]}, model, state, self._validate_characters)
@@ -163,6 +184,7 @@ class SeriesService:
                     card_context = self._card_context(state, volume, chapter, scene_number, is_final_scene)
                     card = self._improve("scene_card", card_context, model, state, lambda item: self._validate_card(item, scene_id, state))
                     state["cards"][scene_id] = card
+                    state["last_completed_unit"] = {"stage": "scene_card", "unit": scene_id}
                     prose_context = self._writer_context(state, card, scene_id, is_final_scene)
                     prose = self._improve("scene", prose_context, model, state, self._validate_scene)
                     continuity_context = {"scene_id": scene_id, "content": prose["content"], "card": card, "is_final_scene": is_final_scene}
@@ -186,6 +208,7 @@ class SeriesService:
         return None
 
     def _improve(self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any], validator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        state["_active"] = {"stage": stage, "unit": context.get("scene_id")}
         candidate: dict[str, Any] | None = None
         error = ""
         for _ in range(4):
@@ -236,6 +259,12 @@ class SeriesService:
         counts = brief.get("chapters_per_volume")
         if counts is not None and (not isinstance(counts, list) or not all(isinstance(value, int) and 1 <= value <= 12 for value in counts) or (brief.get("volumes") and len(counts) != brief["volumes"])):
             raise ContractError("chapters_per_volume は巻数と一致する1〜12の整数配列でなければなりません")
+
+    @staticmethod
+    def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
+        counts = brief.get("chapters_per_volume")
+        if counts is not None and len(counts) != volume_count:
+            raise ContractError("chapters_per_volume は全巻構成の巻数と一致しなければなりません")
 
     @staticmethod
     def _validate_plan(plan: dict[str, Any], brief: dict[str, Any]) -> None:
