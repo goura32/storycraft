@@ -74,8 +74,10 @@ class FlowModel:
         if stage == "scene_card":
             return {
                 "scene_id": context["scene_id"], "pov_character_id": "char-0001", "location_id": "entity-0001",
+                "start_time_id": "time-0001", "end_time_id": "time-0001", "character_ids": ["char-0001"],
                 "purpose": "秘密に近づく", "required_events": ["灯りを見つける"],
-                "reader_disclosure": "父の不在", "presentation_rules": "澪の観察だけで描く",
+                "thread_actions": [{"thread_id": "thread-0001", "action": "resolve" if context["is_final_scene"] else "advance"}],
+                "reader_disclosure": "父の不在", "withheld_information": "父の真実", "presentation_rules": "澪の観察だけで描く", "end_change": "秘密への距離が縮まる",
                 "visible_ids": ["char-0001", "entity-0001", "thread-0001"],
                 "allowed_update_ids": ["thread-0001"],
             }

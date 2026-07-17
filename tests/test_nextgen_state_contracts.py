@@ -35,5 +35,22 @@ class StateContractTests(unittest.TestCase):
             SeriesService(self.workspace).resume(FlowModel())
 
 
+class SceneCardContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.workspace = Path(tempfile.mkdtemp(prefix="storycraft-card-contract-"))
+
+    def test_scene_card_without_required_temporal_and_disclosure_contract_is_rejected(self) -> None:
+        class MissingFieldsModel(FlowModel):
+            def generate(self, stage: str, context: dict) -> dict:
+                value = super().generate(stage, context)
+                if stage == "scene_card":
+                    for key in ("start_time_id", "end_time_id", "character_ids", "thread_actions", "withheld_information", "end_change"):
+                        value.pop(key, None)
+                return value
+
+        with self.assertRaisesRegex(ContractError, "必須項目"):
+            SeriesService(self.workspace).run(BRIEF, MissingFieldsModel())
+
+
 if __name__ == "__main__":
     unittest.main()

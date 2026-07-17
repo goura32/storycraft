@@ -367,14 +367,26 @@ class SeriesService:
                 raise ContractError("場面数は1〜4でなければなりません")
 
     def _validate_card(self, card: dict[str, Any], scene_id: str, state: dict[str, Any]) -> None:
-        self._require(card, "scene_id", "pov_character_id", "location_id", "purpose", "required_events", "reader_disclosure", "presentation_rules", "visible_ids", "allowed_update_ids")
+        self._require(card, "scene_id", "pov_character_id", "location_id", "start_time_id", "end_time_id", "character_ids", "purpose", "required_events", "thread_actions", "reader_disclosure", "withheld_information", "presentation_rules", "end_change", "visible_ids", "allowed_update_ids")
         if card["scene_id"] != scene_id:
             raise ContractError("場面カードのIDが実行対象と一致しません")
         characters = {record["id"] for record in state["characters"]}
+        times = {record["id"] for record in state["timeline"]}
         world = {record["id"] for record in state["world"]}
+        threads = {record["id"] for record in state["threads"]}
         known = self._known_ids(state)
         if card["pov_character_id"] not in characters or card["location_id"] not in world:
             raise ContractError("場面カードの視点人物または場所が不正です")
+        if card["start_time_id"] not in times or card["end_time_id"] not in times:
+            raise ContractError("場面カードの時刻が不正です")
+        if not isinstance(card["character_ids"], list) or not card["character_ids"] or not set(card["character_ids"]).issubset(characters):
+            raise ContractError("場面カードの登場人物が不正です")
+        if not isinstance(card["thread_actions"], list):
+            raise ContractError("場面カードの伏線操作が不正です")
+        for action in card["thread_actions"]:
+            self._require(action, "thread_id", "action")
+            if action["thread_id"] not in threads or action["action"] not in {"introduce", "advance", "resolve"}:
+                raise ContractError("場面カードの伏線操作が不正です")
         for field in ("visible_ids", "allowed_update_ids"):
             values = card[field]
             if not isinstance(values, list) or len(values) != len(set(values)) or not set(values).issubset(known):
@@ -450,7 +462,7 @@ class SeriesService:
             raise ContractError("応答項目がオブジェクトではありません")
         for field in fields:
             if not isinstance(value.get(field), str) or not value[field].strip():
-                if field in {"required_events", "visible_ids", "allowed_update_ids", "state_updates", "related_ids"} and isinstance(value.get(field), list):
+                if field in {"required_events", "character_ids", "thread_actions", "visible_ids", "allowed_update_ids", "state_updates", "related_ids"} and isinstance(value.get(field), list):
                     continue
                 if field == "character_knowledge" and isinstance(value.get(field), dict):
                     continue

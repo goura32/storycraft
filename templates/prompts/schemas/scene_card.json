@@ -1,52 +1,35 @@
 {
   "type": "object",
   "required": [
-    "scene_id",
-    "pov_character_id",
-    "location_id",
-    "purpose",
-    "required_events",
-    "reader_disclosure",
-    "presentation_rules",
-    "visible_ids",
-    "allowed_update_ids"
+    "scene_id", "pov_character_id", "location_id", "start_time_id", "end_time_id",
+    "character_ids", "purpose", "required_events", "thread_actions", "reader_disclosure",
+    "withheld_information", "presentation_rules", "end_change", "visible_ids", "allowed_update_ids"
   ],
   "properties": {
-    "scene_id": {
-      "type": "string"
-    },
-    "pov_character_id": {
-      "type": "string"
-    },
-    "location_id": {
-      "type": "string"
-    },
-    "purpose": {
-      "type": "string"
-    },
-    "required_events": {
+    "scene_id": {"type": "string"},
+    "pov_character_id": {"type": "string"},
+    "location_id": {"type": "string"},
+    "start_time_id": {"type": "string"},
+    "end_time_id": {"type": "string"},
+    "character_ids": {"type": "array", "items": {"type": "string"}},
+    "purpose": {"type": "string"},
+    "required_events": {"type": "array", "items": {"type": "string"}},
+    "thread_actions": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "object",
+        "required": ["thread_id", "action"],
+        "properties": {
+          "thread_id": {"type": "string"},
+          "action": {"type": "string", "enum": ["introduce", "advance", "resolve"]}
+        }
       }
     },
-    "reader_disclosure": {
-      "type": "string"
-    },
-    "presentation_rules": {
-      "type": "string"
-    },
-    "visible_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "allowed_update_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    }
+    "reader_disclosure": {"type": "string"},
+    "withheld_information": {"type": "string"},
+    "presentation_rules": {"type": "string"},
+    "end_change": {"type": "string"},
+    "visible_ids": {"type": "array", "items": {"type": "string"}},
+    "allowed_update_ids": {"type": "array", "items": {"type": "string"}}
   }
 }
