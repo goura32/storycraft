@@ -1,8 +1,0 @@
-{
-  "type": "object",
-  "required": ["resolved_ids", "ending_reached"],
-  "properties": {
-    "resolved_ids": {"type": "array", "items": {"type": "string"}, "description": "入力threadsにある全IDを一度ずつ"},
-    "ending_reached": {"type": "boolean", "description": "初回企画のendingに実際に到達済みならtrue"}
-  }
-}

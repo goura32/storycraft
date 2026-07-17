@@ -96,7 +96,11 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
                 self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
         self.assertFalse(list(root.glob("*.j2")))
         files = list(root.glob("*/*.j2"))
-        self.assertEqual(len(files), 45)
+        self.assertEqual(len(files), 36)
+        retired = {"closure_check", "scene_cards", "scene_write"}
+        self.assertFalse(retired & {path.parent.name for path in files})
+        for stage in retired:
+            self.assertFalse((Path(__file__).parents[1] / "templates" / "prompts" / "schemas" / f"{stage}.json").exists())
         for path in files:
             self.assertTrue(path.name.endswith(f"_{path.parent.name}.j2"), path)
 
