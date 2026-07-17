@@ -4,6 +4,21 @@
 
 少なくとも一つの major の主要な謎・約束・重要イベントを登録する。作者の真実、人物・読者の知識、開示規則、回収条件を分ける。導入・進展・回収をどの巻に配分するかは後続のvolume_mapだけが決める。永続IDは作らない。
 
+各threadの `initial_state` には `status` を必ず含める。値は `open`、`in_progress`、`resolved` のいずれかとする。majorは `open` から始めること。
+
+**書き方の指針：**
+- `kind`: 伏線の種別。例：出自の秘密、道具の正体、組織の陰謀、約束の履行、病の正体、裏切りの兆候など
+- `importance`: 重要度。major=シリーズ完結までに必ず回収する主軸伏線。supporting=主要伏線を補強する副次伏線
+- `description`: 伏線の内容概要。何が隠され、何を見せ、何を回収するかを簡潔に
+- `author_truth`: **作者だけが知る真実**。読者・人物には見せない完全な事実関係
+- `reader_knowledge`: 現時点で読者に許される知識・推測の範囲。どこまで見せてよいか
+- `character_knowledge`: 各人物（IDキー）が現時点で知っている/知らない情報。値は "knows" / "suspects" / "unknown" / "misunderstands" 等
+- `presentation_rule`: 本文でどう提示するか。例：会話の端々で匂わせる、特定アイテムの描写で示す、夢/回想で断片提示、直接語らない等
+- `resolution_condition`: 回収完了とみなす条件。真相が明示された/人物が認識した/証拠が提示された/結果が確定した 等の具体基準
+- `initial_state`: 伏線の開始時状態
+  - `status`: 伏線の現状態。open=未着手、in_progress=提示開始済み、resolved=回収済み
+  - `progress`: 回収進捗（0.0〜1.0）。提示の深度・読者理解度の目安
+
 ## 入力
 
 {{ context | tojson }}

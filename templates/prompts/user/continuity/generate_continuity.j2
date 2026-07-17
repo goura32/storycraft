@@ -4,6 +4,21 @@
 
 凍結済み本文だけを事実源にする。各状態更新は入力の scene_id を source_scene_id にそのまま入れ、許可IDだけを使う。更新は current_state 内の既存フィールド一つだけに限り、current_state 全体・固定プロフィール・台帳の固定項目を置換しない。本文にそのまま含まれる短い根拠文字列を付ける。本文外の事実、予告、解釈は追加しない。
 
+人物の current_state で更新可能なフィールドは `emotion`、`situation`、`recent_goal` のみ。major threadの `status` は `open`、`in_progress`、`resolved` のみ更新可能。それ以外のフィールド・構造の追加・変更・置換は禁止。
+
+同一キャラクターへの複数更新は禁止。1キャラクターにつき1フィールド1更新のみ許可。`allowed_update_ids` に含まれるIDを重複して使ってはいけない。
+
+根拠文字列 `evidence` は本文中から**そのまま**コピーした短い断片（10〜80文字程度）でなければならない。要約、書き換え、追記は禁止。本文検索で完全一致しなければ検証で落ちる。
+
+**書き方の指針：**
+- `handoff_summary`: 次場面へ引き継ぐ要約。視点人物の心理状態・主要伏線の進捗・変化した関係/状態・次場面の示唆を簡潔に。約200〜800字
+- `state_updates`: 各更新エントリ
+  - `source_scene_id`: 更新根拠となる場面ID（この場面のscene_idと一致）
+  - `id`: 更新対象の台帳エントリID（allowed_update_idsに含まれるもの）
+  - `field`: 更新フィールド名。例：`threads.current_state.status`, `threads.current_state.progress`, `characters.current_state.emotion`, `relationships.current_state.emotion` 等
+  - `value`: 新しい値。フィールド型に合わせる（status: open/in_progress/resolved, progress: 0.0-1.0, emotion/situation/recent_goal: string等）
+  - `evidence`: 本文中の該当箇所（引用または要約）。この更新の描写根拠として本文に存在する文字列。**本文からそのままコピー（10〜80文字）**
+
 ## 入力
 
 {{ context | tojson }}

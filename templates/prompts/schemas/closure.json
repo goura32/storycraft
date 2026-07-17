@@ -8,15 +8,16 @@
   "properties": {
     "resolved_ids": {
       "type": "array",
-      "items": {
-        "type": "string"
-      }
+      "items": { "type": "string" },
+      "description": "完結時点で回収済み（status == resolved）の major 伏線ID全件。threads 台帳の major と完全一致させる。"
     },
     "ending_evidence": {
-      "type": "string"
+      "type": "string",
+      "description": "最終場面本文中の、結末の根拠となる該当箇所（引用または要約）。brief.ending と整合する描写であること。"
     },
     "ending_authority": {
-      "type": "string"
+      "type": "string",
+      "description": "brief.ending の文字列と完全一致させる。シリーズ完結時の着地イメージをそのまま転記。"
     }
   }
 }

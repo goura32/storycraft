@@ -17,19 +17,38 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "人物名（フルネーム・呼称）。brief で言及された表記と一字一句合わせる。"
           },
           "role": {
-            "type": "string"
+            "type": "string",
+            "description": "物語上の役割・立場（例：王女（主人公）、王太子（婚約者）、古参魔術師（師・助言者）、陰謀家（敵対勢力））。"
           },
           "narrative_function": {
-            "type": "string"
+            "type": "string",
+            "description": "この人物が物語で果たす構造的機能。テーマ・対立・成長の触媒としてどう働くかを簡潔に。"
           },
           "fixed_profile": {
-            "type": "string"
+            "type": "string",
+            "description": "不変の人物設定。経歴・性格の核・能力・信条・外見的特徴等、物語開始時点で確定している事実のみ。秘密・伏線・未来の変化は書かない。"
           },
           "initial_state": {
-            "type": "object"
+            "type": "object",
+            "description": "物語開始直後の主観的状態。感情・置かれている状況・直近の目的のみ。他者の内面・プロット解説・未来の行為・本文外の因果は書かない。",
+            "properties": {
+              "emotion": {
+                "type": "string",
+                "description": "開始時点での主観的感情・心理状態。複雑な混在も可。"
+              },
+              "situation": {
+                "type": "string",
+                "description": "開始時点での客観的状況・立場・環境。"
+              },
+              "recent_goal": {
+                "type": "string",
+                "description": "開始時点で意識している直近の目的・願望。"
+              }
+            }
           }
         }
       }

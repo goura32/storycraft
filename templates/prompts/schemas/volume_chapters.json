@@ -18,22 +18,28 @@
         ],
         "properties": {
           "number": {
-            "type": "integer"
+            "type": "integer",
+            "description": "章番号（1から連番）"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "章タイトル。読者の興味を惹き、内容を示唆するもの。"
           },
           "purpose": {
-            "type": "string"
+            "type": "string",
+            "description": "この章で達成すべき物語的目的。主要項目の進展・人物関係の変化・情報開示・伏線提示等、具体的な機能を記述。"
           },
           "start_state": {
-            "type": "string"
+            "type": "string",
+            "description": "章冒頭の状況。主要人物の所在・感情・直面する問題・世界状態等。"
           },
           "end_state": {
-            "type": "string"
+            "type": "string",
+            "description": "章末尾の状況。開始状態から何が変化したか、次章へどう繋がるか。"
           },
           "scene_count": {
-            "type": "integer"
+            "type": "integer",
+            "description": "この章を構成する場面数。1〜4。"
           }
         }
       }

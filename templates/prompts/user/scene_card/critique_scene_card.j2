@@ -2,6 +2,20 @@
 
 候補を入力状態と候補の出力スキーマに照らし、修正可能で根拠のある問題だけを issues に出す。問題がなければ空配列にする。称賛、点数、出版可否、候補に存在しない問題は出さない。
 
+**チェック観点：**
+1. **スキーマ適合**: 全必須項目が正しい型・形式で存在するか
+2. **ID一致**: 全ID（scene_id/pov_character_id/location_id/start_time_id/end_time_id/character_ids/visible_ids/allowed_update_ids/thread_actions.thread_id）が対応台帳の既存IDと完全一致するか
+3. **scene_id形式**: `vXX-cXX-sXX` 形式で、巻・章・場面が volume_chapters と整合するか
+4. **視点整合**: `pov_character_id` が `character_ids` に含まれるか
+5. **時間整合**: `start_time_id` と `end_time_id` が timeline台帳のidで、順序が正しいか
+6. **場所整合**: `location_id` が world台帳のidか
+7. **thread_actions**: `action` が introduce/advance/resolve のいずれか。同一thread_idの重複操作なし
+8. **所有範囲内**: `reader_disclosure`/`withheld_information`/`presentation_rules`/`end_change` が scene_card の所有範囲を超えないか（秘密・作者真実・未来展開の新規作成なし）
+9. **更新制約**: `allowed_update_ids` が `visible_ids` の部分集合か。`time-XXXX` と `rel-XXXX` を含まないか
+10. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
+
+各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。
+
 ## 候補
 
 {{ candidate | tojson }}
@@ -9,10 +23,6 @@
 ## 入力状態
 
 {{ context | tojson }}
-
-## 候補の出力契約
-
-{{ candidate_schema }}
 
 ## 出力スキーマ
 

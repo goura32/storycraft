@@ -2,7 +2,12 @@
 
 ## 実行指示
 
-登録済み主要項目と採用済み本文を照合して完結監査を行う。ending_authority には入力briefの ending をそのまま複写し、ending_evidence は最終場面本文に含まれる短い根拠文字列だけを返す。自己判断で未回収項目を回収済みにしない。
+登録済み主要項目と採用済み本文を照合して完結監査を行う。`ending_authority` には入力briefの `ending` をそのまま複写し、`ending_evidence` は最終場面本文に含まれる短い根拠文字列だけを返す。自己判断で未回収項目を回収済みにしない。
+
+**書き方の指針：**
+- `resolved_ids`: 完結時点で回収済み（status == resolved）の major 伏線ID全件。threads 台帳の major と完全一致させる
+- `ending_evidence`: 最終場面本文中の、結末の根拠となる該当箇所（引用または要約）。brief.ending と整合する描写であること
+- `ending_authority`: brief.ending の文字列と完全一致させる。シリーズ完結時の着地イメージをそのまま転記
 
 ## 入力
 

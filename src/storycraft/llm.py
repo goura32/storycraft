@@ -75,6 +75,7 @@ class LLMClient:
             attempt=meta.get("__attempt", 1),
             seed=seed,
         )
+        logger.info(f"LLM呼び出し開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} seed={seed}")
         try:
             stream = self.client.chat.completions.create(
                             model=llm["model"],
@@ -87,6 +88,8 @@ class LLMClient:
             idle_timeout = llm.get("idle_timeout_seconds", 600)
             last_recv = time.time()
             start = time.time()
+            thinking_started = False
+            content_started = False
             for chunk in stream:
                 now = time.time()
                 if now - last_recv > idle_timeout:
@@ -97,6 +100,9 @@ class LLMClient:
                 reasoning = getattr(delta, "reasoning", None)
                 if reasoning:
                     reasoning = str(reasoning)
+                    if not thinking_started:
+                        logger.info(f"LLM思考開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
+                        thinking_started = True
                     rec.meta_chunks.append(
                         {"t": round(now - start, 2), "kind": STATUS_THINKING,
                          "chars": len(reasoning)}
@@ -105,6 +111,9 @@ class LLMClient:
                 content = getattr(delta, "content", None)
                 if content:
                     content = str(content)
+                    if not content_started:
+                        logger.info(f"LLM生成開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
+                        content_started = True
                     rec.content += content
                     rec.meta_chunks.append(
                         {"t": round(now - start, 2), "kind": STATUS_CONTENT,
@@ -112,10 +121,13 @@ class LLMClient:
                     )
                     last_recv = now
             rec.finished_at = time.time()
+            duration = round(rec.finished_at - rec.started_at, 2)
+            logger.info(f"LLM呼び出し完了: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s 文字数={len(rec.content)}")
         except Exception as e:  # noqa: BLE001
             rec.error = f"{type(e).__name__}: {e}"
             rec.finished_at = time.time()
-            logger.error("LLM呼び出し失敗: %s", rec.error)
+            duration = round(rec.finished_at - rec.started_at, 2)
+            logger.error(f"LLM呼び出し失敗: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s エラー={rec.error}")
         return rec
 
     def call_once(self, messages, response_format, seed: int) -> CallRecord:
@@ -132,8 +144,8 @@ class LLMClient:
             role = message.get("role")
             message_content = message.get("content")
             if isinstance(role, str) and isinstance(message_content, str):
-                sections.append(f"---\n## {labels.get(role, f'送信 ({role})')}\n\n{message_content}")
-        sections.append(f"---\n## 受信\n\n{content}")
+                sections.append(f"\n---\n## {labels.get(role, f'送信 ({role})')}\n\n{message_content}")
+        sections.append(f"\n---\n## 受信\n\n{content}")
         return "\n".join(sections) + "\n"
 
     def save_raw(self, rec: CallRecord, prompt_messages: list) -> None:

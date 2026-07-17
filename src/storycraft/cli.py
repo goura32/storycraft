@@ -11,6 +11,7 @@ import yaml
 from .config import Settings
 from .series_engine import ContractError, SeriesService
 from .series_model import OpenAIStoryModel
+from .log import logger, add_file_handler
 
 
 def _load_brief(path: str) -> dict[str, Any]:
@@ -24,9 +25,18 @@ def _load_brief(path: str) -> dict[str, Any]:
     return value
 
 
+def _setup_logging(workspace: Path) -> None:
+    """ワークスペースにログファイルハンドラを追加する。"""
+    log_path = workspace / "storycraft.log"
+    add_file_handler(log_path)
+    logger.info(f"ログ出力先: {log_path}")
+
+
 def _service_and_model(args) -> tuple[SeriesService, OpenAIStoryModel]:
     settings = Settings.load(args.config)
     workspace = settings.resolve_output_dir(args.out)
+    _setup_logging(workspace)
+    logger.info(f"モデル: {settings.llm.get('model', 'unknown')}")
     service = SeriesService(workspace)
     return service, OpenAIStoryModel(settings, workspace / "raw")
 

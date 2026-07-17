@@ -6,30 +6,77 @@
     "withheld_information", "presentation_rules", "end_change", "visible_ids", "allowed_update_ids"
   ],
   "properties": {
-    "scene_id": {"type": "string"},
-    "pov_character_id": {"type": "string"},
-    "location_id": {"type": "string"},
-    "start_time_id": {"type": "string"},
-    "end_time_id": {"type": "string"},
-    "character_ids": {"type": "array", "items": {"type": "string"}},
-    "purpose": {"type": "string"},
-    "required_events": {"type": "array", "items": {"type": "string"}},
+    "scene_id": {
+      "type": "string",
+      "description": "場面ID。形式: vXX-cXX-sXX（巻-章-場面）。例: v01-c01-s01"
+    },
+    "pov_character_id": {
+      "type": "string",
+      "description": "視点人物のID（characters台帳のid）。この人物の知覚・思考・感覚で場面を描写する。"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "場所ID（world台帳のid）。場面の物理的・空間的舞台。"
+    },
+    "start_time_id": {
+      "type": "string",
+      "description": "開始時刻ID（timeline台帳のid）。場面の始まりの時間参照点。"
+    },
+    "end_time_id": {
+      "type": "string",
+      "description": "終了時刻ID（timeline台帳のid）。場面の終わりの時間参照点。"
+    },
+    "character_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "登場人物IDの配列（characters台帳のid）。最低1人（視点人物）。場面に物理的に存在する人物のみ。"
+    },
+    "purpose": {
+      "type": "string",
+      "description": "この場面の物語的目的。主要項目の操作・関係変化・情報提示・感情描写等、具体的な機能を簡潔に。"
+    },
+    "required_events": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "この場面で必ず発生させるイベント・アクションの列挙。順序不問。抜け漏れ防止用。"
+    },
     "thread_actions": {
       "type": "array",
       "items": {
         "type": "object",
         "required": ["thread_id", "action"],
         "properties": {
-          "thread_id": {"type": "string"},
-          "action": {"type": "string", "enum": ["introduce", "advance", "resolve"]}
+          "thread_id": { "type": "string", "description": "主要項目ID（threads台帳のid）" },
+          "action": { "type": "string", "enum": ["introduce", "advance", "resolve"], "description": "この場面での操作。introduce=提示開始、advance=進展、resolve=回収完了" }
         }
-      }
+      },
+      "description": "この場面で扱う主要項目（伏線）操作の配列。各項目は1場面1操作まで。"
     },
-    "reader_disclosure": {"type": "string"},
-    "withheld_information": {"type": "string"},
-    "presentation_rules": {"type": "string"},
-    "end_change": {"type": "string"},
-    "visible_ids": {"type": "array", "items": {"type": "string"}},
-    "allowed_update_ids": {"type": "array", "items": {"type": "string"}}
+    "reader_disclosure": {
+      "type": "string",
+      "description": "この場面で読者に明示する情報。視点人物の知覚範囲内で、読者が知ってよい事実・感情・推測材料。"
+    },
+    "withheld_information": {
+      "type": "string",
+      "description": "この場面で読者に見せない情報。視点人物は知っているが読者には隠す事実、作者真実、未来の展開等。"
+    },
+    "presentation_rules": {
+      "type": "string",
+      "description": "描写上のルール・制約。例：視点人物の五感のみ使用、内心独白は最小限、特定用語は使わない、テンポ優先等。"
+    },
+    "end_change": {
+      "type": "string",
+      "description": "場面終了時に変化すること。状態・認識・関係・所在・伏線進捗等、次場面へ繋がる具体的変化。"
+    },
+    "visible_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "この場面で参照可能な台帳エントリIDの集合（characters/relationships/world/timeline/threads）。視点人物の知覚範囲に基づく。"
+    },
+    "allowed_update_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "この場面で状態更新を許可されるIDの集合（visible_idsの部分集合）。continuity工程で更新対象になるもの。"
+    }
   }
 }

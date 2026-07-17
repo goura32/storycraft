@@ -2,6 +2,17 @@
 
 候補をCanon、入力brief、候補の出力契約に照らす。Canon外のID・事実の追加、majorの導入から回収までの配分欠落、最終巻以外の空の問い、最終巻の問い、重複する操作だけを根拠つきissueとして出す。称賛、点数、出版可否、候補にない事実は出さない。
 
+**チェック観点：**
+1. **スキーマ適合**: 全必須項目が正しい型・形式で存在するか
+2. **ID一致**: `thread_targets` の `thread_id` が Canon の主要項目IDのみか
+3. **major配分**: major主要項目が巻順で introduce → advance* → resolve の順で一度ずつ完結しているか
+4. **各巻最低一操作**: 各巻に少なくとも一つの主要項目操作があるか
+5. **reader_question**: 最終巻以外は非空、最終巻は空文字列か
+6. **ending不複写**: `brief.ending` の複写・要約・言い換えがないか
+7. **重複操作**: 同一巻・同一thread_idでの重複操作がないか
+
+各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。
+
 ## 候補
 
 {{ candidate | tojson }}
@@ -9,10 +20,6 @@
 ## 入力状態
 
 {{ context | tojson }}
-
-## 候補の出力契約
-
-{{ candidate_schema }}
 
 ## 出力スキーマ
 

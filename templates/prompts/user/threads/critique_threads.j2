@@ -2,6 +2,17 @@
 
 候補を入力状態と候補の出力スキーマに照らし、修正可能で根拠のある問題だけを issues に出す。問題がなければ空配列にする。称賛、点数、出版可否、候補に存在しない問題は出さない。
 
+**チェック観点：**
+1. **スキーマ適合**: 全必須項目が正しい型・形式で存在するか
+2. **major必須**: 少なくとも1つの major 伏線があるか
+3. **所有範囲内**: `author_truth`/`reader_knowledge`/`character_knowledge`/`presentation_rule`/`resolution_condition` が工程の所有範囲を超えていないか。`initial_state` に将来の確定変化・秘密・本文外の因果が混入していないか
+4. **整合性**: `author_truth` が `reader_knowledge` より詳細で、`character_knowledge` が各人物の立場に整合するか
+5. **操作可能性**: `presentation_rule` が本文で実行可能か、`resolution_condition` が客観的に判定可能か
+6. **初期状態**: `status` が open/in_progress/resolved、`progress` が 0.0〜1.0、majorは open 始まりか
+7. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
+
+各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。
+
 ## 候補
 
 {{ candidate | tojson }}
@@ -9,10 +20,6 @@
 ## 入力状態
 
 {{ context | tojson }}
-
-## 候補の出力契約
-
-{{ candidate_schema }}
 
 ## 出力スキーマ
 

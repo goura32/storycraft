@@ -2,14 +2,42 @@
   "type": "object",
   "required": ["title", "genre", "protagonist", "key_people", "want", "avoid", "ending"],
   "properties": {
-    "title": {"type": "string"},
-    "genre": {"type": "string"},
-    "protagonist": {"type": "string"},
-    "key_people": {"type": "string"},
-    "want": {"type": "string"},
-    "avoid": {"type": "string"},
-    "ending": {"type": "string"},
-    "volumes": {"type": "integer"},
-    "chapters_per_volume": {"type": "array", "items": {"type": "integer"}}
+    "title": {
+      "type": "string",
+      "description": "作品タイトル。ジャンル・雰囲気を反映し、読者の興味を惹くもの。"
+    },
+    "genre": {
+      "type": "string",
+      "description": "ジャンル名。市場分類として通じる標準的な名称（例：女性向けロマンスファンタジー、異世界転生、ミステリー等）。"
+    },
+    "protagonist": {
+      "type": "string",
+      "description": "主人公の人物像。名前・立場・性格の核・抱える葛藤・物語上の役割を含め、読者が共感できる具体像で記述する。秘密や未来の展開は書かない。"
+    },
+    "key_people": {
+      "type": "string",
+      "description": "主人公以外の主要人物群。役割・関係性・物語上の機能を簡潔に列挙する。詳細なプロフィールは characters 工程で確定するためここでは概要のみ。"
+    },
+    "want": {
+      "type": "string",
+      "description": "本作で描写したい核心的な魅力・読ませたい体験・テーマ的意図。ジャンル読者の期待と本作独自の切り口を両立させる記述。"
+    },
+    "avoid": {
+      "type": "string",
+      "description": "避けたい表現・展開・クリシェ・読後感の悪化要因。禁止事項・NG要素を具体的に列挙する。"
+    },
+    "ending": {
+      "type": "string",
+      "description": "シリーズ完結時の着地イメージ。主人公らの最終状態・世界の変化・読後感の方向性（希望・喪失・静謐等）を記述する。詳細なプロットは書かない。"
+    },
+    "volumes": {
+      "type": "integer",
+      "description": "全巻数。4〜10の整数。未定なら省略可。"
+    },
+    "chapters_per_volume": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "各巻のチャプター数配列。volumes と同長で各要素 1〜12。未定なら省略可。"
+    }
   }
 }

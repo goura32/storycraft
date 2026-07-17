@@ -17,22 +17,39 @@
         ],
         "properties": {
           "kind": {
-            "type": "string"
+            "type": "string",
+            "description": "時間要素の種別。例：歴史的時代区分（年代記）、人物の年齢・人生段階、魔法・技術の衰退/発展曲線、季節・周期的現象、組織の興亡サイクル、呪い・予言の進行条件、アイテムの劣化/覚醒スケジュールなど。"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "この時間要素が何を表すかの具体的説明。期間・頻度・変化の方向性・物語への影響を含める。"
           },
           "related_ids": {
             "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "items": { "type": "string" },
+            "description": "関連する人物ID・世界要素ID・主要項目IDの配列。台帳登録済みのIDのみ。"
           },
           "fixed_rule": {
-            "type": "string"
+            "type": "string",
+            "description": "時間経過に伴う不変のルール・法則。物理法則・魔法の原理・制度的制約・生物学的限界等、物語で曲げられない制約。"
           },
           "initial_state": {
-            "type": "object"
+            "type": "object",
+            "description": "物語開始時点での動的状態。現在の値・段階・残存期間・次回変化の予定時期等。将来の確定変化・秘密・本文外の因果は書かない。",
+            "properties": {
+              "current_value": {
+                "type": "string",
+                "description": "現在の数値・段階・状態（例：魔力残量 37%、年齢 17歳、呪い進行度 第2段階）。"
+              },
+              "next_change_trigger": {
+                "type": "string",
+                "description": "次の変化を引き起こす条件・きっかけ（分かる範囲で）。"
+              },
+              "estimate_until_next": {
+                "type": "string",
+                "description": "次の変化までの推定期間・猶予（ある場合）。"
+              }
+            }
           }
         }
       }

@@ -6,7 +6,8 @@
   ],
   "properties": {
     "handoff_summary": {
-      "type": "string"
+      "type": "string",
+      "description": "次場面へ引き継ぐ要約。視点人物の心理状態・主要伏線の進捗・変化した関係/状態・次場面の示唆を簡潔に。約200〜800字。"
     },
     "state_updates": {
       "type": "array",
@@ -21,17 +22,23 @@
         ],
         "properties": {
           "source_scene_id": {
-            "type": "string"
+            "type": "string",
+            "description": "更新根拠となる場面ID（この場面のscene_idと一致）"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "更新対象の台帳エントリID（allowed_update_idsに含まれるもの）"
           },
           "field": {
-            "type": "string"
+            "type": "string",
+            "description": "更新フィールド名。例：threads.current_state.status, threads.current_state.progress, characters.current_state.emotion, relationships.current_state.emotion 等"
           },
-          "value": {},
+          "value": {
+            "description": "新しい値。フィールド型に合わせる（status: open/in_progress/resolved, progress: 0.0-1.0, emotion/situation/recent_goal: string等）"
+          },
           "evidence": {
-            "type": "string"
+            "type": "string",
+            "description": "本文中の該当箇所（引用または要約）。この更新の描写根拠として本文に存在する文字列。"
           }
         }
       }

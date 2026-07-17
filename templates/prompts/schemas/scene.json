@@ -5,7 +5,8 @@
   ],
   "properties": {
     "content": {
-      "type": "string"
+      "type": "string",
+      "description": "場面本文。約500〜5000字。視点人物の五感・思考・感情・会話・動作・環境描写で構成。読者への明示情報・隠蔽情報・描写ルール・場面末尾の変化をすべて反映する。伏線操作（introduce/advance/resolve）の描写根拠を本文に埋め込む。"
     }
   }
 }

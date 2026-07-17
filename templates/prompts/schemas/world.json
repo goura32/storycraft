@@ -17,19 +17,38 @@
         ],
         "properties": {
           "kind": {
-            "type": "string"
+            "type": "string",
+            "description": "世界要素の種別。例：場所（都市・建物・地形）、組織（国家・騎士団・ギルド）、制度（法律・階級・通貨）、技術・魔法体系、歴史的事件、文化・慣習、宗教・信仰、動植物・幻獣、アイテム・遺物など。"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "要素の名称（固有名・通称）。作中で統一して呼ばれる表記。"
           },
           "stable_fact": {
-            "type": "string"
+            "type": "string",
+            "description": "不変の事実・設定。定義・仕組み・由来・物理法則・歴史的事実等、物語で覆らない前提知識のみ。伏線・秘密・未来の変化は書かない。"
           },
           "use_or_access_rule": {
-            "type": "string"
+            "type": "string",
+            "description": "誰が・どう使えるか・どうアクセスできるかの運用ルール。権限・条件・制約・コスト・タブー等。"
           },
           "initial_state": {
-            "type": "object"
+            "type": "object",
+            "description": "物語開始時点での動的状態。現在の所有者・管理状況・活性度・認知度・直近の変化等。将来の変化・秘密・本文外の因果は書かない。",
+            "properties": {
+              "status": {
+                "type": "string",
+                "description": "現在の状態・稼働状況・認知度など。"
+              },
+              "current_holder_or_manager": {
+                "type": "string",
+                "description": "現在の所有者・管理者・担い手（いる場合）。"
+              },
+              "recent_change": {
+                "type": "string",
+                "description": "開始直前の主な変化・きっかけ（ある場合）。"
+              }
+            }
           }
         }
       }

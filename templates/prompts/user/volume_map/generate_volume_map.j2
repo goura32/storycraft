@@ -10,6 +10,11 @@
 - 最終巻以外の `reader_question` は空にしない。最終巻は空文字列にする。
 - `brief.ending` は結末の唯一の正本である。ここに複写・要約・言い換えしない。
 
+**書き方の指針：**
+- `title`: Canonの既存内容だけを表す読者向け巻題
+- `reader_question`: その巻で残る読者向けの未解決問い。最終巻は空文字列
+- `thread_targets`: この巻で場面カードが必ず扱う操作。`thread_id` は入力Canonの主要項目ID、`required_action` は introduce/advance/resolve のいずれか
+
 ## 入力
 
 {{ context | tojson }}
