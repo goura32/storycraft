@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storycraft.nextgen import ContractError, SeriesService
+from storycraft.series_engine import ContractError, SeriesService
 
 
 BRIEF = {
@@ -108,7 +108,7 @@ class FlowModel:
         return candidate
 
 
-class NextGenerationFlowAcceptanceTests(unittest.TestCase):
+class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workspace = Path(tempfile.mkdtemp(prefix="storycraft-flow-"))
 

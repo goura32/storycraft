@@ -11,7 +11,7 @@ python -m venv "$work/venv"
 "$work/venv/bin/pip" install "$work"/dist/*.whl
 "$work/venv/bin/storycraft" --help
 "$work/venv/bin/python" - <<'PY'
-from storycraft.nextgen_model import OpenAIStoryModel
+from storycraft.series_model import OpenAIStoryModel
 from storycraft.prompt_template import get_template_loader
 
 assert "source_scene_id" in get_template_loader().load_schema_text("generate", "continuity")

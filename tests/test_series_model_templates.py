@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from storycraft.prompt_template import get_template_loader
 from storycraft.llm import CallRecord
-from storycraft.nextgen_model import OpenAIStoryModel
+from storycraft.series_model import OpenAIStoryModel
 
 
 class _CapturingClient:
@@ -39,7 +39,7 @@ class _TemplateLoader:
         return "JINJAでレンダリングされたplanプロンプト"
 
 
-class NextGenerationModelTemplateTests(unittest.TestCase):
+class SeriesEngineModelTemplateTests(unittest.TestCase):
     def test_generate_renders_stage_template_as_sent_user_prompt(self) -> None:
         client = _CapturingClient()
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)
@@ -47,7 +47,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         model.attempt = 0
         loader = _TemplateLoader()
 
-        with patch("storycraft.nextgen_model.get_template_loader", return_value=loader):
+        with patch("storycraft.series_model.get_template_loader", return_value=loader):
             model.generate("plan", {"brief": {"title": "雨の地図"}})
 
         self.assertEqual(

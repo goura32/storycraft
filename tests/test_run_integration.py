@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storycraft.nextgen import ContractError, SeriesService
+from storycraft.series_engine import ContractError, SeriesService
 
 
 BRIEF = {
@@ -36,7 +36,7 @@ class PlanModel:
         return candidate
 
 
-class NextGenerationStepTests(unittest.TestCase):
+class SeriesEngineStepTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workspace = Path(tempfile.mkdtemp(prefix="storycraft-step-"))
 

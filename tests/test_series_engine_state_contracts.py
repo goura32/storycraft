@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storycraft.nextgen import ContractError, SeriesService
-from test_nextgen_flow import BRIEF, FlowModel
+from storycraft.series_engine import ContractError, SeriesService
+from test_series_engine_flow import BRIEF, FlowModel
 
 
 class StateContractTests(unittest.TestCase):

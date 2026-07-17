@@ -9,8 +9,8 @@ from typing import Any
 import yaml
 
 from .config import Settings
-from .nextgen import ContractError, SeriesService
-from .nextgen_model import OpenAIStoryModel
+from .series_engine import ContractError, SeriesService
+from .series_model import OpenAIStoryModel
 
 
 def _load_brief(path: str) -> dict[str, Any]:

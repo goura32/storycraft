@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from .llm import LLMClient
-from .nextgen import ContractError
+from .series_engine import ContractError
 from .prompt_template import get_template_loader
 
 
