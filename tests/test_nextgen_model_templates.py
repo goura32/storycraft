@@ -115,6 +115,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("自分の `description` と `suggestion`", prompt)
         revision = OpenAIStoryModel._render("fix", "plan", candidate={}, critique={"issues": []}, context={})
         self.assertIn("批評issueに出ていない違反もこの全件照合で直す", revision)
+        self.assertIn("入力候補を見ずに自分が返す完成JSON", revision)
 
     def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:
         loader = get_template_loader()
