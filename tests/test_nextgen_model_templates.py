@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from storycraft.prompt_template import get_template_loader
 from storycraft.llm import CallRecord
 from storycraft.nextgen_model import OpenAIStoryModel
 
@@ -81,6 +82,15 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
             contents = (root / name).read_text(encoding="utf-8")
             self.assertIn("{{ output_schema }}", contents, name)
             self.assertNotIn("```json", contents, name)
+            self.assertNotIn("ensure_ascii", contents, name)
+            self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
+
+    def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:
+        loader = get_template_loader()
+        self.assertFalse(loader.env.policies["json.dumps_kwargs"]["ensure_ascii"])
+        rendered = loader.env.from_string("{{ value | tojson(indent=2) }}").render(value={"title": "雨の地図"})
+        self.assertIn("雨の地図", rendered)
+        self.assertNotIn("\\\\u96e8", rendered)
 
 
 if __name__ == "__main__":

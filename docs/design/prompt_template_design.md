@@ -6,6 +6,8 @@
 
 - 実送信プロンプトの正本は `templates/prompts/` である。出力スキーマは `templates/prompts/schemas/` のJSONを正本とし、userテンプレートは `{{ output_schema }}` プレースホルダーだけで受け取る。
 - `src/storycraft/nextgen_model.py` は工程名をテンプレート名へ対応付け、`PromptTemplate.render_system()` と `render_user()` でsystem/userメッセージを構築する。Python文字列に工程別契約を重複させない。
+- `PromptTemplate` はJinja標準`tojson`の `json.dumps_kwargs.ensure_ascii=False` を環境ポリシーとして一元設定する。テンプレートは `tojson(indent=2)` のように整形だけを指定し、文字エンコーディングを指定しない。
+- userテンプレートでは出力スキーマ節を末尾に置く。
 - 採用可否は `src/storycraft/nextgen.py` の工程別検証器が決める。JSON object モードだけを信用して採用してはならない。
 - 生の要求と応答はシリーズ作業場所の `raw/` にJSONと同stemのMarkdownで残す。草稿・批評・修正版・失敗理由・採用済み状態は `state.json` に残す。
 

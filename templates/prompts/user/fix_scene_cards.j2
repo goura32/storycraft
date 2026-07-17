@@ -2,20 +2,20 @@
 
 批評issuesに従い候補を修正する。指摘されていない正しいIDと順序を失わない。`scene_id` は入力と完全一致させ、両ID配列は入力の既知IDだけにし、更新許可IDは可視IDの部分集合にする。最終場面では全未回収IDを両配列に含める。
 
-## 出力スキーマ
-
-{{ output_schema }}
-
 ## 候補
 
-{{ candidate | tojson(ensure_ascii=False, indent=2) }}
+{{ candidate | tojson(indent=2) }}
 
 ## 批評issues
 
-{{ critique | tojson(ensure_ascii=False, indent=2) }}
+{{ critique | tojson(indent=2) }}
 
 ## 入力状態
 
-{{ context | tojson(ensure_ascii=False, indent=2) }}
+{{ context | tojson(indent=2) }}
 
 JSONオブジェクトだけを返すこと。
+
+## 出力スキーマ
+
+{{ output_schema }}

@@ -2,20 +2,20 @@
 
 批評issuesに従い候補を修正する。指摘されていない正しい本文事実、ID、順序を失わない。完成日本語本文、本文だけに根拠を持つ引継ぎ、許可IDかつ本文事実に整合する状態更新を同時に満たす。本文外の事実・予測・解釈を引継ぎに足さない。最終場面では結末と全required IDの回収を本文で成立させる。
 
-## 出力スキーマ
-
-{{ output_schema }}
-
 ## 候補
 
-{{ candidate | tojson(ensure_ascii=False, indent=2) }}
+{{ candidate | tojson(indent=2) }}
 
 ## 批評issues
 
-{{ critique | tojson(ensure_ascii=False, indent=2) }}
+{{ critique | tojson(indent=2) }}
 
 ## 入力状態
 
-{{ context | tojson(ensure_ascii=False, indent=2) }}
+{{ context | tojson(indent=2) }}
 
 JSONオブジェクトだけを返すこと。
+
+## 出力スキーマ
+
+{{ output_schema }}

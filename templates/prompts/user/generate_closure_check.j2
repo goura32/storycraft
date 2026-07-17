@@ -8,14 +8,14 @@
 - `ending_reached` は希望や予定ではなく、採用済み場面の状態に基づいて判定する。
 - 未回収の問いがあれば、それを `resolved_ids` に入れたり、`ending_reached` を true にしたりしない。
 
+## 入力
+
+{{ brief | tojson(indent=2) }}
+{{ threads | tojson(indent=2) }}
+{{ scenes | tojson(indent=2) }}
+
+JSONオブジェクトだけを返すこと。
+
 ## 出力スキーマ
 
 {{ output_schema }}
-
-## 入力
-
-{{ brief | tojson(ensure_ascii=False, indent=2) }}
-{{ threads | tojson(ensure_ascii=False, indent=2) }}
-{{ scenes | tojson(ensure_ascii=False, indent=2) }}
-
-JSONオブジェクトだけを返すこと。

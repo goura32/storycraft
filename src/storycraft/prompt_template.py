@@ -19,8 +19,9 @@ class PromptTemplate:
             trim_blocks=True,
             lstrip_blocks=True,
         )
-        # カスタムフィルタ: JSON整形出力
-        self.env.filters["tojson"] = lambda v, **kw: json.dumps(v, **kw)
+        # Jinja標準tojsonのシリアライズ設定はここで一元管理する。
+        self.env.policies["json.dumps_function"] = json.dumps
+        self.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
 
     def load_schema(self, category: str, stage: str) -> str:
         """スキーマファイルを読み込み、整形済み文字列で返す"""

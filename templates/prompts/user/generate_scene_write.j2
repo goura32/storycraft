@@ -10,19 +10,19 @@
 - `state_updates` は `card.allowed_update_ids` のIDだけを使う。`resolved` は本文で直接答えや回収が描かれたときだけにし、本文に新しい進展がない既に `resolved` のIDを `in_progress` に戻さない。
 - `is_final_scene` が true のとき、`required_ending` に本文で到達し、`required_resolved_ids` の全IDを本文事実に基づいて `resolved` にする。引継ぎに予告や未確定の結末を残さない。
 
+## 入力
+
+{{ brief | tojson(indent=2) }}
+{{ plan | tojson(indent=2) }}
+{{ card | tojson(indent=2) }}
+{{ threads | tojson(indent=2) }}
+{{ previous_handoff | tojson }}
+{{ is_final_scene | tojson }}
+{{ required_ending | tojson }}
+{{ required_resolved_ids | tojson(indent=2) }}
+
+JSONオブジェクトだけを返すこと。
+
 ## 出力スキーマ
 
 {{ output_schema }}
-
-## 入力
-
-{{ brief | tojson(ensure_ascii=False, indent=2) }}
-{{ plan | tojson(ensure_ascii=False, indent=2) }}
-{{ card | tojson(ensure_ascii=False, indent=2) }}
-{{ threads | tojson(ensure_ascii=False, indent=2) }}
-{{ previous_handoff | tojson(ensure_ascii=False) }}
-{{ is_final_scene | tojson }}
-{{ required_ending | tojson(ensure_ascii=False) }}
-{{ required_resolved_ids | tojson(ensure_ascii=False, indent=2) }}
-
-JSONオブジェクトだけを返すこと。

@@ -10,15 +10,15 @@
 - 可視化は本文で扱う主要な問いに限り、更新許可はこの場面で実際に進展または回収する問いに限る。
 - `is_final_scene` が true のとき、`unresolved_thread_ids` の全IDを両配列に含める。最終場面以外で未回収の問いを一括回収する許可を広げない。
 
-## 出力スキーマ
-
-{{ output_schema }}
-
 ## 入力
 
-{{ scene_id | tojson(ensure_ascii=False) }}
-{{ available_thread_ids | tojson(ensure_ascii=False, indent=2) }}
-{{ unresolved_thread_ids | tojson(ensure_ascii=False, indent=2) }}
+{{ scene_id | tojson }}
+{{ available_thread_ids | tojson(indent=2) }}
+{{ unresolved_thread_ids | tojson(indent=2) }}
 {{ is_final_scene | tojson }}
 
 JSONオブジェクトだけを返すこと。
+
+## 出力スキーマ
+
+{{ output_schema }}

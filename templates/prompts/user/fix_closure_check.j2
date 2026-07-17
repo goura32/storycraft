@@ -2,20 +2,20 @@
 
 批評issuesに従い候補を修正する。指摘されていない正しいIDを失わない。`resolved_ids` は入力台帳の全IDと追加・欠落・重複なしで完全一致させる。未回収の問いがある場合は `ending_reached` を true にしない。判定は採用済み場面の状態だけに根拠を置く。
 
-## 出力スキーマ
-
-{{ output_schema }}
-
 ## 候補
 
-{{ candidate | tojson(ensure_ascii=False, indent=2) }}
+{{ candidate | tojson(indent=2) }}
 
 ## 批評issues
 
-{{ critique | tojson(ensure_ascii=False, indent=2) }}
+{{ critique | tojson(indent=2) }}
 
 ## 入力状態
 
-{{ context | tojson(ensure_ascii=False, indent=2) }}
+{{ context | tojson(indent=2) }}
 
 JSONオブジェクトだけを返すこと。
+
+## 出力スキーマ
+
+{{ output_schema }}
