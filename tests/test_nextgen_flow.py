@@ -33,7 +33,7 @@ class FlowModel:
         if stage == "plan":
             return {"volumes": [
                 {"number": number, "title": f"第{number}巻", "change": f"第{number}巻の変化",
-                 "leaves_question": "次巻の問い" if number < 4 else "", "ending_condition": "島に残る" if number == 4 else "未設定"}
+                 "leaves_question": "次巻の問い" if number < 4 else "", "ending_condition": BRIEF["ending"] if number == 4 else "未設定"}
                 for number in range(1, 5)
             ]}
         if stage == "characters":
@@ -144,6 +144,12 @@ class NextGenerationFlowAcceptanceTests(unittest.TestCase):
         plan = FlowModel().generate("plan", {})
         plan["volumes"][0]["change"] = "調査の詳細を追加する。" * 30
         with self.assertRaisesRegex(ContractError, "change は240文字以内"):
+            SeriesService._validate_plan(plan, BRIEF)
+
+    def test_plan_rejects_final_ending_paraphrase(self) -> None:
+        plan = FlowModel().generate("plan", {})
+        plan["volumes"][-1]["ending_condition"] = "島に残る"
+        with self.assertRaisesRegex(ContractError, "briefの結末と完全一致"):
             SeriesService._validate_plan(plan, BRIEF)
 
     def test_plan_rejects_hangul_left_by_revision(self) -> None:

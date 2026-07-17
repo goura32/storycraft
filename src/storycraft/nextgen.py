@@ -260,6 +260,8 @@ class SeriesService:
                     raise ContractError("最終巻以外の結末条件は未設定でなければなりません")
             elif not volume["ending_condition"].strip():
                 raise ContractError("最終巻には結末条件が必要です")
+            elif volume["ending_condition"] != brief["ending"]:
+                raise ContractError("最終巻の結末条件はbriefの結末と完全一致しなければなりません")
 
     @staticmethod
     def _validate_characters(value: dict[str, Any]) -> None:
