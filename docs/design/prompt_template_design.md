@@ -1,6 +1,6 @@
 # プロンプトテンプレートと出力契約
 
-> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、工程・正本・更新権限の設計正本は[次世代生成フロー設計](next_generation_flow.md)とする。
+> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、工程・正本・更新権限の設計正本は[シリーズ生成フロー設計](series_engine_flow.md)とする。
 
 ## 正本と構築責務
 
@@ -9,7 +9,7 @@
 - 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
 - `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
 - 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。
-- 採用可否は `series_engine.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
+- 採用可否は `series_contracts.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
 
 ## 実送信テンプレート
 
@@ -37,7 +37,7 @@ plan / characters / relationships / world / timeline / threads
 | `timeline` | 既知IDだけを参照し、固定規則と開始時状態を持つ |
 | `threads` | 内容のみでIDなし、作者の真実・知識・開示規則・回収条件・開始状態を持つ |
 | `volume_chapters` | 対象巻の章数、章番号、目的、開始・終了状態、場面数 |
-| `scene_card` | 実行対象ID、既知の視点人物・場所、可視ID、可視IDの部分集合である更新許可ID |
+| `scene_card` | 実行対象ID、既知の視点人物・開始終了時刻・場所・登場人物、必須イベント、伏線操作、開示・秘匿、場面終了時の変化、可視ID、可視IDの部分集合である更新許可ID |
 | `scene` | 空でない `content` だけ。状態更新・要約・注釈を含めない |
 | `continuity` | 許可IDだけを更新し、更新根拠が凍結本文に文字列として存在する |
 | `volume_summary` | 既知主要項目だけを参照する巻の引継ぎ要約 |
