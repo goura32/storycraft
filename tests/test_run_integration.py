@@ -32,7 +32,7 @@ class PlanModel:
     def critique(self, stage: str, candidate: dict, context: dict) -> dict:
         return {"issues": []}
 
-    def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+    def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
         return candidate
 
 

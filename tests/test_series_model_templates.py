@@ -82,7 +82,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
     def test_active_templates_use_output_schema_placeholder_not_inline_json_schema(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts" / "user"
         stages = ["plan", "characters", "relationships", "world", "timeline", "threads", "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure"]
-        for kind in ("generate", "critique", "fix"):
+        for kind in ("generate", "critique", "revision"):
             for stage in stages:
                 name = f"{stage}/{kind}_{stage}.j2"
                 contents = (root / name).read_text(encoding="utf-8")
@@ -111,9 +111,9 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         for stage in stages:
             self.assertTrue((root / f"{stage}.json").is_file(), stage)
             self.assertIn('"type"', get_template_loader().load_schema_text("generate", stage))
-            self.assertIn('"type"', get_template_loader().load_schema_text("fix", stage))
+            self.assertIn('"type"', get_template_loader().load_schema_text("revision", stage))
 
-    def test_every_current_stage_has_renderable_generation_critique_and_fix_contract(self) -> None:
+    def test_every_current_stage_has_renderable_generation_critique_and_revision_contract(self) -> None:
         stages = [
             "plan", "characters", "relationships", "world", "timeline", "threads",
             "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure",
@@ -121,7 +121,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         for stage in stages:
             generation = OpenAIStoryModel._render("generate", stage, context={})
             critique = OpenAIStoryModel._render("critique", stage, candidate={}, context={})
-            revision = OpenAIStoryModel._render("fix", stage, candidate={}, critique={"issues": []}, context={})
+            revision = OpenAIStoryModel._render("revision", stage, candidate={}, critique={"issues": []}, context={})
             for prompt in (generation, critique, revision):
                 self.assertNotIn("{{", prompt, stage)
                 self.assertIn("## 出力スキーマ", prompt, stage)
@@ -139,14 +139,14 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("複合表現全体", prompt)
         self.assertIn("自分の `description` と `suggestion`", prompt)
         self.assertIn("出力スキーマの固定操作から一つだけ選ぶ", prompt)
-        revision = OpenAIStoryModel._render("fix", "plan", candidate={}, critique={"issues": []}, context={})
+        revision = OpenAIStoryModel._render("revision", "plan", candidate={}, critique={"issues": []}, context={})
         self.assertIn("`suggestion` 中の語句や具体例を事実・仕様として採用しない", revision)
         self.assertIn("入力候補を見ずに自分が返す完成JSON", revision)
         character_prompt = OpenAIStoryModel._render("generate", "characters", context={})
         self.assertIn("未記載の職歴、学歴、性格の由来", character_prompt)
         character_critique = OpenAIStoryModel._render("critique", "characters", candidate={}, context={})
         self.assertIn("人物の `name`、`role`、`narrative_function`", character_critique)
-        character_revision = OpenAIStoryModel._render("fix", "characters", candidate={}, critique={"issues": []}, context={})
+        character_revision = OpenAIStoryModel._render("revision", "characters", candidate={}, critique={"issues": []}, context={})
         self.assertIn("人物修正では、批評の `suggestion` を新事実として採用しない", character_revision)
 
     def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:

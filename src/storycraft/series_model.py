@@ -28,8 +28,8 @@ class OpenAIStoryModel:
     def critique(self, stage: str, candidate: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         return self._call("critique", stage, self._render("critique", stage, candidate=candidate, context=context))
 
-    def revise(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-        return self._call("revise", stage, self._render("fix", stage, candidate=candidate, critique=critique, context=context))
+    def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        return self._call("revision", stage, self._render("revision", stage, candidate=candidate, critique=critique, context=context))
 
     @staticmethod
     def _render(kind: str, stage: str, **kwargs: Any) -> str:

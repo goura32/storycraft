@@ -157,7 +157,7 @@ class SeriesWorkflow(ContractValidator):
             return candidate
         revised: dict[str, Any] | None = None
         try:
-            revised = model.revise(stage, candidate, critique, context)
+            revised = model.revision(stage, candidate, critique, context)
             if not isinstance(revised, dict):
                 raise ContractError("修正版がオブジェクトではありません")
             validator(revised)

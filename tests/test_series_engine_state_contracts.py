@@ -56,8 +56,8 @@ class StateContractTests(unittest.TestCase):
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
                 return self._model.critique(stage, candidate, context)
 
-            def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
-                return self._model.revise(stage, candidate, critique, context)
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return self._model.revision(stage, candidate, critique, context)
 
         errors: list[Exception] = []
         case = self
@@ -135,7 +135,7 @@ class StateContractTests(unittest.TestCase):
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
                 return {"issues": [{"severity": "minor", "field": "required_events", "description": "表現", "suggestion": "修正"}]}
 
-            def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
                 return {"required_events": []}
 
         service = SeriesService(self.workspace)

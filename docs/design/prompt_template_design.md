@@ -17,7 +17,7 @@
 |---|---|---|
 | 生成 | `user/{stage}/generate_{stage}.j2` | `schemas/{stage}.json` |
 | 批評 | `user/{stage}/critique_{stage}.j2` | `schemas/critique.json` |
-| 修正 | `user/{stage}/fix_{stage}.j2` | 生成と同じ `schemas/{stage}.json` |
+| 改訂 | `user/{stage}/revision_{stage}.j2` | 生成と同じ `schemas/{stage}.json` |
 
 生成工程は以下である。
 
