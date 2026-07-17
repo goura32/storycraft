@@ -1,4 +1,6 @@
 .venv/
+.wheel-smoke/
+dist/
 __pycache__/
 *.pyc
 *.egg-info/
