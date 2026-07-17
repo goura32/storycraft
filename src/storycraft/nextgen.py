@@ -88,6 +88,8 @@ class SeriesService:
             self.store.save(state)
         else:
             state = self.store.load()
+        if state["completed"]:
+            return self._result(state, self._volume_paths())
         self._run_one(state, model)
         self.store.save(state)
         return self._result(state)
@@ -535,7 +537,27 @@ class SeriesService:
     def _prior_summaries(state: dict[str, Any], volume_number: int) -> list[dict[str, Any]]:
         return [state["volume_summaries"][str(number)] for number in range(1, volume_number) if str(number) in state["volume_summaries"]]
 
+    def _validate_manuscript_state(self, state: dict[str, Any]) -> None:
+        expected: set[str] = set()
+        for volume_number in range(1, len(state["plan"]["volumes"]) + 1):
+            chapters = state["chapters"].get(str(volume_number))
+            if not isinstance(chapters, list) or not chapters:
+                raise ContractError("必要な章がありません")
+            for chapter in chapters:
+                for scene_number in range(1, chapter["scene_count"] + 1):
+                    expected.add(self._scene_id(volume_number, chapter["number"], scene_number))
+        scenes = state["scenes"]
+        actual = {scene.get("scene_id") for scene in scenes if isinstance(scene, dict)}
+        if actual != expected:
+            raise ContractError("必要な場面が欠落または不正です")
+        contents = [scene.get("content") for scene in scenes]
+        if not all(isinstance(content, str) and content.strip() for content in contents):
+            raise ContractError("空本文があります")
+        if len(contents) != len(set(contents)):
+            raise ContractError("場面本文が重複しています")
+
     def _write_output(self, state: dict[str, Any]) -> list[Path]:
+        self._validate_manuscript_state(state)
         output = self.workspace / "output"
         output.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []

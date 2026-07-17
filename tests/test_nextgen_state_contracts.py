@@ -34,6 +34,26 @@ class StateContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "保存状態"):
             SeriesService(self.workspace).resume(FlowModel())
 
+    def test_output_rejects_missing_planned_scene_before_creating_files(self) -> None:
+        service = SeriesService(self.workspace)
+        service.run(BRIEF, FlowModel())
+        state = service.store.load()
+        state["scenes"] = state["scenes"][1:]
+        output = self.workspace / "blocked-output"
+        service.workspace = output.parent
+        for path in (service.workspace / "output").glob("*"):
+            path.unlink()
+        with self.assertRaisesRegex(ContractError, "必要な場面"):
+            service._write_output(state)
+        self.assertFalse((service.workspace / "output" / "series.md").exists())
+
+    def test_step_on_completed_series_does_not_rewrite_output(self) -> None:
+        service = SeriesService(self.workspace)
+        service.run(BRIEF, FlowModel())
+        service._write_output = lambda state: self.fail("completed series must not write output")  # type: ignore[method-assign]
+        result = service.step(FlowModel())
+        self.assertTrue(result.completed)
+
 
 class SceneCardContractTests(unittest.TestCase):
     def setUp(self) -> None:
