@@ -117,6 +117,12 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         revision = OpenAIStoryModel._render("fix", "plan", candidate={}, critique={"issues": []}, context={})
         self.assertIn("`suggestion` 中の語句や具体例を事実・仕様として採用しない", revision)
         self.assertIn("入力候補を見ずに自分が返す完成JSON", revision)
+        character_prompt = OpenAIStoryModel._render("generate", "characters", context={})
+        self.assertIn("未記載の職歴、学歴、性格の由来", character_prompt)
+        character_critique = OpenAIStoryModel._render("critique", "characters", candidate={}, context={})
+        self.assertIn("人物の `name`、`role`、`narrative_function`", character_critique)
+        character_revision = OpenAIStoryModel._render("fix", "characters", candidate={}, critique={"issues": []}, context={})
+        self.assertIn("人物修正では、批評の `suggestion` を新事実として採用しない", character_revision)
 
     def test_jinja_json_policy_keeps_japanese_unescaped(self) -> None:
         loader = get_template_loader()
