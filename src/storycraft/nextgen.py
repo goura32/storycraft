@@ -1,4 +1,4 @@
-"""次世代Storycraftの互換なし実行系。"""
+"""仕様準拠の次世代Storycraft実行系。"""
 from __future__ import annotations
 
 import json
@@ -16,13 +16,7 @@ class StoryModel(Protocol):
 
     def critique(self, stage: str, candidate: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]: ...
 
-    def revise(
-        self,
-        stage: str,
-        candidate: dict[str, Any],
-        critique: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any]: ...
+    def revise(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -49,8 +43,8 @@ class _Store:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ContractError("保存状態が壊れています") from exc
-        if data.get("version") != 2:
-            raise ContractError("この保存状態は次世代形式ではありません")
+        if data.get("version") != 3:
+            raise ContractError("この保存状態は現行の次世代形式ではありません")
         return data
 
     def save(self, data: dict[str, Any]) -> None:
@@ -61,19 +55,15 @@ class _Store:
 
 
 class SeriesService:
-    """一つのシリーズを生成、再開、出力する公開境界。"""
+    """一つのシリーズを工程正本から生成、再開、出力する公開境界。"""
+
+    _INITIAL_STAGES = ("plan", "characters", "relationships", "world", "timeline", "threads")
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
         self.store = _Store(workspace)
 
-    def run(
-        self,
-        brief: dict[str, Any],
-        model: StoryModel,
-        *,
-        stop_after_scene: str | None = None,
-    ) -> RunResult:
+    def run(self, brief: dict[str, Any], model: StoryModel, *, stop_after_scene: str | None = None) -> RunResult:
         if self.store.exists():
             raise ContractError("この作業場所には保存済みシリーズがあります。resume を使ってください")
         state = self._new_state(brief)
@@ -81,11 +71,9 @@ class SeriesService:
         return self._advance(state, model, stop_after_scene=stop_after_scene)
 
     def resume(self, model: StoryModel) -> RunResult:
-        state = self.store.load()
-        return self._advance(state, model)
+        return self._advance(self.store.load(), model)
 
     def step(self, model: StoryModel, brief: dict[str, Any] | None = None) -> RunResult:
-        """未完了の最初の単位だけを実行する。初回だけ企画が必要。"""
         if not self.store.exists():
             if brief is None:
                 raise ContractError("初回の step には企画が必要です")
@@ -93,404 +81,437 @@ class SeriesService:
             self.store.save(state)
         else:
             state = self.store.load()
-        if state["plan"] is None:
-            plan = self._improve(
-                "plan", {"brief": state["brief"]}, model, state,
-                lambda value: self._validate_plan(value, state["brief"]),
-            )
-            self._validate_plan(plan, state["brief"])
-            state["plan"] = plan
-            self.store.save(state)
-            return self._result(state)
-        specs = self._scene_specs(state["plan"])
-        if state["next_scene_index"] < len(specs):
-            scene_id = specs[state["next_scene_index"]]["scene_id"]
-            return self._advance(state, model, stop_after_scene=str(scene_id))
-        return self._advance(state, model)
+        self._run_one(state, model)
+        self.store.save(state)
+        return self._result(state)
 
     def _new_state(self, brief: dict[str, Any]) -> dict[str, Any]:
         self._validate_brief(brief)
         return {
-            "version": 2,
+            "version": 3,
             "brief": brief,
             "plan": None,
-            "threads": self._initial_threads(brief),
+            "characters": None,
+            "relationships": None,
+            "world": None,
+            "timeline": None,
+            "threads": None,
+            "chapters": {},
+            "cards": {},
             "scenes": [],
-            "next_scene_index": 0,
+            "volume_summaries": {},
+            "initial_ledgers_confirmed": False,
             "attempts": [],
             "closure": {},
             "completed": False,
         }
 
-    def _advance(
-        self,
-        state: dict[str, Any],
-        model: StoryModel,
-        *,
-        stop_after_scene: str | None = None,
-    ) -> RunResult:
-        if state["plan"] is None:
-            plan = self._improve(
-                "plan", {"brief": state["brief"]}, model, state,
-                lambda value: self._validate_plan(value, state["brief"]),
-            )
-            self._validate_plan(plan, state["brief"])
-            state["plan"] = plan
+    def _advance(self, state: dict[str, Any], model: StoryModel, *, stop_after_scene: str | None = None) -> RunResult:
+        while not state["completed"]:
+            scene_id = self._run_one(state, model)
             self.store.save(state)
-
-        scene_specs = self._scene_specs(state["plan"])
-        index = state["next_scene_index"]
-        while index < len(scene_specs):
-            spec = scene_specs[index]
-            is_final_scene = index == len(scene_specs) - 1
-            unresolved_thread_ids = [
-                thread_id for thread_id, thread in state["threads"].items() if thread["status"] != "resolved"
-            ]
-            required_final_resolved_ids = unresolved_thread_ids if is_final_scene else []
-            card_context = self._card_context(state, spec, is_final_scene, unresolved_thread_ids)
-            card = self._improve(
-                "scene_card", card_context, model, state,
-                lambda value: self._validate_card(value, spec, state["threads"], required_final_resolved_ids),
-            )
-            self._validate_card(card, spec, state["threads"], required_final_resolved_ids)
-
-            scene_context = {
-                "brief": state["brief"],
-                "plan": state["plan"],
-                "card": card,
-                "threads": {
-                    thread_id: dict(state["threads"][thread_id])
-                    for thread_id in card["visible_thread_ids"]
-                },
-                "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "",
-                "is_final_scene": is_final_scene,
-                "required_ending": state["brief"]["ending"] if is_final_scene else "",
-                "required_resolved_ids": unresolved_thread_ids if is_final_scene else [],
-            }
-            scene = self._improve(
-                "scene", scene_context, model, state,
-                lambda value: self._validate_scene(value, card, state["threads"], required_final_resolved_ids),
-            )
-            self._validate_scene(scene, card, state["threads"], required_final_resolved_ids)
-            self._apply_updates(state["threads"], scene["state_updates"], card["scene_id"])
-            state["scenes"].append(
-                {
-                    "scene_id": card["scene_id"],
-                    "volume": spec["volume"],
-                    "chapter": spec["chapter"],
-                    "content": scene["content"],
-                    "handoff_summary": scene["handoff_summary"],
-                    "state_updates": scene["state_updates"],
-                }
-            )
-            index += 1
-            state["next_scene_index"] = index
-            self.store.save(state)
-            if stop_after_scene == card["scene_id"]:
+            if scene_id is not None and scene_id == stop_after_scene:
                 return self._result(state)
+        return self._result(state, self._volume_paths())
+
+    def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
+        if state["plan"] is None:
+            state["plan"] = self._improve("plan", {"brief": state["brief"]}, model, state, lambda item: self._validate_plan(item, state["brief"]))
+            return None
+        if state["characters"] is None:
+            proposed = self._improve("characters", {"brief": state["brief"], "plan": state["plan"]}, model, state, self._validate_characters)
+            state["characters"] = self._assign_ids(proposed["characters"], "char")
+            return None
+        if state["relationships"] is None:
+            context = {"characters": state["characters"], "plan": state["plan"]}
+            proposed = self._improve("relationships", context, model, state, lambda item: self._validate_relationships(item, state["characters"]))
+            state["relationships"] = self._assign_ids(proposed["relationships"], "rel")
+            return None
+        if state["world"] is None:
+            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"]}
+            proposed = self._improve("world", context, model, state, self._validate_world)
+            state["world"] = self._assign_ids(proposed["entities"], "entity")
+            return None
+        if state["timeline"] is None:
+            context = self._ledger_context(state)
+            proposed = self._improve("timeline", context, model, state, lambda item: self._validate_timeline(item, self._known_ids(state)))
+            state["timeline"] = self._assign_ids(proposed["timelines"], "time")
+            return None
+        if state["threads"] is None:
+            context = self._ledger_context(state)
+            proposed = self._improve("threads", context, model, state, lambda item: self._validate_threads(item, self._known_ids(state)))
+            state["threads"] = self._assign_ids(proposed["threads"], "thread")
+            return None
+        if not state["initial_ledgers_confirmed"]:
+            self._validate_initial_ledgers(state)
+            state["initial_ledgers_confirmed"] = True
+            return None
+
+        for volume in state["plan"]["volumes"]:
+            volume_key = str(volume["number"])
+            if volume_key not in state["chapters"]:
+                context = {"brief": state["brief"], "volume": volume, "ledgers": self._ledger_context(state), "prior_summaries": self._prior_summaries(state, volume["number"])}
+                state["chapters"][volume_key] = self._improve("volume_chapters", context, model, state, lambda item: self._validate_chapters(item, volume, state["brief"]))["chapters"]
+                return None
+            for chapter in state["chapters"][volume_key]:
+                for scene_number in range(1, chapter["scene_count"] + 1):
+                    scene_id = self._scene_id(volume["number"], chapter["number"], scene_number)
+                    if any(scene["scene_id"] == scene_id for scene in state["scenes"]):
+                        continue
+                    is_final_scene = self._is_final_scene(state, volume, chapter, scene_number)
+                    card_context = self._card_context(state, volume, chapter, scene_number, is_final_scene)
+                    card = self._improve("scene_card", card_context, model, state, lambda item: self._validate_card(item, scene_id, state))
+                    state["cards"][scene_id] = card
+                    prose_context = self._writer_context(state, card, scene_id, is_final_scene)
+                    prose = self._improve("scene", prose_context, model, state, self._validate_scene)
+                    continuity_context = {"scene_id": scene_id, "content": prose["content"], "card": card, "is_final_scene": is_final_scene}
+                    continuity = self._improve("continuity", continuity_context, model, state, lambda item: self._validate_continuity(item, prose["content"], card, state, is_final_scene))
+                    self._apply_updates(state, continuity["state_updates"], scene_id)
+                    state["scenes"].append({"scene_id": scene_id, "volume": volume["number"], "chapter": chapter["number"], "content": prose["content"], "handoff_summary": continuity["handoff_summary"], "state_updates": continuity["state_updates"]})
+                    return scene_id
+            if volume_key not in state["volume_summaries"]:
+                scenes = [scene for scene in state["scenes"] if scene["volume"] == volume["number"]]
+                context = {"volume": volume, "scenes": scenes, "threads": state["threads"]}
+                summary = self._improve("volume_summary", context, model, state, lambda item: self._validate_volume_summary(item, state))
+                state["volume_summaries"][volume_key] = summary
+                return None
 
         if not state["closure"]:
-            closure_context = {"brief": state["brief"], "threads": state["threads"], "scenes": state["scenes"]}
-            closure = self._improve(
-                "closure", closure_context, model, state,
-                lambda value: self._validate_closure(value, state["threads"]),
-            )
-            self._validate_closure(closure, state["threads"])
-            state["closure"] = closure
-            self.store.save(state)
-
-        paths = self._write_output(state)
+            context = {"brief": state["brief"], "threads": state["threads"], "scenes": state["scenes"], "volume_summaries": state["volume_summaries"]}
+            state["closure"] = self._improve("closure", context, model, state, lambda item: self._validate_closure(item, state))
+            return None
+        self._write_output(state)
         state["completed"] = True
-        self.store.save(state)
-        return self._result(state, paths)
+        return None
 
-    def _improve(
-        self,
-        stage: str,
-        context: dict[str, Any],
-        model: StoryModel,
-        state: dict[str, Any],
-        validator: Callable[[dict[str, Any]], None],
-    ) -> dict[str, Any]:
+    def _improve(self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any], validator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
         candidate: dict[str, Any] | None = None
-        validation_error = ""
+        error = ""
         for _ in range(4):
             proposed = model.generate(stage, context)
-            if not isinstance(proposed, dict):
-                validation_error = "草稿がオブジェクトではありません"
-                state["attempts"].append({"stage": stage, "kind": "draft_rejected", "reason": validation_error})
-                self.store.save(state)
-                continue
             try:
+                if not isinstance(proposed, dict):
+                    raise ContractError("草稿がオブジェクトではありません")
                 validator(proposed)
             except ContractError as exc:
-                validation_error = str(exc)
-                state["attempts"].append(
-                    {"stage": stage, "kind": "draft_rejected", "candidate": proposed, "reason": validation_error}
-                )
+                error = str(exc)
+                state["attempts"].append({"stage": stage, "kind": "draft_rejected", "candidate": proposed, "reason": error})
                 self.store.save(state)
                 continue
             candidate = proposed
             break
         if candidate is None:
-            raise ContractError(f"{stage} の草稿を検証できませんでした: {validation_error}")
-        state["attempts"].append(
-            {"stage": stage, "kind": "draft", "input": context, "candidate": candidate}
-        )
-        self.store.save(state)
+            raise ContractError(f"{stage} の草稿を検証できませんでした: {error}")
+        state["attempts"].append({"stage": stage, "kind": "draft", "input": context, "candidate": candidate})
         try:
             critique = model.critique(stage, candidate, context)
+            self._validate_critique(critique)
         except Exception as exc:
             state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": str(exc)})
-            self.store.save(state)
-            return candidate
-        try:
-            self._validate_critique(critique)
-        except ContractError as exc:
-            state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": str(exc)})
-            self.store.save(state)
             return candidate
         state["attempts"].append({"stage": stage, "kind": "critique", "critique": critique})
+        if not critique["issues"]:
+            return candidate
         try:
             revised = model.revise(stage, candidate, critique, context)
             if not isinstance(revised, dict):
                 raise ContractError("修正版がオブジェクトではありません")
             validator(revised)
-        except Exception as exc:  # 批評・修正失敗では草稿を失わせない
+        except Exception as exc:
             state["attempts"].append({"stage": stage, "kind": "revision_failed", "reason": str(exc)})
-            self.store.save(state)
             return candidate
         state["attempts"].append({"stage": stage, "kind": "revision", "candidate": revised})
-        self.store.save(state)
         return revised
 
     @staticmethod
     def _validate_brief(brief: dict[str, Any]) -> None:
         if not isinstance(brief, dict):
             raise ContractError("企画はオブジェクトでなければなりません")
-        for key in ("title", "premise", "ending"):
+        for key in ("title", "genre", "protagonist", "key_people", "want", "avoid", "ending"):
             if not isinstance(brief.get(key), str) or not brief[key].strip():
                 raise ContractError(f"企画の必須項目がありません: {key}")
-        volumes = brief.get("volumes")
-        if volumes is not None and (not isinstance(volumes, int) or not 4 <= volumes <= 10):
+        if brief.get("volumes") is not None and (not isinstance(brief["volumes"], int) or not 4 <= brief["volumes"] <= 10):
             raise ContractError("volumes は 4〜10 の整数でなければなりません")
-        chapter_counts = brief.get("chapters_per_volume")
-        if chapter_counts is not None:
-            if (
-                not isinstance(chapter_counts, list)
-                or not all(isinstance(count, int) and 1 <= count <= 12 for count in chapter_counts)
-                or (volumes is not None and len(chapter_counts) != volumes)
-            ):
-                raise ContractError("chapters_per_volume は巻数と一致する1〜12の整数配列でなければなりません")
-        questions = brief.get("major_questions", [])
-        if not isinstance(questions, list) or not all(isinstance(question, str) and question.strip() for question in questions):
-            raise ContractError("major_questions は空でない文字列の配列でなければなりません")
-
-    @staticmethod
-    def _initial_threads(brief: dict[str, Any]) -> dict[str, dict[str, Any]]:
-        questions = brief.get("major_questions") or [brief["ending"]]
-        return {
-            f"question-{index:02d}": {
-                "id": f"question-{index:02d}",
-                "question": question,
-                "status": "open",
-                "last_scene_id": None,
-            }
-            for index, question in enumerate(questions, start=1)
-        }
+        counts = brief.get("chapters_per_volume")
+        if counts is not None and (not isinstance(counts, list) or not all(isinstance(value, int) and 1 <= value <= 12 for value in counts) or (brief.get("volumes") and len(counts) != brief["volumes"])):
+            raise ContractError("chapters_per_volume は巻数と一致する1〜12の整数配列でなければなりません")
 
     @staticmethod
     def _validate_plan(plan: dict[str, Any], brief: dict[str, Any]) -> None:
         volumes = plan.get("volumes")
-        if not isinstance(volumes, list) or not 4 <= len(volumes) <= 10:
-            raise ContractError("全巻計画は4〜10巻でなければなりません")
-        requested = brief.get("volumes")
-        if requested is not None and len(volumes) != requested:
-            raise ContractError("指定巻数と全巻計画の巻数が一致しません")
-        requested_chapters = brief.get("chapters_per_volume")
-        for expected, volume in enumerate(volumes, start=1):
+        if not isinstance(volumes, list) or not 4 <= len(volumes) <= 10 or (brief.get("volumes") and len(volumes) != brief["volumes"]):
+            raise ContractError("全巻構成の巻数が不正です")
+        for expected, volume in enumerate(volumes, 1):
             if not isinstance(volume, dict) or volume.get("number") != expected:
-                raise ContractError("全巻計画の巻番号が連番ではありません")
-            if not isinstance(volume.get("title"), str) or not volume["title"].strip():
-                raise ContractError("巻題がありません")
-            chapters = volume.get("chapters")
-            if not isinstance(chapters, list) or not chapters:
-                raise ContractError("各巻には少なくとも一章が必要です")
-            if requested_chapters is not None and len(chapters) != requested_chapters[expected - 1]:
-                raise ContractError("指定章数と全巻計画の章数が一致しません")
-            for chapter_number, chapter in enumerate(chapters, start=1):
-                if not isinstance(chapter, dict) or chapter.get("number") != chapter_number:
-                    raise ContractError("章番号が連番ではありません")
-                if not isinstance(chapter.get("title"), str) or not chapter["title"].strip():
-                    raise ContractError("章題がありません")
-            if not isinstance(volume.get("change"), str) or not volume["change"].strip():
-                raise ContractError("各巻には成立する変化または区切りが必要です")
-            if expected < len(volumes) and (
-                not isinstance(volume.get("leaves_question"), str)
-                or not volume["leaves_question"].strip()
-            ):
+                raise ContractError("全巻構成の巻番号が連番ではありません")
+            for key in ("title", "change", "leaves_question", "ending_condition"):
+                if not isinstance(volume.get(key), str):
+                    raise ContractError(f"全巻構成の {key} が不正です")
+            if expected < len(volumes) and not volume["leaves_question"].strip():
                 raise ContractError("最終巻以外には次巻へ続く問いが必要です")
 
     @staticmethod
-    def _scene_specs(plan: dict[str, Any]) -> list[dict[str, int | str]]:
-        specs: list[dict[str, int | str]] = []
-        for volume in plan["volumes"]:
-            for chapter in volume["chapters"]:
-                volume_number = volume["number"]
-                chapter_number = chapter["number"]
-                for scene_number in (1, 2):
-                    specs.append(
-                        {
-                            "volume": volume_number,
-                            "chapter": chapter_number,
-                            "scene": scene_number,
-                            "scene_id": f"v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}",
-                        }
-                    )
-        return specs
+    def _validate_characters(value: dict[str, Any]) -> None:
+        records = value.get("characters")
+        if not isinstance(records, list) or not records:
+            raise ContractError("人物台帳が空です")
+        for record in records:
+            SeriesService._require(record, "name", "role", "narrative_function", "fixed_profile")
+            SeriesService._initial_state(record)
+            if "id" in record:
+                raise ContractError("人物IDはプログラムが採番します")
 
     @staticmethod
-    def _card_context(
-        state: dict[str, Any],
-        spec: dict[str, int | str],
-        is_final_scene: bool,
-        unresolved_thread_ids: list[str],
-    ) -> dict[str, Any]:
-        return {
-            "brief": state["brief"],
-            "plan": state["plan"],
-            "scene_id": spec["scene_id"],
-            "volume": spec["volume"],
-            "chapter": spec["chapter"],
-            "scene": spec["scene"],
-            "available_thread_ids": sorted(state["threads"]),
-            "is_final_scene": is_final_scene,
-            "unresolved_thread_ids": unresolved_thread_ids,
-        }
+    def _validate_relationships(value: dict[str, Any], characters: list[dict[str, Any]]) -> None:
+        records = value.get("relationships")
+        ids = {record["id"] for record in characters}
+        if not isinstance(records, list):
+            raise ContractError("関係台帳が配列ではありません")
+        for record in records:
+            SeriesService._require(record, "character_a_id", "character_b_id", "fixed_meaning")
+            SeriesService._initial_state(record)
+            if record["character_a_id"] not in ids or record["character_b_id"] not in ids:
+                raise ContractError("関係台帳が未知の人物を参照しています")
+            if "id" in record:
+                raise ContractError("関係IDはプログラムが採番します")
 
     @staticmethod
-    def _validate_card(
-        card: dict[str, Any],
-        spec: dict[str, int | str],
-        threads: dict[str, Any],
-        required_update_ids: list[str] | None = None,
-    ) -> None:
-        if card.get("scene_id") != spec["scene_id"]:
+    def _validate_world(value: dict[str, Any]) -> None:
+        records = value.get("entities")
+        if not isinstance(records, list):
+            raise ContractError("世界台帳が配列ではありません")
+        for record in records:
+            SeriesService._require(record, "kind", "name", "stable_fact", "use_or_access_rule")
+            SeriesService._initial_state(record)
+            if "id" in record:
+                raise ContractError("世界IDはプログラムが採番します")
+
+    @staticmethod
+    def _validate_timeline(value: dict[str, Any], known_ids: set[str]) -> None:
+        records = value.get("timelines")
+        if not isinstance(records, list):
+            raise ContractError("時間台帳が配列ではありません")
+        for record in records:
+            SeriesService._require(record, "kind", "description", "related_ids", "fixed_rule")
+            SeriesService._initial_state(record)
+            if not isinstance(record["related_ids"], list) or not set(record["related_ids"]).issubset(known_ids):
+                raise ContractError("時間台帳が未知IDを参照しています")
+            if "id" in record:
+                raise ContractError("時間IDはプログラムが採番します")
+
+    @staticmethod
+    def _validate_threads(value: dict[str, Any], known_ids: set[str]) -> None:
+        records = value.get("threads")
+        if not isinstance(records, list) or not records:
+            raise ContractError("主要項目台帳が空です")
+        for record in records:
+            SeriesService._require(record, "kind", "importance", "description", "author_truth", "reader_knowledge", "character_knowledge", "presentation_rule", "introduce_by", "resolve_by", "resolution_condition")
+            state = SeriesService._initial_state(record)
+            if record["importance"] not in {"major", "supporting"} or state.get("status") not in {"open", "in_progress", "resolved"}:
+                raise ContractError("主要項目の状態または重要度が不正です")
+            if not isinstance(record["character_knowledge"], dict) or not set(record["character_knowledge"]).issubset(known_ids):
+                raise ContractError("主要項目が未知の人物を参照しています")
+            if "id" in record:
+                raise ContractError("主要項目IDはプログラムが採番します")
+
+    @staticmethod
+    def _validate_chapters(value: dict[str, Any], volume: dict[str, Any], brief: dict[str, Any]) -> None:
+        chapters = value.get("chapters")
+        expected_count = (brief.get("chapters_per_volume") or [None] * len([volume]))[volume["number"] - 1] if brief.get("chapters_per_volume") else None
+        if not isinstance(chapters, list) or not chapters or (expected_count is not None and len(chapters) != expected_count):
+            raise ContractError("章一覧の件数が不正です")
+        for number, chapter in enumerate(chapters, 1):
+            if not isinstance(chapter, dict) or chapter.get("number") != number:
+                raise ContractError("章番号が連番ではありません")
+            SeriesService._require(chapter, "title", "purpose", "start_state", "end_state")
+            if not isinstance(chapter.get("scene_count"), int) or not 1 <= chapter["scene_count"] <= 4:
+                raise ContractError("場面数は1〜4でなければなりません")
+
+    def _validate_card(self, card: dict[str, Any], scene_id: str, state: dict[str, Any]) -> None:
+        self._require(card, "scene_id", "pov_character_id", "location_id", "purpose", "required_events", "reader_disclosure", "presentation_rules", "visible_ids", "allowed_update_ids")
+        if card["scene_id"] != scene_id:
             raise ContractError("場面カードのIDが実行対象と一致しません")
-        for field in ("visible_thread_ids", "allowed_update_ids"):
-            values = card.get(field)
-            if not isinstance(values, list) or not all(value in threads for value in values):
-                raise ContractError(f"場面カードに未知の台帳IDがあります: {field}")
-            if len(values) != len(set(values)):
-                raise ContractError(f"場面カードのIDが重複しています: {field}")
-        if not set(card["allowed_update_ids"]).issubset(card["visible_thread_ids"]):
+        characters = {record["id"] for record in state["characters"]}
+        world = {record["id"] for record in state["world"]}
+        known = self._known_ids(state)
+        if card["pov_character_id"] not in characters or card["location_id"] not in world:
+            raise ContractError("場面カードの視点人物または場所が不正です")
+        for field in ("visible_ids", "allowed_update_ids"):
+            values = card[field]
+            if not isinstance(values, list) or len(values) != len(set(values)) or not set(values).issubset(known):
+                raise ContractError(f"場面カードの {field} が不正です")
+        if not set(card["allowed_update_ids"]).issubset(card["visible_ids"]):
             raise ContractError("状態更新の許可IDは可視IDの部分集合でなければなりません")
-        if required_update_ids and not set(required_update_ids).issubset(card["allowed_update_ids"]):
-            raise ContractError("最終場面は未回収の主要な問いをすべて更新許可しなければなりません")
 
     @staticmethod
-    def _validate_scene(
-        scene: dict[str, Any],
-        card: dict[str, Any],
-        threads: dict[str, Any],
-        required_resolved_ids: list[str] | None = None,
-    ) -> None:
-        if not isinstance(scene.get("content"), str) or not scene["content"].strip():
-            raise ContractError("場面本文が空です")
-        if not isinstance(scene.get("handoff_summary"), str) or not scene["handoff_summary"].strip():
-            raise ContractError("引継ぎ要約が空です")
-        updates = scene.get("state_updates")
-        if not isinstance(updates, list):
+    def _validate_scene(value: dict[str, Any]) -> None:
+        if set(value) != {"content"} or not isinstance(value.get("content"), str) or not value["content"].strip():
+            raise ContractError("場面本文は空でない content だけを返さなければなりません")
+
+    def _validate_continuity(self, value: dict[str, Any], content: str, card: dict[str, Any], state: dict[str, Any], is_final_scene: bool) -> None:
+        self._require(value, "handoff_summary", "state_updates")
+        if not isinstance(value["state_updates"], list):
             raise ContractError("状態更新が配列ではありません")
-        allowed = set(card["allowed_update_ids"])
-        updated_ids: set[str] = set()
-        for update in updates:
-            if not isinstance(update, dict) or update.get("id") not in threads:
-                raise ContractError("未知IDの状態更新です")
-            if update["id"] not in allowed:
-                raise ContractError("場面カードで許可されていない状態更新です")
-            if update["id"] in updated_ids:
-                raise ContractError("同じ問いを一場面で複数回更新できません")
-            updated_ids.add(update["id"])
-            if update.get("status") not in {"open", "in_progress", "resolved"}:
-                raise ContractError("状態更新のstatusが不正です")
-        if required_resolved_ids:
-            unresolved = set(required_resolved_ids) - {
-                update["id"] for update in updates if update.get("status") == "resolved"
-            }
-            if unresolved:
-                raise ContractError("最終場面で回収されていない主要な問いがあります")
+        seen: set[str] = set()
+        unresolved = {record["id"] for record in state["threads"] if record["importance"] == "major" and record["current_state"].get("status") != "resolved"}
+        resolved: set[str] = set()
+        for update in value["state_updates"]:
+            self._require(update, "id", "field", "value", "evidence")
+            if update["id"] in seen or update["id"] not in card["allowed_update_ids"]:
+                raise ContractError("状態更新が重複または未許可です")
+            seen.add(update["id"])
+            if not isinstance(update["evidence"], str) or not update["evidence"] or update["evidence"] not in content:
+                raise ContractError("状態更新に本文根拠がありません")
+            target = self._record_for_id(state, update["id"])
+            if target is None:
+                raise ContractError("状態更新が未知IDを参照しています")
+            if update["field"] == "status":
+                if not update["id"].startswith("thread-") or update["value"] not in {"open", "in_progress", "resolved"}:
+                    raise ContractError("主要項目以外のstatus更新または不正な状態です")
+                if update["value"] == "resolved":
+                    resolved.add(update["id"])
+            elif update["field"] != "current_state" or not isinstance(update["value"], (str, dict, list)):
+                raise ContractError("更新できないフィールドです")
+        if is_final_scene and not unresolved.issubset(resolved):
+            raise ContractError("最終場面で主要項目がすべて回収されていません")
 
     @staticmethod
-    def _apply_updates(threads: dict[str, Any], updates: list[dict[str, Any]], scene_id: str) -> None:
-        for update in updates:
-            thread = threads[update["id"]]
-            thread["status"] = update["status"]
-            thread["last_scene_id"] = scene_id
+    def _validate_volume_summary(value: dict[str, Any], state: dict[str, Any]) -> None:
+        if not isinstance(value.get("volume_summary"), str) or not value["volume_summary"].strip() or not isinstance(value.get("unresolved_thread_ids"), list):
+            raise ContractError("巻要約が不正です")
+        known = {record["id"] for record in state["threads"]}
+        if not set(value["unresolved_thread_ids"]).issubset(known):
+            raise ContractError("巻要約が未知の主要項目を参照しています")
+
+    def _validate_closure(self, value: dict[str, Any], state: dict[str, Any]) -> None:
+        resolved = value.get("resolved_ids")
+        required = {record["id"] for record in state["threads"] if record["importance"] == "major"}
+        if not isinstance(resolved, list) or set(resolved) != required or len(resolved) != len(set(resolved)):
+            raise ContractError("完結確認の主要項目が台帳と一致しません")
+        for item in required:
+            record = self._record_for_id(state, item)
+            if record is None or record["current_state"].get("status") != "resolved":
+                raise ContractError("未回収の主要項目があります")
+        evidence = value.get("ending_evidence")
+        if not isinstance(evidence, str) or not evidence or not any(evidence in scene["content"] for scene in state["scenes"]):
+            raise ContractError("結末の本文根拠がありません")
 
     @staticmethod
-    def _validate_closure(closure: dict[str, Any], threads: dict[str, Any]) -> None:
-        resolved_ids = closure.get("resolved_ids")
-        if (
-            not isinstance(resolved_ids, list)
-            or len(resolved_ids) != len(set(resolved_ids))
-            or set(resolved_ids) != set(threads)
-        ):
-            raise ContractError("主要な問いの回収結果が台帳と一致しません")
-        if closure.get("ending_reached") is not True:
-            raise ContractError("結末が確認できません")
-        unresolved = [thread_id for thread_id, thread in threads.items() if thread["status"] != "resolved"]
-        if unresolved:
-            raise ContractError(f"未回収の主要な問いがあります: {', '.join(unresolved)}")
-
-    @staticmethod
-    def _validate_critique(critique: Any) -> None:
-        if not isinstance(critique, dict) or not isinstance(critique.get("issues"), list):
+    def _validate_critique(value: Any) -> None:
+        if not isinstance(value, dict) or not isinstance(value.get("issues"), list):
             raise ContractError("批評の issues が配列ではありません")
-        for issue in critique["issues"]:
-            if not isinstance(issue, dict):
-                raise ContractError("批評 issue がオブジェクトではありません")
-            if issue.get("severity") not in {"critical", "major", "minor"}:
-                raise ContractError("批評 issue の severity が不正です")
-            for field in ("field", "description", "suggestion"):
-                if not isinstance(issue.get(field), str) or not issue[field].strip():
-                    raise ContractError(f"批評 issue の {field} がありません")
+        for issue in value["issues"]:
+            if not isinstance(issue, dict) or issue.get("severity") not in {"critical", "major", "minor"}:
+                raise ContractError("批評 issue が不正です")
+            SeriesService._require(issue, "field", "description", "suggestion")
+
+    @staticmethod
+    def _require(value: Any, *fields: str) -> None:
+        if not isinstance(value, dict):
+            raise ContractError("応答項目がオブジェクトではありません")
+        for field in fields:
+            if not isinstance(value.get(field), str) or not value[field].strip():
+                if field in {"required_events", "visible_ids", "allowed_update_ids", "state_updates", "related_ids"} and isinstance(value.get(field), list):
+                    continue
+                if field == "character_knowledge" and isinstance(value.get(field), dict):
+                    continue
+                raise ContractError(f"必須項目がありません: {field}")
+
+    @staticmethod
+    def _initial_state(record: dict[str, Any]) -> dict[str, Any]:
+        state = record.get("initial_state")
+        if not isinstance(state, dict) or not state:
+            raise ContractError("開始時の現在状態がありません")
+        return state
+
+    @staticmethod
+    def _assign_ids(records: list[dict[str, Any]], prefix: str) -> list[dict[str, Any]]:
+        assigned: list[dict[str, Any]] = []
+        for number, record in enumerate(records, 1):
+            copy = dict(record)
+            copy["id"] = f"{prefix}-{number:04d}"
+            copy["current_state"] = dict(copy["initial_state"])
+            assigned.append(copy)
+        return assigned
+
+    def _validate_initial_ledgers(self, state: dict[str, Any]) -> None:
+        if not all(state[key] is not None for key in ("characters", "relationships", "world", "timeline", "threads")):
+            raise ContractError("初期台帳がそろっていません")
+        for record in state["threads"]:
+            for character_id in record["character_knowledge"]:
+                if character_id not in self._known_ids(state):
+                    raise ContractError("主要項目台帳の人物参照が不正です")
+
+    def _ledger_context(self, state: dict[str, Any]) -> dict[str, Any]:
+        return {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"] or [], "relationships": state["relationships"] or [], "world": state["world"] or [], "timeline": state["timeline"] or [], "threads": state["threads"] or []}
+
+    def _known_ids(self, state: dict[str, Any]) -> set[str]:
+        return {record["id"] for key in ("characters", "relationships", "world", "timeline", "threads") for record in (state[key] or [])}
+
+    def _record_for_id(self, state: dict[str, Any], identifier: str) -> dict[str, Any] | None:
+        for key in ("characters", "relationships", "world", "timeline", "threads"):
+            for record in state[key] or []:
+                if record["id"] == identifier:
+                    return record
+        return None
+
+    def _apply_updates(self, state: dict[str, Any], updates: list[dict[str, Any]], scene_id: str) -> None:
+        for update in updates:
+            target = self._record_for_id(state, update["id"])
+            assert target is not None
+            if update["field"] == "status":
+                target["current_state"]["status"] = update["value"]
+            else:
+                target["current_state"] = update["value"]
+            target["last_scene_id"] = scene_id
+
+    def _card_context(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int, is_final_scene: bool) -> dict[str, Any]:
+        scene_id = self._scene_id(volume["number"], chapter["number"], scene_number)
+        return {"scene_id": scene_id, "volume": volume, "chapter": chapter, "scene_number": scene_number, "ledgers": self._ledger_context(state), "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "", "is_final_scene": is_final_scene}
+
+    def _writer_context(self, state: dict[str, Any], card: dict[str, Any], scene_id: str, is_final_scene: bool) -> dict[str, Any]:
+        visible = {record["id"]: record for key in ("characters", "relationships", "world", "timeline", "threads") for record in state[key] or [] if record["id"] in card["visible_ids"]}
+        return {"scene_id": scene_id, "card": card, "writer_view": visible, "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "", "is_final_scene": is_final_scene, "ending": state["brief"]["ending"] if is_final_scene else ""}
+
+    @staticmethod
+    def _scene_id(volume: int, chapter: int, scene: int) -> str:
+        return f"v{volume:02d}-c{chapter:02d}-s{scene:02d}"
+
+    def _is_final_scene(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int) -> bool:
+        return volume["number"] == state["plan"]["volumes"][-1]["number"] and chapter["number"] == state["chapters"][str(volume["number"])][-1]["number"] and scene_number == chapter["scene_count"]
+
+    @staticmethod
+    def _prior_summaries(state: dict[str, Any], volume_number: int) -> list[dict[str, Any]]:
+        return [state["volume_summaries"][str(number)] for number in range(1, volume_number) if str(number) in state["volume_summaries"]]
 
     def _write_output(self, state: dict[str, Any]) -> list[Path]:
-        output_dir = self.workspace / "output"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        scenes_by_volume: dict[int, list[dict[str, Any]]] = {}
-        for scene in state["scenes"]:
-            scenes_by_volume.setdefault(scene["volume"], []).append(scene)
+        output = self.workspace / "output"
+        output.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []
         for volume in state["plan"]["volumes"]:
-            number = volume["number"]
-            chapter_titles = {chapter["number"]: chapter["title"] for chapter in volume["chapters"]}
-            label = "無料導入巻" if number == 1 else "販売対象巻"
-            lines = [f"# 第{number}巻 {volume['title']}", f"<!-- {label} -->", ""]
-            current_chapter: int | None = None
-            for scene in scenes_by_volume.get(number, []):
-                if current_chapter != scene["chapter"]:
-                    current_chapter = scene["chapter"]
-                    lines.extend([f"## 第{current_chapter}章 {chapter_titles[current_chapter]}", ""])
+            chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume["number"])]}
+            scenes = [scene for scene in state["scenes"] if scene["volume"] == volume["number"]]
+            lines = [f"# 第{volume['number']}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume["number"] == 1 else "<!-- 販売対象巻 -->", ""]
+            current = None
+            for scene in scenes:
+                if current != scene["chapter"]:
+                    current = scene["chapter"]
+                    lines.extend([f"## 第{current}章 {chapters[current]}", ""])
                 lines.extend([scene["content"], ""])
-            path = output_dir / f"volume-{number:02d}.md"
+            path = output / f"volume-{volume['number']:02d}.md"
             path.write_text("\n".join(lines), encoding="utf-8")
             paths.append(path)
-        series_path = output_dir / "series.md"
-        series_path.write_text(
-            "\n\n".join(path.read_text(encoding="utf-8") for path in paths),
-            encoding="utf-8",
-        )
-        self._validate_output(paths, series_path)
+        series = output / "series.md"
+        series.write_text("\n\n".join(path.read_text(encoding="utf-8") for path in paths), encoding="utf-8")
+        self._validate_output(paths, series)
         return paths
 
     @staticmethod
-    def _validate_output(paths: list[Path], series_path: Path) -> None:
+    def _validate_output(paths: list[Path], series: Path) -> None:
         bodies = []
         for path in paths:
             text = path.read_text(encoding="utf-8")
-            if "## 第" not in text or not text.strip():
+            if "## 第" not in text:
                 raise ContractError(f"必要な章がない出力です: {path.name}")
             body = "\n".join(line for line in text.splitlines() if not line.startswith("#") and not line.startswith("<!--")).strip()
             if not body:
@@ -498,17 +519,11 @@ class SeriesService:
             bodies.append(body)
         if len(bodies) != len(set(bodies)):
             raise ContractError("巻本文が重複しています")
-        if not series_path.exists() or not series_path.read_text(encoding="utf-8").strip():
+        if not series.exists() or not series.read_text(encoding="utf-8").strip():
             raise ContractError("全巻Markdownがありません")
 
+    def _volume_paths(self) -> list[Path]:
+        return sorted((self.workspace / "output").glob("volume-*.md"))
+
     def _result(self, state: dict[str, Any], paths: list[Path] | None = None) -> RunResult:
-        if paths is None:
-            output_dir = self.workspace / "output"
-            paths = sorted(output_dir.glob("volume-*.md"))
-        return RunResult(
-            completed=bool(state["completed"]),
-            volume_count=len(state["plan"]["volumes"]) if state["plan"] else 0,
-            volume_paths=paths,
-            series_path=self.workspace / "output" / "series.md",
-            closure=state["closure"],
-        )
+        return RunResult(completed=bool(state["completed"]), volume_count=len(state["plan"]["volumes"]) if state["plan"] else 0, volume_paths=paths or self._volume_paths(), series_path=self.workspace / "output" / "series.md", closure=state["closure"])

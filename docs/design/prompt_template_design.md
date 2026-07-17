@@ -1,64 +1,51 @@
 # プロンプトテンプレートと出力契約
 
-> この文書は、次世代実装が実際に送信するJinjaテンプレートと、採用前の検証契約を対応付ける設計資料である。製品仕様は[製品仕様](../product/SPECIFICATION.md)を正本とする。
+> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、工程・正本・更新権限の設計正本は[次世代生成フロー設計](next_generation_flow.md)とする。
 
-## 正本と記録
+## 正本と構築責務
 
-- 実送信プロンプトの正本は `templates/prompts/` である。出力スキーマは `templates/prompts/schemas/` のJSONを正本とし、userテンプレートは `{{ output_schema }}` プレースホルダーだけで受け取る。
-- `src/storycraft/nextgen_model.py` は工程名をテンプレート名へ対応付け、`PromptTemplate.render_system()` と `render_user()` でsystem/userメッセージを構築する。Python文字列に工程別契約を重複させない。
-- `PromptTemplate` はJinja標準`tojson`の `json.dumps_kwargs.ensure_ascii=False` と `indent=2` を環境ポリシーとして一元設定する。テンプレートは `tojson` のみを使い、シリアライズ設定を指定しない。
-- userテンプレートでは出力スキーマ節を末尾に置く。
-- JSONオブジェクトだけを返す共通プロトコルは `system/common.j2` にのみ置く。
-- 採用可否は `src/storycraft/nextgen.py` の工程別検証器が決める。JSON object モードだけを信用して採用してはならない。
-- 生の要求と応答はシリーズ作業場所の `raw/` にJSONと同stemのMarkdownで残す。草稿・批評・修正版・失敗理由・採用済み状態は `state.json` に残す。
+- 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/generate/` のJSONである。
+- `src/storycraft/nextgen_model.py` は工程名を受け、共通のJinja userテンプレートへ工程名・入力・工程別外部スキーマを渡す。工程固有の指示は `generate_stage.j2` の工程分岐に置く。
+- 批評・修正は共通テンプレートを使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
+- `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
+- 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。
+- 採用可否は `nextgen.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
 
-## 現行工程とテンプレート
+## 実送信テンプレート
 
-| 次世代工程 | 生成 | 批評 | 修正 |
-|---|---|---|---|
-| `plan` | `user/generate_plan.j2` | `user/critique_plan.j2` | `user/fix_plan.j2` |
-| `scene_card` | `user/generate_scene_cards.j2` | `user/critique_scene_cards.j2` | `user/fix_scene_cards.j2` |
-| `scene` | `user/generate_scene_write.j2` | `user/critique_scene_write.j2` | `user/fix_scene_write.j2` |
-| `closure` | `user/generate_closure_check.j2` | `user/critique_closure_check.j2` | `user/fix_closure_check.j2` |
-
-共通systemメッセージは `system/common.j2` である。テンプレートにない工程は次世代モデルから呼び出せない。
-
-## 全巻計画 `plan`
-
-| 項目 | テンプレートが要求する内容 | 採用前の検証 |
+| 用途 | テンプレート | 出力スキーマ |
 |---|---|---|
-| `volumes` | 依頼された巻数と一致する4〜10巻の配列 | 4〜10件、依頼巻数と完全一致 |
-| `volumes[].number` | 1から始まる欠番・重複なしの連番 | 実行順と一致する連番 |
-| `volumes[].title` | その巻だけを表す空でない巻題 | 空文字列を拒否 |
-| `volumes[].chapters` | 少なくとも1章。指定時は`chapters_per_volume`と件数完全一致 | 空配列・件数不一致を拒否 |
-| `chapters[].number` | 巻内で1から始まる欠番・重複なしの連番 | 実行順と一致する連番 |
-| `change` | 出来事列挙でなく読了後に成立する変化または区切り | 空文字列を拒否 |
-| `leaves_question` | 最終巻以外では未解決の問い、最終巻は空文字列 | 最終巻以外の空文字列を拒否 |
+| 生成 | `user/generate_stage.j2` | `schemas/generate/{stage}.json` |
+| 批評 | `user/critique_stage.j2` | `schemas/critique.json` |
+| 修正 | `user/fix_stage.j2` | 生成と同じ `schemas/generate/{stage}.json` |
 
-## 場面カード `scene_card`
+生成工程は以下である。
 
-`scene_id` は入力実行対象と完全一致する。`visible_thread_ids` は入力の既知IDだけ、`allowed_update_ids` はその部分集合だけを含める。最終場面では全未回収IDを両方へ含める。検証器は未知ID、重複ID、不可視ID、最終場面の未許可未回収IDを拒否する。
+```text
+plan / characters / relationships / world / timeline / threads
+/ volume_chapters / scene_card / scene / continuity / volume_summary / closure
+```
 
-## 場面成果物 `scene`
+## 工程別の決定的検証
 
-- `content` は注釈、箇条書き、Markdown、執筆メモを含まない完成日本語本文である。空本文を拒否する。
-- `handoff_summary` は本文で起きた事実、終点、未解決点だけを記す。本文外の人物、設定、期間、出来事、予測、計画、解釈を加えない。空文字列を拒否する。
-- `state_updates` は `allowed_update_ids` だけを使い、`open`、`in_progress`、`resolved` のいずれかとする。未知ID、未許可ID、同一ID重複を拒否する。
-- 最終場面は初回企画の結末へ到達し、未回収主要問いをすべて本文根拠で `resolved` にする。
+| 工程 | 主な検証 |
+|---|---|
+| `plan` | 4〜10巻、指定巻数、連番、巻ごとの変化、最終巻以外の問い |
+| `characters` | 内容のみでIDなし、固定プロフィールと開始時状態 |
+| `relationships` | 既存人物IDだけを参照し、固定意味と開始時状態を持つ |
+| `world` | 内容のみでIDなし、固定事実・利用規則・開始時状態を分離 |
+| `timeline` | 既知IDだけを参照し、固定規則と開始時状態を持つ |
+| `threads` | 内容のみでIDなし、作者の真実・知識・開示規則・回収条件・開始状態を持つ |
+| `volume_chapters` | 対象巻の章数、章番号、目的、開始・終了状態、場面数 |
+| `scene_card` | 実行対象ID、既知の視点人物・場所、可視ID、可視IDの部分集合である更新許可ID |
+| `scene` | 空でない `content` だけ。状態更新・要約・注釈を含めない |
+| `continuity` | 許可IDだけを更新し、更新根拠が凍結本文に文字列として存在する |
+| `volume_summary` | 既知主要項目だけを参照する巻の引継ぎ要約 |
+| `closure` | 全主要項目の回収済み状態と、本文中の結末根拠 |
 
-## 完結確認 `closure`
+## 記録と検証手順
 
-`resolved_ids` は入力台帳の全IDを一度ずつ含める。`ending_reached` は採用済み場面で初回企画の結末に実際に到達したときだけtrueにする。検証器はID集合不一致、重複、未回収時のtrueを拒否する。
-
-## 批評と修正
-
-批評テンプレートは、確認できる契約違反だけを `severity`、`field`、`description`、`suggestion` の4キーを持つ `issues` に出す。問題がなければ空配列にする。称賛、点数、出版可否、候補に存在しない問題は出さない。自然な日本語以外、簡体字・中国語混入、明白な誤字、人称混乱も対象にする。
-
-修正テンプレートは、候補、批評、元入力を受け、対象工程と同じ出力スキーマ・制約を再掲する。指摘されていない正しいID、順序、本文事実を失わず、修正版は草稿と同じ検証器で再検証する。
-
-## 検証手順
-
-1. 各工程の検証器から必須・列挙・相互整合・採用条件を抽出する。
-2. `PromptTemplate.render_user()` に実行時コンテキストを渡し、未展開のJinjaトークンがないことを確認する。
-3. rawの `sent_messages` と同stem Markdownに、対応テンプレートの内容と実データが記録されることを確認する。
-4. 決定的モデルで、生成、批評、修正、状態保存、完結確認、Markdown出力を通す。
+- 生の要求・応答はシリーズ作業場所の `raw/` にJSONと同stem Markdownで残す。
+- 草稿、批評、修正版、失敗理由、採用済み工程状態は `state.json` に残す。
+- 各工程は検証済み草稿を先に保存する。批評または修正に失敗しても、検証済み草稿を失わない。
+- テストでは、テンプレート展開、外部スキーマ、ID採番、台帳の工程順、本文根拠のない更新拒否、`resume`での採用済み台帳再生成防止を確認する。

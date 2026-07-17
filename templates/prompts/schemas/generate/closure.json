@@ -1,18 +1,18 @@
 {
   "type": "object",
   "required": [
-    "volume_summary",
-    "unresolved_thread_ids"
+    "resolved_ids",
+    "ending_evidence"
   ],
   "properties": {
-    "volume_summary": {
-      "type": "string"
-    },
-    "unresolved_thread_ids": {
+    "resolved_ids": {
       "type": "array",
       "items": {
         "type": "string"
       }
+    },
+    "ending_evidence": {
+      "type": "string"
     }
   }
 }

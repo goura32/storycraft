@@ -1,19 +1,40 @@
 {
   "type": "object",
-  "required": ["chapters"],
+  "required": [
+    "chapters"
+  ],
   "properties": {
     "chapters": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["chapter_number", "title", "purpose", "start_state", "end_state", "scene_count"],
+        "required": [
+          "number",
+          "title",
+          "purpose",
+          "start_state",
+          "end_state",
+          "scene_count"
+        ],
         "properties": {
-          "chapter_number": {"type": "integer"},
-          "title": {"type": "string"},
-          "purpose": {"type": "string"},
-          "start_state": {"type": "string"},
-          "end_state": {"type": "string"},
-          "scene_count": {"type": "integer", "minimum": 2, "maximum": 4}
+          "number": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "start_state": {
+            "type": "string"
+          },
+          "end_state": {
+            "type": "string"
+          },
+          "scene_count": {
+            "type": "integer"
+          }
         }
       }
     }

@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "required": [
+    "handoff_summary",
+    "state_updates"
+  ],
+  "properties": {
+    "handoff_summary": {
+      "type": "string"
+    },
+    "state_updates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "field",
+          "value",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "value": {},
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

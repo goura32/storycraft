@@ -1,21 +1,39 @@
 {
   "type": "object",
-  "required": ["timelines"],
+  "required": [
+    "timelines"
+  ],
   "properties": {
     "timelines": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "kind", "description", "starts_at", "ends_at", "related_ids", "status", "actual_scene"],
+        "required": [
+          "kind",
+          "description",
+          "related_ids",
+          "fixed_rule",
+          "initial_state"
+        ],
         "properties": {
-          "id": {"type": "string"},
-          "kind": {"type": "string"},
-          "description": {"type": "string"},
-          "starts_at": {"type": "string"},
-          "ends_at": {"type": "string"},
-          "related_ids": {"type": "array", "items": {"type": "string"}},
-          "status": {"type": "string", "enum": ["予定", "進行中", "完了", "失効"]},
-          "actual_scene": {"type": ["string", "null"]}
+          "kind": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "related_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fixed_rule": {
+            "type": "string"
+          },
+          "initial_state": {
+            "type": "object"
+          }
         }
       }
     }

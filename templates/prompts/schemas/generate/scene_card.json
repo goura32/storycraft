@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "required": [
+    "scene_id",
+    "pov_character_id",
+    "location_id",
+    "purpose",
+    "required_events",
+    "reader_disclosure",
+    "presentation_rules",
+    "visible_ids",
+    "allowed_update_ids"
+  ],
+  "properties": {
+    "scene_id": {
+      "type": "string"
+    },
+    "pov_character_id": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "required_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reader_disclosure": {
+      "type": "string"
+    },
+    "presentation_rules": {
+      "type": "string"
+    },
+    "visible_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowed_update_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

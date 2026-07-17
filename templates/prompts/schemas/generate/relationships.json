@@ -1,31 +1,27 @@
 {
   "type": "object",
   "required": [
-    "entities"
+    "relationships"
   ],
   "properties": {
-    "entities": {
+    "relationships": {
       "type": "array",
       "items": {
         "type": "object",
         "required": [
-          "kind",
-          "name",
-          "stable_fact",
-          "use_or_access_rule",
+          "character_a_id",
+          "character_b_id",
+          "fixed_meaning",
           "initial_state"
         ],
         "properties": {
-          "kind": {
+          "character_a_id": {
             "type": "string"
           },
-          "name": {
+          "character_b_id": {
             "type": "string"
           },
-          "stable_fact": {
-            "type": "string"
-          },
-          "use_or_access_rule": {
+          "fixed_meaning": {
             "type": "string"
           },
           "initial_state": {

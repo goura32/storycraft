@@ -34,8 +34,8 @@ class _TemplateLoader:
     def load_schema_text(self, category: str, stage: str) -> str:
         return f"外部スキーマ:{category}/{stage}"
 
-    def render_user(self, kind: str, stage: str, **kwargs: object) -> str:
-        self.calls.append((kind, stage, kwargs))
+    def render_user(self, kind: str, template_stage: str, **kwargs: object) -> str:
+        self.calls.append((kind, template_stage, kwargs))
         return "JINJAでレンダリングされたplanプロンプト"
 
 
@@ -52,7 +52,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
 
         self.assertEqual(
             loader.calls,
-            [("generate", "plan", {"brief": {"title": "雨の地図"}, "output_schema": "外部スキーマ:generate/plan"})],
+            [("generate", "stage", {"stage": "plan", "context": {"brief": {"title": "雨の地図"}}, "output_schema": "外部スキーマ:generate/plan"})],
         )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたplanプロンプト")
 
@@ -65,19 +65,15 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         model.generate("plan", {"brief": {"title": "雨の地図", "volumes": 4, "chapters_per_volume": [2, 3, 2, 3]}})
 
         prompt = client.messages[1]["content"]  # type: ignore[index]
-        self.assertIn("# 全巻計画の生成", prompt)
-        self.assertIn('"chapters_per_volume": [\n    2,\n    3,\n    2,\n    3\n  ]', prompt)
-        self.assertIn("巻番号 n の `chapters` 件数は配列の n 番目の数と完全に一致", prompt)
+        self.assertIn("# plan の生成", prompt)
+        self.assertIn('"chapters_per_volume": [\n      2,\n      3,\n      2,\n      3\n    ]', prompt)
+        self.assertIn("全巻構成だけを作る", prompt)
         self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
 
     def test_active_templates_use_output_schema_placeholder_not_inline_json_schema(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts" / "user"
-        names = [
-            "generate_plan.j2", "generate_scene_cards.j2", "generate_scene_write.j2", "generate_closure_check.j2",
-            "critique_plan.j2", "critique_scene_cards.j2", "critique_scene_write.j2", "critique_closure_check.j2",
-            "fix_plan.j2", "fix_scene_cards.j2", "fix_scene_write.j2", "fix_closure_check.j2",
-        ]
+        names = ["generate_stage.j2", "critique_stage.j2", "fix_stage.j2"]
         for name in names:
             contents = (root / name).read_text(encoding="utf-8")
             self.assertIn("{{ output_schema }}", contents, name)
@@ -86,6 +82,19 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
             self.assertNotIn("indent=2", contents, name)
             self.assertNotIn("JSONオブジェクトだけを返すこと。", contents, name)
             self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
+
+    def test_every_current_stage_has_renderable_generation_critique_and_fix_contract(self) -> None:
+        stages = [
+            "plan", "characters", "relationships", "world", "timeline", "threads",
+            "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure",
+        ]
+        for stage in stages:
+            generation = OpenAIStoryModel._render("generate", stage, context={})
+            critique = OpenAIStoryModel._render("critique", stage, candidate={}, context={})
+            revision = OpenAIStoryModel._render("fix", stage, candidate={}, critique={"issues": []}, context={})
+            for prompt in (generation, critique, revision):
+                self.assertNotIn("{{", prompt, stage)
+                self.assertIn("## 出力スキーマ", prompt, stage)
 
     def test_system_template_owns_json_response_protocol(self) -> None:
         system = get_template_loader().render_system()

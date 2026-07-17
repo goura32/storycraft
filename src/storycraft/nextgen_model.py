@@ -9,49 +9,38 @@ from .nextgen import ContractError
 from .prompt_template import get_template_loader
 
 
-_TEMPLATE_STAGE = {
-    "plan": "plan",
-    "scene_card": "scene_cards",
-    "scene": "scene_write",
-    "closure": "closure_check",
+_STAGES = {
+    "plan", "characters", "relationships", "world", "timeline", "threads",
+    "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure",
 }
 
 
 class OpenAIStoryModel:
-    """Jinjaテンプレートから実送信プロンプトを構築する次世代モデル。"""
+    """Jinjaテンプレートと工程別外部スキーマから実送信プロンプトを構築する。"""
 
     def __init__(self, settings, raw_dir) -> None:
         self.client = LLMClient(settings, raw_dir)
         self.attempt = 0
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
-        return self._call("generate", stage, self._render("generate", stage, **context))
+        return self._call("generate", stage, self._render("generate", stage, context=context))
 
     def critique(self, stage: str, candidate: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         return self._call("critique", stage, self._render("critique", stage, candidate=candidate, context=context))
 
-    def revise(
-        self,
-        stage: str,
-        candidate: dict[str, Any],
-        critique: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any]:
-        return self._call(
-            "revise",
-            stage,
-            self._render("fix", stage, candidate=candidate, critique=critique, context=context),
-        )
+    def revise(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        return self._call("revise", stage, self._render("fix", stage, candidate=candidate, critique=critique, context=context))
 
     @staticmethod
     def _render(kind: str, stage: str, **kwargs: Any) -> str:
-        try:
-            template_stage = _TEMPLATE_STAGE[stage]
-        except KeyError as exc:
-            raise ContractError(f"未知の生成工程です: {stage}") from exc
+        if stage not in _STAGES:
+            raise ContractError(f"未知の生成工程です: {stage}")
         loader = get_template_loader()
-        output_schema = loader.load_schema_text(kind, template_stage)
-        return loader.render_user(kind, template_stage, output_schema=output_schema, **kwargs)
+        output_schema = loader.load_schema_text(kind, stage)
+        if kind == "generate":
+            return loader.render_user("generate", "stage", stage=stage, output_schema=output_schema, **kwargs)
+        candidate_schema = loader.load_schema_text("generate", stage)
+        return loader.render_user(kind, "stage", stage=stage, output_schema=output_schema, candidate_schema=candidate_schema, **kwargs)
 
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
         last_error = ""
