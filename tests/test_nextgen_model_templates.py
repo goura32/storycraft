@@ -52,7 +52,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
 
         self.assertEqual(
             loader.calls,
-            [("generate", "stage", {"stage": "plan", "context": {"brief": {"title": "雨の地図"}}, "output_schema": "外部スキーマ:generate/plan"})],
+            [("generate", "plan", {"stage": "plan", "context": {"brief": {"title": "雨の地図"}}, "output_schema": "外部スキーマ:generate/plan"})],
         )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたplanプロンプト")
 
@@ -69,12 +69,13 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn('"chapters_per_volume": [\n      2,\n      3,\n      2,\n      3\n    ]', prompt)
         self.assertIn("全巻構成だけを作る", prompt)
         self.assertIn("中国語の漢字語・簡体字", prompt)
-        self.assertIn("入力briefにある「水の記録」「資料室」「真実」", prompt)
+        self.assertIn("`volumes` の配列順が巻順である", prompt)
+        self.assertIn("`number`、章の採番、`ending_condition` は出力しない", prompt)
         critique = OpenAIStoryModel._render("critique", "plan", candidate={}, context={})
         self.assertIn("briefにない内容語を一つでも含めれば必ずissue", critique)
         self.assertIn("入力にない過去の関係", prompt)
         self.assertIn("240文字以内", prompt)
-        self.assertIn("水脈」「地形」「関係性", prompt)
+        self.assertNotIn('"ending_condition":', prompt)
         self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
 

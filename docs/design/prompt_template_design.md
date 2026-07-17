@@ -5,8 +5,8 @@
 ## 正本と構築責務
 
 - 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/generate/` のJSONである。
-- `src/storycraft/nextgen_model.py` は工程名を受け、共通のJinja userテンプレートへ工程名・入力・工程別外部スキーマを渡す。工程固有の指示は `generate_stage.j2` の工程分岐に置く。
-- 批評・修正は共通テンプレートを使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
+- 実送信promptは工程ごとの `user/{kind}_{stage}.j2` を正本とする。各入口templateは共通本文をincludeできるが、adapterは工程名で個別fileを選び、工程ごとの差し替え・監査を可能にする。
+- 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
 - `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
 - 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。
 - 採用可否は `nextgen.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
@@ -15,9 +15,9 @@
 
 | 用途 | テンプレート | 出力スキーマ |
 |---|---|---|
-| 生成 | `user/generate_stage.j2` | `schemas/generate/{stage}.json` |
-| 批評 | `user/critique_stage.j2` | `schemas/critique.json` |
-| 修正 | `user/fix_stage.j2` | 生成と同じ `schemas/generate/{stage}.json` |
+| 生成 | `user/generate_{stage}.j2` | `schemas/generate/{stage}.json` |
+| 批評 | `user/critique_{stage}.j2` | `schemas/critique.json` |
+| 修正 | `user/fix_{stage}.j2` | 生成と同じ `schemas/generate/{stage}.json` |
 
 生成工程は以下である。
 
@@ -30,7 +30,7 @@ plan / characters / relationships / world / timeline / threads
 
 | 工程 | 主な検証 |
 |---|---|
-| `plan` | 4〜10巻、指定巻数、連番、巻ごとの変化、最終巻以外の問い |
+| `plan` | 4〜10巻、指定巻数、配列順の巻順、巻ごとの変化、最終巻以外の問い。連番・結末条件はLLM出力に持たず、結末の正本はbrief |
 | `characters` | 内容のみでIDなし、固定プロフィールと開始時状態 |
 | `relationships` | 既存人物IDだけを参照し、固定意味と開始時状態を持つ |
 | `world` | 内容のみでIDなし、固定事実・利用規則・開始時状態を分離 |

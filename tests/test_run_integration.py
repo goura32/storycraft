@@ -25,7 +25,7 @@ class PlanModel:
         if stage != "plan":
             raise AssertionError(stage)
         return {"volumes": [
-            {"number": number, "title": f"第{number}巻", "change": "変化", "leaves_question": "問い" if number < 4 else "", "ending_condition": "島に残る" if number == 4 else "未設定"}
+            {"title": f"第{number}巻", "change": "変化", "leaves_question": "問い" if number < 4 else ""}
             for number in range(1, 5)
         ]}
 

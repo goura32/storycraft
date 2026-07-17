@@ -147,8 +147,9 @@ class SeriesService:
             state["initial_ledgers_confirmed"] = True
             return None
 
-        for volume in state["plan"]["volumes"]:
-            volume_key = str(volume["number"])
+        for volume_number, planned_volume in enumerate(state["plan"]["volumes"], 1):
+            volume = {**planned_volume, "number": volume_number}
+            volume_key = str(volume_number)
             if volume_key not in state["chapters"]:
                 context = {"brief": state["brief"], "volume": volume, "ledgers": self._ledger_context(state), "prior_summaries": self._prior_summaries(state, volume["number"])}
                 state["chapters"][volume_key] = self._improve("volume_chapters", context, model, state, lambda item: self._validate_chapters(item, volume, state["brief"]))["chapters"]
@@ -242,12 +243,12 @@ class SeriesService:
         if not isinstance(volumes, list) or not 4 <= len(volumes) <= 10 or (brief.get("volumes") and len(volumes) != brief["volumes"]):
             raise ContractError("全巻構成の巻数が不正です")
         for expected, volume in enumerate(volumes, 1):
-            if not isinstance(volume, dict) or volume.get("number") != expected:
-                raise ContractError("全巻構成の巻番号が連番ではありません")
-            for key in ("title", "change", "leaves_question", "ending_condition"):
+            if not isinstance(volume, dict) or "number" in volume or "ending_condition" in volume:
+                raise ContractError("全巻構成に採番または結末条件を含めてはいけません")
+            for key in ("title", "change", "leaves_question"):
                 if not isinstance(volume.get(key), str):
                     raise ContractError(f"全巻構成の {key} が不正です")
-            limits = {"title": 48, "change": 240, "leaves_question": 160, "ending_condition": 240}
+            limits = {"title": 48, "change": 240, "leaves_question": 160}
             for key, limit in limits.items():
                 if len(volume[key]) > limit:
                     raise ContractError(f"全巻構成の {key} は{limit}文字以内でなければなりません")
@@ -256,12 +257,8 @@ class SeriesService:
             if expected < len(volumes):
                 if not volume["leaves_question"].strip():
                     raise ContractError("最終巻以外には次巻へ続く問いが必要です")
-                if volume["ending_condition"] != "未設定":
-                    raise ContractError("最終巻以外の結末条件は未設定でなければなりません")
-            elif not volume["ending_condition"].strip():
-                raise ContractError("最終巻には結末条件が必要です")
-            elif volume["ending_condition"] != brief["ending"]:
-                raise ContractError("最終巻の結末条件はbriefの結末と完全一致しなければなりません")
+            elif volume["leaves_question"]:
+                raise ContractError("最終巻の問いは空文字列でなければなりません")
 
     @staticmethod
     def _validate_characters(value: dict[str, Any]) -> None:
@@ -491,7 +488,7 @@ class SeriesService:
         return f"v{volume:02d}-c{chapter:02d}-s{scene:02d}"
 
     def _is_final_scene(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int) -> bool:
-        return volume["number"] == state["plan"]["volumes"][-1]["number"] and chapter["number"] == state["chapters"][str(volume["number"])][-1]["number"] and scene_number == chapter["scene_count"]
+        return volume["number"] == len(state["plan"]["volumes"]) and chapter["number"] == state["chapters"][str(volume["number"])][-1]["number"] and scene_number == chapter["scene_count"]
 
     @staticmethod
     def _prior_summaries(state: dict[str, Any], volume_number: int) -> list[dict[str, Any]]:
@@ -501,17 +498,17 @@ class SeriesService:
         output = self.workspace / "output"
         output.mkdir(parents=True, exist_ok=True)
         paths: list[Path] = []
-        for volume in state["plan"]["volumes"]:
-            chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume["number"])]}
-            scenes = [scene for scene in state["scenes"] if scene["volume"] == volume["number"]]
-            lines = [f"# 第{volume['number']}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume["number"] == 1 else "<!-- 販売対象巻 -->", ""]
+        for volume_number, volume in enumerate(state["plan"]["volumes"], 1):
+            chapters = {chapter["number"]: chapter["title"] for chapter in state["chapters"][str(volume_number)]}
+            scenes = [scene for scene in state["scenes"] if scene["volume"] == volume_number]
+            lines = [f"# 第{volume_number}巻 {volume['title']}", "<!-- 無料導入巻 -->" if volume_number == 1 else "<!-- 販売対象巻 -->", ""]
             current = None
             for scene in scenes:
                 if current != scene["chapter"]:
                     current = scene["chapter"]
                     lines.extend([f"## 第{current}章 {chapters[current]}", ""])
                 lines.extend([scene["content"], ""])
-            path = output / f"volume-{volume['number']:02d}.md"
+            path = output / f"volume-{volume_number:02d}.md"
             path.write_text("\n".join(lines), encoding="utf-8")
             paths.append(path)
         series = output / "series.md"

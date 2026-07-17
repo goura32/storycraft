@@ -1,21 +1,2 @@
-次のJSONオブジェクト（草稿）と批評結果を受け、問題を修正して改善版を返してください。
-
-草稿:
-{{ current | tojson(ensure_ascii=False, indent=2) }}
-
-批評結果:
-{{ critique_result | tojson(ensure_ascii=False, indent=2) }}
-
-文脈情報:
-{{ card | tojson(ensure_ascii=False, indent=2) }}
-
-改善の方向:
-{{ improvement_directions | tojson(ensure_ascii=False, indent=2) }}
-
-批評で指摘された issues をすべて解消し、overall_assessment の意図を反映した改善版を出力してください。
-スキーマに従い、JSONオブジェクトのみを返してください。
-
-## 出力スキーマ
-{{ schema }}
-
-必ずJSONオブジェクトだけを返してください.
+{% set stage = "volume_chapters" %}
+{% include "user/fix_stage.j2" %}

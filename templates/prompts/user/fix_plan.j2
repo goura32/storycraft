@@ -1,20 +1,2 @@
-# 全巻計画の修正
-
-批評issuesに従い候補を修正する。指摘されていない正しい巻・章番号、順序、題、事実を失わない。依頼巻数、`chapters_per_volume`、連番、非空項目、最終巻以外の未解決問い、最終巻で結末を先延ばしにしない制約をすべて満たす。
-
-## 候補
-
-{{ candidate | tojson }}
-
-## 批評issues
-
-{{ critique | tojson }}
-
-## 入力状態
-
-{{ context | tojson }}
-
-
-## 出力スキーマ
-
-{{ output_schema }}
+{% set stage = "plan" %}
+{% include "user/fix_stage.j2" %}

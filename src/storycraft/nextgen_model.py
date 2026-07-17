@@ -38,9 +38,9 @@ class OpenAIStoryModel:
         loader = get_template_loader()
         output_schema = loader.load_schema_text(kind, stage)
         if kind == "generate":
-            return loader.render_user("generate", "stage", stage=stage, output_schema=output_schema, **kwargs)
+            return loader.render_user("generate", stage, stage=stage, output_schema=output_schema, **kwargs)
         candidate_schema = loader.load_schema_text("generate", stage)
-        return loader.render_user(kind, "stage", stage=stage, output_schema=output_schema, candidate_schema=candidate_schema, **kwargs)
+        return loader.render_user(kind, stage, stage=stage, output_schema=output_schema, candidate_schema=candidate_schema, **kwargs)
 
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
         last_error = ""
