@@ -247,6 +247,10 @@ class SeriesService:
             for key in ("title", "change", "leaves_question", "ending_condition"):
                 if not isinstance(volume.get(key), str):
                     raise ContractError(f"全巻構成の {key} が不正です")
+            limits = {"title": 48, "change": 240, "leaves_question": 160, "ending_condition": 240}
+            for key, limit in limits.items():
+                if len(volume[key]) > limit:
+                    raise ContractError(f"全巻構成の {key} は{limit}文字以内でなければなりません")
             if expected < len(volumes):
                 if not volume["leaves_question"].strip():
                     raise ContractError("最終巻以外には次巻へ続く問いが必要です")

@@ -140,6 +140,12 @@ class NextGenerationFlowAcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "本文根拠"):
             SeriesService(self.workspace).run(BRIEF, FlowModel(invalid_evidence=True))
 
+    def test_plan_rejects_overlong_detail_dump(self) -> None:
+        plan = FlowModel().generate("plan", {})
+        plan["volumes"][0]["change"] = "調査の詳細を追加する。" * 30
+        with self.assertRaisesRegex(ContractError, "change は240文字以内"):
+            SeriesService._validate_plan(plan, BRIEF)
+
     def test_resume_does_not_regenerate_adopted_initial_ledgers(self) -> None:
         model = FlowModel()
         service = SeriesService(self.workspace)
