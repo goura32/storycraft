@@ -72,6 +72,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("前巻の結果を受け", prompt)
         self.assertIn("入力にない過去の関係", prompt)
         self.assertIn("240文字以内", prompt)
+        self.assertIn("各断定文", prompt)
         self.assertIn('"required": [\n    "volumes"\n  ]', prompt)
         self.assertNotIn("巻数は5巻を第一候補", prompt)
 
