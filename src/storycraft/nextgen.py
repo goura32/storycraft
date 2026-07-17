@@ -162,7 +162,7 @@ class SeriesService:
             return None
         if state["threads"] is None:
             context = self._ledger_context(state)
-            proposed = self._improve("threads", context, model, state, lambda item: self._validate_threads(item, self._known_ids(state)))
+            proposed = self._improve("threads", context, model, state, lambda item: self._validate_threads(item, self._known_ids(state), state["brief"], state["plan"]))
             state["threads"] = self._assign_ids(proposed["threads"], "thread")
             return None
         if not state["initial_ledgers_confirmed"]:
@@ -362,10 +362,12 @@ class SeriesService:
                 raise ContractError("時間IDはプログラムが採番します")
 
     @staticmethod
-    def _validate_threads(value: dict[str, Any], known_ids: set[str]) -> None:
+    def _validate_threads(value: dict[str, Any], known_ids: set[str], brief: dict[str, Any], plan: dict[str, Any]) -> None:
         records = value.get("threads")
         if not isinstance(records, list) or not records:
             raise ContractError("主要項目台帳が空です")
+        major_count = 0
+        questions = {volume["leaves_question"] for volume in plan["volumes"] if volume["leaves_question"]}
         for record in records:
             SeriesService._require(record, "kind", "importance", "description", "author_truth", "reader_knowledge", "character_knowledge", "presentation_rule", "introduce_by", "resolve_by", "resolution_condition")
             state = SeriesService._initial_state(record)
@@ -375,6 +377,13 @@ class SeriesService:
                 raise ContractError("主要項目が未知の人物を参照しています")
             if "id" in record:
                 raise ContractError("主要項目IDはプログラムが採番します")
+            if record["importance"] == "major":
+                major_count += 1
+                traceability = record.get("traceability")
+                if not isinstance(traceability, dict) or traceability.get("brief_want") != brief["want"] or traceability.get("brief_ending") != brief["ending"] or traceability.get("leaves_question") not in questions:
+                    raise ContractError("主要項目に企画・結末・巻末の問いへの追跡情報がありません")
+        if major_count == 0:
+            raise ContractError("主要項目台帳には major が必要です")
 
     @staticmethod
     def _validate_chapters(value: dict[str, Any], volume: dict[str, Any], brief: dict[str, Any]) -> None:
@@ -470,7 +479,8 @@ class SeriesService:
             if record is None or record["current_state"].get("status") != "resolved":
                 raise ContractError("未回収の主要項目があります")
         evidence = value.get("ending_evidence")
-        if not isinstance(evidence, str) or not evidence or not any(evidence in scene["content"] for scene in state["scenes"]):
+        final_scene = state["scenes"][-1] if state["scenes"] else {}
+        if value.get("ending_authority") != state["brief"]["ending"] or not isinstance(evidence, str) or not evidence or evidence not in final_scene.get("content", ""):
             raise ContractError("結末の本文根拠がありません")
 
     @staticmethod

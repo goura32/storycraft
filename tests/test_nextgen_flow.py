@@ -63,6 +63,7 @@ class FlowModel:
                 "author_truth": "父は島を守るために去った", "reader_knowledge": "父は失踪した",
                 "character_knowledge": {"char-0001": "父は戻らない"}, "presentation_rule": "直接説明しない",
                 "introduce_by": "v01", "resolve_by": "v04", "resolution_condition": "真実を受け入れる",
+                "traceability": {"brief_want": BRIEF["want"], "brief_ending": BRIEF["ending"], "leaves_question": "次巻の問い"},
                 "initial_state": {"status": "open"},
             }]}
         if stage == "volume_chapters":
@@ -97,7 +98,7 @@ class FlowModel:
         if stage == "volume_summary":
             return {"volume_summary": f"第{context['volume']['number']}巻の要約", "unresolved_thread_ids": []}
         if stage == "closure":
-            return {"resolved_ids": ["thread-0001"], "ending_evidence": "島に残る"}
+            return {"resolved_ids": ["thread-0001"], "ending_evidence": "島に残る", "ending_authority": BRIEF["ending"]}
         raise AssertionError(f"unexpected stage: {stage}")
 
     def critique(self, stage: str, candidate: dict, context: dict) -> dict:
@@ -137,6 +138,17 @@ class NextGenerationFlowAcceptanceTests(unittest.TestCase):
         self.assertEqual(state["threads"][0]["current_state"]["status"], "resolved")
         self.assertEqual(len(state["volume_summaries"]), 4)
         self.assertEqual(len(result.volume_paths), 4)
+
+    def test_threads_require_major_traceability_and_closure_uses_final_scene_ending_authority(self) -> None:
+        class UntraceableThreadModel(FlowModel):
+            def generate(self, stage: str, context: dict) -> dict:
+                value = super().generate(stage, context)
+                if stage == "threads":
+                    value["threads"][0].pop("traceability", None)
+                return value
+
+        with self.assertRaisesRegex(ContractError, "追跡"):
+            SeriesService(self.workspace).run(BRIEF, UntraceableThreadModel())
 
     def test_ledger_generation_has_required_prior_local_context_and_prose_has_only_visible_records(self) -> None:
         model = FlowModel()

@@ -16,6 +16,7 @@
           "reader_knowledge",
           "character_knowledge",
           "presentation_rule",
+          "traceability",
           "introduce_by",
           "resolve_by",
           "resolution_condition",
@@ -46,6 +47,15 @@
           },
           "presentation_rule": {
             "type": "string"
+          },
+          "traceability": {
+            "type": "object",
+            "required": ["brief_want", "brief_ending", "leaves_question"],
+            "properties": {
+              "brief_want": {"type": "string"},
+              "brief_ending": {"type": "string"},
+              "leaves_question": {"type": "string"}
+            }
           },
           "introduce_by": {
             "type": "string"
