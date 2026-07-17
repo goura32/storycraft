@@ -11,7 +11,15 @@
           "severity": {"type": "string", "enum": ["critical", "major", "minor"]},
           "field": {"type": "string", "description": "問題のJSONパス"},
           "description": {"type": "string", "description": "確認できる具体的な問題"},
-          "suggestion": {"type": "string", "description": "直接適用できる修正指示"}
+          "suggestion": {
+            "type": "string",
+            "enum": [
+              "問題箇所を削除する。",
+              "入力に明記された事実だけで高水準に書き直す。",
+              "日本語表記を正す。"
+            ],
+            "description": "修正の固定操作。新しい事実や具体例を書かない。"
+          }
         }
       }
     }

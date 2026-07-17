@@ -113,7 +113,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         self.assertIn("固有名詞だけでなく普通名詞句、行為、理由、状態、因果", prompt)
         self.assertIn("複合表現全体", prompt)
         self.assertIn("自分の `description` と `suggestion`", prompt)
-        self.assertIn("briefに明記されない資料名、記録の扱い", prompt)
+        self.assertIn("出力スキーマの固定操作から一つだけ選ぶ", prompt)
         revision = OpenAIStoryModel._render("fix", "plan", candidate={}, critique={"issues": []}, context={})
         self.assertIn("`suggestion` 中の語句や具体例を事実・仕様として採用しない", revision)
         self.assertIn("入力候補を見ずに自分が返す完成JSON", revision)
