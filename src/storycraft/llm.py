@@ -121,19 +121,37 @@ class LLMClient:
     def call_once(self, messages, response_format, seed: int) -> CallRecord:
         return self._make_call(messages, response_format, seed)
 
+    @staticmethod
+    def _raw_markdown(filename: str, sent_messages: list, content: str) -> str:
+        """生ログの送受信本文を、JSONエスケープなしで閲覧用に整形する。"""
+        sections = [f"# {filename}"]
+        for message in sent_messages:
+            if not isinstance(message, dict):
+                continue
+            role = message.get("role")
+            message_content = message.get("content")
+            if isinstance(role, str) and isinstance(message_content, str):
+                sections.extend((f"## {role}", message_content))
+        sections.extend(("## received", content))
+        return "\n\n".join(sections) + "\n"
+
     def save_raw(self, rec: CallRecord, prompt_messages: list) -> None:
-        """送受信生データを保存。thinking本文は除く（§5）。"""
+        """送受信生データと、人間向けMarkdownを同じstemで保存。thinking本文は除く。"""
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         idx = len(list(self.raw_dir.glob("*.json")))
+        sent_messages = [
+            m for m in prompt_messages
+            if not (isinstance(m, dict) and "__" in "".join(m.keys()))
+        ]
         out = {
             "index": idx,
-            "sent_messages": [
-                m for m in prompt_messages
-                if not (isinstance(m, dict) and "__" in "".join(m.keys()))
-            ],
+            "sent_messages": sent_messages,
             "received": rec.to_dict(),
             "content": rec.content,
         }
-        (self.raw_dir / f"{idx:04d}_{rec.kind}_{rec.ref}.json").write_text(
-            json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8"
+        json_path = self.raw_dir / f"{idx:04d}_{rec.kind}_{rec.ref}.json"
+        json_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        json_path.with_suffix(".md").write_text(
+            self._raw_markdown(json_path.with_suffix(".md").name, sent_messages, rec.content),
+            encoding="utf-8",
         )
