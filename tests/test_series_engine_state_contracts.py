@@ -34,6 +34,62 @@ class StateContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "保存状態"):
             SeriesService(self.workspace).resume(FlowModel())
 
+    def test_active_workspace_lock_rejects_second_public_operation_without_state_change(self) -> None:
+        import threading
+
+        started = threading.Event()
+        release = threading.Event()
+
+        class BlockingPlanModel:
+            def __init__(self) -> None:
+                self._blocked = False
+                self._model = FlowModel()
+
+            def generate(self, stage: str, context: dict) -> dict:
+                if not self._blocked:
+                    case.assertEqual(stage, "plan")
+                    self._blocked = True
+                    started.set()
+                    case.assertTrue(release.wait(timeout=5))
+                return self._model.generate(stage, context)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return self._model.critique(stage, candidate, context)
+
+            def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return self._model.revise(stage, candidate, critique, context)
+
+        errors: list[Exception] = []
+        case = self
+
+        def run_first() -> None:
+            try:
+                SeriesService(self.workspace).run(BRIEF, BlockingPlanModel())
+            except Exception as exc:  # assertion failures must reach the test thread
+                errors.append(exc)
+
+        worker = threading.Thread(target=run_first)
+        worker.start()
+        self.assertTrue(started.wait(timeout=5))
+        state_before = (self.workspace / "state.json").read_bytes()
+        with self.assertRaisesRegex(ContractError, "使用中"):
+            SeriesService(self.workspace).resume(FlowModel())
+        self.assertEqual((self.workspace / "state.json").read_bytes(), state_before)
+        release.set()
+        worker.join(timeout=10)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, [])
+
+    def test_save_fsyncs_state_file_before_replace_and_workspace_after_replace(self) -> None:
+        from unittest.mock import patch
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        with patch("storycraft.series_engine.os.fsync") as fsync:
+            service.store.save(state)
+        self.assertGreaterEqual(fsync.call_count, 2)
+        self.assertEqual(service.store.load()["version"], 3)
+
     def test_output_rejects_missing_planned_scene_before_creating_files(self) -> None:
         service = SeriesService(self.workspace)
         service.run(BRIEF, FlowModel())

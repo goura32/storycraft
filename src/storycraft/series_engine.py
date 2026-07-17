@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Iterator, Protocol
+
+import fcntl
 
 
 class ContractError(ValueError):
@@ -59,8 +63,37 @@ class _Store:
     def save(self, data: dict[str, Any]) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
         temporary.replace(self.path)
+        self._fsync_directory()
+
+    def _fsync_directory(self) -> None:
+        if os.name != "posix":
+            return
+        descriptor = os.open(self.root, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    @contextmanager
+    def lock(self) -> Iterator[None]:
+        self.root.mkdir(parents=True, exist_ok=True)
+        handle = (self.root / ".series.lock").open("a+")
+        try:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise ContractError("この作業場所は別の実行で使用中です") from exc
+            yield
+        finally:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
 
 
 class SeriesService:
@@ -73,28 +106,31 @@ class SeriesService:
         self.store = _Store(workspace)
 
     def run(self, brief: dict[str, Any], model: StoryModel, *, stop_after_scene: str | None = None) -> RunResult:
-        if self.store.exists():
-            raise ContractError("この作業場所には保存済みシリーズがあります。resume を使ってください")
-        state = self._new_state(brief)
-        self.store.save(state)
-        return self._advance(state, model, stop_after_scene=stop_after_scene)
-
-    def resume(self, model: StoryModel) -> RunResult:
-        return self._advance(self.store.load(), model)
-
-    def step(self, model: StoryModel, brief: dict[str, Any] | None = None) -> RunResult:
-        if not self.store.exists():
-            if brief is None:
-                raise ContractError("初回の step には企画が必要です")
+        with self.store.lock():
+            if self.store.exists():
+                raise ContractError("この作業場所には保存済みシリーズがあります。resume を使ってください")
             state = self._new_state(brief)
             self.store.save(state)
-        else:
-            state = self.store.load()
-        if state["completed"]:
-            return self._result(state, self._volume_paths())
-        self._run_one(state, model)
-        self.store.save(state)
-        return self._result(state)
+            return self._advance(state, model, stop_after_scene=stop_after_scene)
+
+    def resume(self, model: StoryModel) -> RunResult:
+        with self.store.lock():
+            return self._advance(self.store.load(), model)
+
+    def step(self, model: StoryModel, brief: dict[str, Any] | None = None) -> RunResult:
+        with self.store.lock():
+            if not self.store.exists():
+                if brief is None:
+                    raise ContractError("初回の step には企画が必要です")
+                state = self._new_state(brief)
+                self.store.save(state)
+            else:
+                state = self.store.load()
+            if state["completed"]:
+                return self._result(state, self._volume_paths())
+            self._run_one(state, model)
+            self.store.save(state)
+            return self._result(state)
 
     def _new_state(self, brief: dict[str, Any]) -> dict[str, Any]:
         self._validate_brief(brief)
