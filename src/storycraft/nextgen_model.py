@@ -22,7 +22,7 @@ _STAGE_CONTRACTS = {
   ]
 }
 制約:
-- volumes は依頼された巻数と完全に一致させる。指定がない場合も4〜10巻にする。
+- volumes は依頼された巻数と完全に一致させる。指定がない場合も4〜10巻にする。brief.chapters_per_volume がある場合、巻番号 n の chapters は配列の n 番目の数と完全に一致させる。
 - 各巻に少なくとも1章を置き、number と chapters[].number は欠番・重複なしの連番にする。
 - title と chapter title を他の巻・章と混同しない。
 - change は出来事の羅列ではなく、その巻の読了後に成立する変化または区切りを書く。
@@ -47,8 +47,8 @@ _STAGE_CONTRACTS = {
 }
 制約:
 - content は入力の brief、plan、card、可視の台帳状態と矛盾させない。本文外の説明を出さない。
-- handoff_summary は本文を切り捨てず、次場面に必要な変化と未解決点を具体的に記す。本文にない事実を足さない。
-- state_updates は card.allowed_update_ids にあるIDだけを使い、各 status はその問いが本文で未着手・進展中・回収済みのどれかに対応させる。
+- handoff_summary は本文を切り捨てず、次場面に必要な変化と未解決点を具体的に記す。本文にない人物、設定、期間、出来事、次場面の予測、計画、解釈を足さない。各文は本文中の出来事・終点・未解決点だけに根拠を置く。
+- state_updates は card.allowed_update_ids にあるIDだけを使い、各 status はその問いが本文で未着手・進展中・回収済みのどれかに対応させる。本文で直接答えや回収が描かれた時だけ resolved にし、本文に新しい進展がない既に resolved のIDを in_progress へ戻さない。
 - 許可されていない問いを解決・更新したと主張しない。
 - 入力 is_final_scene が true のとき、required_ending を本文で到達済みにし、required_resolved_ids の各IDを本文事実に基づいて resolved へ更新する。次場面への予告や未確定の結末を handoff_summary に残さない。""",
     "closure": """出力スキーマ:
@@ -78,6 +78,7 @@ _CRITIQUE_CONTRACT = """出力スキーマ:
 - 問題がなければ issues は空配列にする。
 - 称賛、点数、出版可否、曖昧な感想は出力しない。
 - 候補に存在しない問題を作らず、入力と候補から確認できる契約違反だけを挙げる。
+- 本文、要約、計画、issues の説明と提案は自然な日本語だけで書く。簡体字・中国語・不自然な外国語混じり、明白な誤字、人称の混乱を発見したら、対象フィールドの issue として報告する。
 - issues の各要素は severity、field、description、suggestion の四つのキーを一度ずつ必ず持つ。severity にフィールド名を入れず、field に重大度を入れない。四つのキーを満たせない指摘は捨て、issues を空配列にする。"""
 
 
@@ -133,7 +134,7 @@ class OpenAIStoryModel:
         for _ in range(max(attempts, 1)):
             self.attempt += 1
             messages = [
-                {"role": "system", "content": "あなたはStorycraftの小説生成工程です。JSONオブジェクトだけを返してください。"},
+                {"role": "system", "content": "あなたはStorycraftの小説生成工程です。JSONオブジェクトだけを返してください。人間向けの文字列値は、固有名・引用・ID以外を自然な日本語で書き、簡体字や中国語を混ぜないでください。"},
                 {"role": "user", "content": f"{instruction}\n\n入力:\n{json.dumps(payload, ensure_ascii=False)}"},
                 {"__kind": kind, "__phase": stage, "__ref": stage, "__attempt": self.attempt},
             ]

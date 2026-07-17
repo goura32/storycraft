@@ -274,6 +274,14 @@ class SeriesService:
         volumes = brief.get("volumes")
         if volumes is not None and (not isinstance(volumes, int) or not 4 <= volumes <= 10):
             raise ContractError("volumes は 4〜10 の整数でなければなりません")
+        chapter_counts = brief.get("chapters_per_volume")
+        if chapter_counts is not None:
+            if (
+                not isinstance(chapter_counts, list)
+                or not all(isinstance(count, int) and 1 <= count <= 12 for count in chapter_counts)
+                or (volumes is not None and len(chapter_counts) != volumes)
+            ):
+                raise ContractError("chapters_per_volume は巻数と一致する1〜12の整数配列でなければなりません")
         questions = brief.get("major_questions", [])
         if not isinstance(questions, list) or not all(isinstance(question, str) and question.strip() for question in questions):
             raise ContractError("major_questions は空でない文字列の配列でなければなりません")
@@ -299,6 +307,7 @@ class SeriesService:
         requested = brief.get("volumes")
         if requested is not None and len(volumes) != requested:
             raise ContractError("指定巻数と全巻計画の巻数が一致しません")
+        requested_chapters = brief.get("chapters_per_volume")
         for expected, volume in enumerate(volumes, start=1):
             if not isinstance(volume, dict) or volume.get("number") != expected:
                 raise ContractError("全巻計画の巻番号が連番ではありません")
@@ -307,6 +316,8 @@ class SeriesService:
             chapters = volume.get("chapters")
             if not isinstance(chapters, list) or not chapters:
                 raise ContractError("各巻には少なくとも一章が必要です")
+            if requested_chapters is not None and len(chapters) != requested_chapters[expected - 1]:
+                raise ContractError("指定章数と全巻計画の章数が一致しません")
             for chapter_number, chapter in enumerate(chapters, start=1):
                 if not isinstance(chapter, dict) or chapter.get("number") != chapter_number:
                     raise ContractError("章番号が連番ではありません")

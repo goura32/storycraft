@@ -28,12 +28,16 @@ class DeterministicModel:
     def generate(self, stage: str, context: dict) -> dict:
         if stage == "plan":
             self.plan_calls += 1
+            chapter_counts = context["brief"].get("chapters_per_volume", [1, 1, 1, 1])
             return {
                 "volumes": [
                     {
                         "number": number,
                         "title": f"第{number}巻",
-                        "chapters": [{"number": 1, "title": "灯の章"}],
+                        "chapters": [
+                            {"number": chapter_number, "title": f"灯の章{chapter_number}"}
+                            for chapter_number in range(1, chapter_counts[number - 1] + 1)
+                        ],
                         "change": f"第{number}巻の変化",
                         "leaves_question": "次の灯は誰が守るのか" if number < 4 else "",
                     }
@@ -50,7 +54,7 @@ class DeterministicModel:
             self.contexts.append(context)
             scene_id = context["card"]["scene_id"]
             update_id = "forbidden" if self.invalid_update else "question-01"
-            final_scene = scene_id == "v04-c01-s02"
+            final_scene = context["is_final_scene"]
             return {
                 "content": f"本文 {scene_id}",
                 "handoff_summary": f"引継ぎ {scene_id}",
@@ -106,6 +110,14 @@ class NextGenerationAcceptanceTests(unittest.TestCase):
 
         with self.assertRaises(ContractError):
             SeriesService(self.workspace / "invalid").run(BRIEF, DeterministicModel(invalid_update=True))
+
+    def test_requested_chapter_counts_are_authoritative_for_the_plan(self) -> None:
+        brief = {**BRIEF, "chapters_per_volume": [2, 3, 2, 3]}
+        result = self.service.run(brief, DeterministicModel())
+
+        self.assertTrue(result.completed)
+        state = self.service.store.load()
+        self.assertEqual([len(volume["chapters"]) for volume in state["plan"]["volumes"]], [2, 3, 2, 3])
 
     def test_resume_continues_from_saved_adopted_state_without_repeating_brief(self) -> None:
         model = DeterministicModel()
