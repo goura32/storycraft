@@ -72,9 +72,15 @@ class StateContractTests(unittest.TestCase):
         worker.start()
         self.assertTrue(started.wait(timeout=5))
         state_before = (self.workspace / "state.json").read_bytes()
-        with self.assertRaisesRegex(ContractError, "使用中"):
-            SeriesService(self.workspace).resume(FlowModel())
-        self.assertEqual((self.workspace / "state.json").read_bytes(), state_before)
+        second_operations = {
+            "run": lambda: SeriesService(self.workspace).run(BRIEF, FlowModel()),
+            "resume": lambda: SeriesService(self.workspace).resume(FlowModel()),
+            "step": lambda: SeriesService(self.workspace).step(FlowModel()),
+        }
+        for name, operation in second_operations.items():
+            with self.subTest(operation=name), self.assertRaisesRegex(ContractError, "使用中"):
+                operation()
+            self.assertEqual((self.workspace / "state.json").read_bytes(), state_before)
         release.set()
         worker.join(timeout=10)
         self.assertFalse(worker.is_alive())
@@ -85,7 +91,7 @@ class StateContractTests(unittest.TestCase):
 
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)
-        with patch("storycraft.series_engine.os.fsync") as fsync:
+        with patch("storycraft.series_store.os.fsync") as fsync:
             service.store.save(state)
         self.assertGreaterEqual(fsync.call_count, 2)
         self.assertEqual(service.store.load()["version"], 3)
