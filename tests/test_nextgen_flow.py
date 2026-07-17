@@ -138,6 +138,19 @@ class NextGenerationFlowAcceptanceTests(unittest.TestCase):
         self.assertEqual(len(state["volume_summaries"]), 4)
         self.assertEqual(len(result.volume_paths), 4)
 
+    def test_ledger_generation_has_required_prior_local_context_and_prose_has_only_visible_records(self) -> None:
+        model = FlowModel()
+        SeriesService(self.workspace).run(BRIEF, model)
+        calls = {stage: context for stage, context in model.calls}
+        self.assertEqual(calls["relationships"]["brief"], BRIEF)
+        self.assertIn("relationships", calls["world"])
+        self.assertIn("world", calls["timeline"])
+        self.assertIn("timeline", calls["threads"])
+        scene_contexts = [context for stage, context in model.calls if stage == "scene"]
+        self.assertTrue(scene_contexts)
+        self.assertNotIn("ledgers", scene_contexts[0])
+        self.assertEqual(set(scene_contexts[0]["writer_view"]), {"char-0001", "entity-0001", "thread-0001"})
+
     def test_continuity_rejects_update_without_literal_prose_evidence(self) -> None:
         with self.assertRaisesRegex(ContractError, "本文根拠"):
             SeriesService(self.workspace).run(BRIEF, FlowModel(invalid_evidence=True))

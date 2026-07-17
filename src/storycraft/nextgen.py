@@ -146,12 +146,12 @@ class SeriesService:
             state["characters"] = self._assign_ids(proposed["characters"], "char")
             return None
         if state["relationships"] is None:
-            context = {"characters": state["characters"], "plan": state["plan"]}
+            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"]}
             proposed = self._improve("relationships", context, model, state, lambda item: self._validate_relationships(item, state["characters"]))
             state["relationships"] = self._assign_ids(proposed["relationships"], "rel")
             return None
         if state["world"] is None:
-            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"]}
+            context = {"brief": state["brief"], "plan": state["plan"], "characters": state["characters"], "relationships": state["relationships"]}
             proposed = self._improve("world", context, model, state, self._validate_world)
             state["world"] = self._assign_ids(proposed["entities"], "entity")
             return None
