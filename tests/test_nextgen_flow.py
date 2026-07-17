@@ -146,6 +146,12 @@ class NextGenerationFlowAcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "change は240文字以内"):
             SeriesService._validate_plan(plan, BRIEF)
 
+    def test_plan_rejects_hangul_left_by_revision(self) -> None:
+        plan = FlowModel().generate("plan", {})
+        plan["volumes"][0]["leaves_question"] = "手がかりを重点적으로探す。"
+        with self.assertRaisesRegex(ContractError, "ハングル字形"):
+            SeriesService._validate_plan(plan, BRIEF)
+
     def test_resume_does_not_regenerate_adopted_initial_ledgers(self) -> None:
         model = FlowModel()
         service = SeriesService(self.workspace)

@@ -251,6 +251,8 @@ class SeriesService:
             for key, limit in limits.items():
                 if len(volume[key]) > limit:
                     raise ContractError(f"全巻構成の {key} は{limit}文字以内でなければなりません")
+                if any("\uac00" <= character <= "\ud7a3" for character in volume[key]):
+                    raise ContractError(f"全巻構成の {key} に日本語以外のハングル字形があります")
             if expected < len(volumes):
                 if not volume["leaves_question"].strip():
                     raise ContractError("最終巻以外には次巻へ続く問いが必要です")
