@@ -221,33 +221,54 @@ class SeriesService:
                 validator(proposed)
             except ContractError as exc:
                 error = str(exc)
-                state["attempts"].append({"stage": stage, "kind": "draft_rejected", "candidate": proposed, "reason": error})
+                self._record_attempt(state, stage, "draft_rejected", context, proposed, error)
                 self.store.save(state)
                 continue
             candidate = proposed
             break
         if candidate is None:
             raise ContractError(f"{stage} の草稿を検証できませんでした: {error}")
-        state["attempts"].append({"stage": stage, "kind": "draft", "input": context, "candidate": candidate})
+        self._record_attempt(state, stage, "draft", context, candidate, "accepted")
         try:
             critique = model.critique(stage, candidate, context)
             self._validate_critique(critique)
         except Exception as exc:
-            state["attempts"].append({"stage": stage, "kind": "critique_failed", "reason": str(exc)})
+            self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
             return candidate
-        state["attempts"].append({"stage": stage, "kind": "critique", "critique": critique})
+        self._record_attempt(state, stage, "critique", context, critique, "accepted")
         if not critique["issues"]:
             return candidate
+        revised: dict[str, Any] | None = None
         try:
             revised = model.revise(stage, candidate, critique, context)
             if not isinstance(revised, dict):
                 raise ContractError("修正版がオブジェクトではありません")
             validator(revised)
+            self._validate_revision_preserves_contract(stage, candidate, revised)
         except Exception as exc:
-            state["attempts"].append({"stage": stage, "kind": "revision_failed", "reason": str(exc)})
+            self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
             return candidate
-        state["attempts"].append({"stage": stage, "kind": "revision", "candidate": revised})
+        self._record_attempt(state, stage, "revision", context, revised, "accepted")
         return revised
+
+    @staticmethod
+    def _record_attempt(state: dict[str, Any], stage: str, kind: str, input_value: dict[str, Any], response: Any, validation: str) -> None:
+        state["attempts"].append({
+            "stage": stage, "kind": kind, "unit": input_value.get("scene_id"), "input": input_value,
+            "response": response, "validation": validation, "raw_reference": None,
+        })
+
+    @staticmethod
+    def _validate_revision_preserves_contract(stage: str, candidate: dict[str, Any], revised: dict[str, Any]) -> None:
+        critical = {
+            "scene_card": ("scene_id", "required_events", "thread_actions", "character_ids", "visible_ids", "allowed_update_ids"),
+            "continuity": ("state_updates",),
+            "volume_chapters": ("chapters",),
+            "closure": ("resolved_ids",),
+        }
+        for field in critical.get(stage, ()):
+            if field in candidate and revised.get(field) != candidate[field]:
+                raise ContractError(f"修正版が契約上重要な {field} を変更または欠落しました")
 
     @staticmethod
     def _validate_brief(brief: dict[str, Any]) -> None:

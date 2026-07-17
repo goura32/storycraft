@@ -54,6 +54,28 @@ class StateContractTests(unittest.TestCase):
         result = service.step(FlowModel())
         self.assertTrue(result.completed)
 
+    def test_revision_contract_loss_keeps_validated_draft_and_records_normalized_attempt(self) -> None:
+        class RevisionLossModel:
+            def generate(self, stage: str, context: dict) -> dict:
+                return {"scene_id": context["scene_id"], "required_events": ["発見"]}
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": [{"severity": "minor", "field": "required_events", "description": "表現", "suggestion": "修正"}]}
+
+            def revise(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return {"required_events": []}
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        candidate = service._improve(
+            "scene_card", {"scene_id": "v01-c01-s01"}, RevisionLossModel(), state,
+            lambda value: None,
+        )
+        self.assertEqual(candidate["scene_id"], "v01-c01-s01")
+        self.assertEqual(state["attempts"][-1]["kind"], "revision_failed")
+        for attempt in state["attempts"]:
+            self.assertTrue({"stage", "kind", "unit", "input", "response", "validation"}.issubset(attempt))
+
     def test_continuity_update_requires_matching_source_scene_and_existing_state_field(self) -> None:
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)
