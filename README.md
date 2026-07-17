@@ -1,6 +1,6 @@
 # Storycraft
 
-利用者が手入力した企画、または自由なkeywordsからLLMが生成したbriefを起点に、個人出版向けの日本語小説シリーズを最後まで書き切るCLIです。
+利用者が手入力したbrief、または自由なkeywordsからLLMが生成したbriefを起点に、個人出版向けの日本語小説シリーズを最後まで書き切るCLIです。
 
 Storycraftは、人物・関係・世界・時系列・主要項目のCanonを先に確定し、その既存IDを巻別の `volume_map` へ配分してから、章、場面カード、本文、継続性更新の順で進めます。保存済みの正本状態から中断再開でき、検証済みの巻別・全巻Markdownだけを公開します。
 
@@ -58,7 +58,7 @@ storycraft run --out ./my-series \
   --keywords '霧の島と灯台'
 ```
 
-`run` は、未保存の作業場所で企画から出力まで連続実行します。実LLMの接続先・model・timeoutは設定YAMLまたは環境変数で指定できます。
+`run` は、未保存の作業場所でbriefから出力まで連続実行します。keywords指定時は、最初の保存可能な単位としてbriefだけを生成・構造検証して採用します。実LLMの接続先・model・timeoutは設定YAMLまたは環境変数で指定できます。
 
 ## 操作
 

@@ -6,7 +6,9 @@
 
 - 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/` のJSONである。
 - 実送信promptは工程ごとの `user/{stage}/{kind}_{stage}.j2` を正本とする。各fileはその工程の指示・入力・出力スキーマを直接記述し、`*_stage.j2` やJinja includeには依存しない。adapterは工程名で個別fileを選ぶ。
-- 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
+- `brief` はkeywords入力時だけ生成工程になる。採用条件は手入力briefと共通の構造・型・範囲であり、創作内容の品質やkeywordsとの意味的一致を決定的に検証しない。
+- `volume_map` はCanon確定後だけに生成する。既存thread IDと `introduce` / `advance` / `resolve` を巻へ配分し、新規Canon事実を作らない。
+- 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。brief以外の批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
 - `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
 - 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。
 - 採用可否は `series_contracts.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
@@ -31,7 +33,7 @@ brief / characters / relationships / world / timeline / threads / volume_map
 | 工程 | 主な検証 |
 |---|---|
 | `brief` | 手入力briefと同じ必須項目・型・巻数範囲だけ。keywords由来の創作内容は検証・採点しない |
-| `volume_map` | 4〜10巻、配列順の巻順、既存thread IDだけ、majorの `introduce → advance* → resolve` 配分、最終巻以外の問い、最終巻の空問い。結末の正本は `brief.ending` |
+| `volume_map` | 4〜10巻、配列順の巻順、既存thread IDだけ、majorの `introduce → advance* → resolve` 配分、最終巻以外の `reader_question`、最終巻の空 `reader_question`。結末の正本は `brief.ending` |
 | `characters` | 内容のみでIDなし、固定プロフィールと開始時状態 |
 | `relationships` | 既存人物IDだけを参照し、固定意味と開始時状態を持つ |
 | `world` | 内容のみでIDなし、固定事実・利用規則・開始時状態を分離 |
