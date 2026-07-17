@@ -47,7 +47,7 @@ class PromptTemplate:
 
     def render_user(self, kind: str, template_stage: str, **kwargs) -> str:
         """ユーザープロンプトをテンプレート名とレンダリング値から構築する。"""
-        template = self.env.get_template(f"user/{kind}_{template_stage}.j2")
+        template = self.env.get_template(f"user/{template_stage}/{kind}_{template_stage}.j2")
         return template.render(**kwargs)
 
     def load_schema_text(self, category: str, stage: str) -> str:

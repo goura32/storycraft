@@ -5,7 +5,7 @@
 ## 正本と構築責務
 
 - 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/generate/` のJSONである。
-- 実送信promptは工程ごとの `user/{kind}_{stage}.j2` を正本とする。各fileはその工程の指示・入力・出力スキーマを直接記述し、`*_stage.j2` やJinja includeには依存しない。adapterは工程名で個別fileを選ぶ。
+- 実送信promptは工程ごとの `user/{stage}/{kind}_{stage}.j2` を正本とする。各fileはその工程の指示・入力・出力スキーマを直接記述し、`*_stage.j2` やJinja includeには依存しない。adapterは工程名で個別fileを選ぶ。
 - 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
 - `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
 - 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。

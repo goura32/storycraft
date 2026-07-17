@@ -84,7 +84,7 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
         stages = ["plan", "characters", "relationships", "world", "timeline", "threads", "volume_chapters", "scene_card", "scene", "continuity", "volume_summary", "closure"]
         for kind in ("generate", "critique", "fix"):
             for stage in stages:
-                name = f"{kind}_{stage}.j2"
+                name = f"{stage}/{kind}_{stage}.j2"
                 contents = (root / name).read_text(encoding="utf-8")
                 self.assertIn("{{ output_schema }}", contents, name)
                 self.assertNotIn("{% include", contents, name)
@@ -94,9 +94,11 @@ class NextGenerationModelTemplateTests(unittest.TestCase):
                 self.assertNotIn("indent=2", contents, name)
                 self.assertNotIn("JSONオブジェクトだけを返すこと。", contents, name)
                 self.assertTrue(contents.rstrip().endswith("{{ output_schema }}"), name)
-        self.assertFalse((root / "generate_stage.j2").exists())
-        self.assertFalse((root / "critique_stage.j2").exists())
-        self.assertFalse((root / "fix_stage.j2").exists())
+        self.assertFalse(list(root.glob("*.j2")))
+        files = list(root.glob("*/*.j2"))
+        self.assertEqual(len(files), 45)
+        for path in files:
+            self.assertTrue(path.name.endswith(f"_{path.parent.name}.j2"), path)
 
     def test_every_current_stage_has_renderable_generation_critique_and_fix_contract(self) -> None:
         stages = [
