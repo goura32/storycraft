@@ -70,7 +70,7 @@ class RawLogMarkdownTests(unittest.TestCase):
 
         client.save_raw(record, [])
 
-        json_path = raw_dir / "0000_generate_v_1_c_6_s_2.json"
+        json_path = raw_dir / "0000_generate_v1_c6_s2.json"
         self.assertTrue(json_path.exists())
         self.assertEqual(list(raw_dir.rglob("*.json")), [json_path])
         self.assertEqual(json.loads(json_path.read_text(encoding="utf-8"))["received"]["ref"], record.ref)

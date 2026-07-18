@@ -32,6 +32,7 @@ def _raw_filename_component(value: str) -> str:
     """監査メタを保ったまま、ファイル名だけを移植可能な文字列へ正規化する。"""
     # 進捗refの総数（v:1/4 等）はログ/JSONメタには残し、ファイル名では省く。
     value = re.sub(r"/\d+", "", value)
+    value = re.sub(r"([vcs]):\s*(\d+)", r"\1\2", value)
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._")
     return normalized or "unknown"
 
