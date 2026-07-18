@@ -149,7 +149,34 @@ class StateContractTests(unittest.TestCase):
             service._run_one(state, UnresolvedBriefModel())
         self.assertIsNone(state["brief"])
         self.assertIsNone(state["characters"])
-        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision"])
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
+
+    def test_final_revision_is_reviewed_and_adopted_when_clean(self) -> None:
+        class ResolvingBriefModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def __init__(self) -> None:
+                self.critique_calls = 0
+
+            def generate(self, stage: str, context: dict) -> dict:
+                return dict(BRIEF)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                self.critique_calls += 1
+                if self.critique_calls == 1:
+                    return {"issues": [{"severity": "minor", "field": "protagonist", "description": "修正対象", "suggestion": "削除"}]}
+                return {"issues": []}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return dict(candidate)
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(keywords=["女性向けロマンスファンタジー"])
+        model = ResolvingBriefModel()
+        service._run_one(state, model)
+        self.assertEqual(model.critique_calls, 2)
+        self.assertEqual(state["brief"], BRIEF)
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
 
     def test_revision_contract_loss_keeps_validated_draft_and_records_normalized_attempt(self) -> None:
         class RevisionLossModel:

@@ -225,8 +225,28 @@ class SeriesWorkflow(ContractValidator):
                 return current_candidate
             self._record_attempt(state, stage, "revision", context, revised, "accepted")
             current_candidate = revised
-        # 最大パスまで回しても解消しない場合は、briefのような後続の根に当たる工程を失敗にする。
-        logger.warning(f"批評未解決: {stage} max_passes={max_passes} 到達")
+        # 最終revisionも必ず検査する。ここを省くと、最終revisionが全issueを解消しても
+        # 未検査のまま「未解決」と扱われる。
+        final_pass = max_passes + 1
+        state["_active"]["phase"] = "critique_final"
+        self.store.save(state)
+        try:
+            final_critique = model.critique(stage, current_candidate, context)
+            self._validate_critique(final_critique)
+        except Exception as exc:
+            self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
+            state["_active"]["phase"] = "failed"
+            self.store.save(state)
+            if require_clean_review:
+                raise ContractError(f"{stage} の最終批評に失敗したため採用しません: {exc}") from exc
+            return current_candidate
+        self._record_attempt(state, stage, "critique", context, final_critique, "accepted")
+        if not final_critique["issues"]:
+            logger.info(f"批評合格: {stage} pass={final_pass} (final revision verified)")
+            state["_active"]["phase"] = "completed"
+            self.store.save(state)
+            return current_candidate
+        logger.warning(f"批評未解決: {stage} max_revisions={max_passes} final_issues={len(final_critique['issues'])}")
         state["_active"]["phase"] = "failed" if require_clean_review else "completed"
         self.store.save(state)
         if require_clean_review:

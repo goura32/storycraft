@@ -81,7 +81,10 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("物語開始時点", critique)
         self.assertIn("物語開始時点", revision)
         self.assertIn("未公表または暗示された秘密や伏線", critique)
+        self.assertIn("結末の方向性・読後感", critique)
+        self.assertIn("候補にない誤字・表現・事実を作らない", critique)
         self.assertIn("未公表または暗示された秘密や伏線", revision)
+        self.assertIn("結末の方向性・読後感", revision)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
