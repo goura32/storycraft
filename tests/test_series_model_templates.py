@@ -78,8 +78,8 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         revision = OpenAIStoryModel._render("revision", "brief", candidate={}, critique={"issues": []}, context={"keywords": ["霧の島"]})
         self.assertNotIn("内容評価は行わない", generate)
         self.assertIn("自動レビュー", generate)
-        self.assertIn("未公表の秘密", critique)
-        self.assertIn("未公表の秘密", revision)
+        self.assertIn("未公表または暗示された秘密や伏線", critique)
+        self.assertIn("未公表または暗示された秘密や伏線", revision)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
