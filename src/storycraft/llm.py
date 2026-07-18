@@ -19,6 +19,7 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from .log import logger
+from .series_contracts import ContractError
 
 STATUS_THINKING = "thinking"
 STATUS_CONTENT = "content"
@@ -57,11 +58,19 @@ class LLMClient:
     def __init__(self, settings, raw_dir: Path):
         self.settings = settings
         self.raw_dir = raw_dir
+        base_url = settings.llm["base_url"]
         self.client = OpenAI(
-            base_url=settings.llm["base_url"],
+            base_url=base_url,
             api_key="ollama",
             timeout=None,
         )
+        # 接続先ヘルスチェック（未設定・到達不能なら即座に失敗）
+        try:
+            models = self.client.models.list()
+            logger.info(f"Ollama接続確認: {base_url} (モデル数: {len(models.data)})")
+        except Exception as e:
+            logger.error(f"Ollama接続失敗: {base_url} - {type(e).__name__}: {e}")
+            raise ContractError(f"LLMサーバーに接続できません: {base_url} - {e}")
 
     def _make_call(self, messages: list[ChatCompletionMessageParam], response_format, seed: int) -> CallRecord:
         llm = self.settings.llm

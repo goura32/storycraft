@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from .log import logger
 from .series_contracts import ContractError, ContractValidator, RunResult, StoryModel
 from .series_output import OutputWriter
 
@@ -168,8 +169,14 @@ class SeriesWorkflow(ContractValidator):
             self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
             return candidate
         self._record_attempt(state, stage, "critique", context, critique, "accepted")
+        if critique["issues"]:
+            logger.info(f"批評指摘: stage={stage} 件数={len(critique['issues'])} severities={[i['severity'] for i in critique['issues']]}")
+            if logger.isEnabledFor(10):  # DEBUG
+                for i, issue in enumerate(critique["issues"]):
+                    logger.debug(f"  issue[{i}]: field={issue.get('field')} severity={issue.get('severity')} desc={issue.get('description')[:80]}...")
         if not critique["issues"]:
             return candidate
+        logger.warning(f"批評指摘あり: {stage} issues={len(critique['issues'])}")
         revised: dict[str, Any] | None = None
         try:
             revised = model.revision(stage, candidate, critique, context)
