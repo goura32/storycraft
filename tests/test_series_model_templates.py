@@ -41,8 +41,10 @@ class _SequenceClient:
         self.records = records
         self.calls = 0
         self.raw_saves = 0
+        self.messages: list[list[dict]] = []
 
     def call_once(self, _messages: list[dict], _response_format: dict, _seed: int) -> CallRecord:
+        self.messages.append(_messages)
         record = self.records[self.calls]
         self.calls += 1
         return record
@@ -82,6 +84,34 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
             [("generate", "brief", {"stage": "brief", "context": {"keywords": ["霧の島"]}, "output_schema": "外部スキーマ:generate/brief"})],
         )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたbriefプロンプト")
+
+    def test_continuity_evidence_contract_requires_verbatim_scene_substrings(self) -> None:
+        prompt = (Path("templates/prompts/user/continuity/generate_continuity.j2").read_text(encoding="utf-8"))
+        schema = (Path("templates/prompts/schemas/continuity.json").read_text(encoding="utf-8"))
+        self.assertIn("evidence in scene.content", prompt)
+        self.assertNotIn("引用または要約", prompt)
+        self.assertIn("scene.content からそのままコピーした連続文字列", schema)
+
+    def test_scene_card_prompt_requires_the_context_time_floor(self) -> None:
+        prompt = Path("templates/prompts/user/scene_card/generate_scene_card.j2").read_text(encoding="utf-8")
+        self.assertIn("same_volume_time_floor", prompt)
+        self.assertIn("allowed_start_time_ids", prompt)
+
+    def test_attempt_counter_restarts_for_each_llm_operation(self) -> None:
+        client = _SequenceClient([
+            CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, content="{}"),
+            CallRecord(kind="critique", phase="brief", ref="brief", attempt=2, seed=2, content="{}"),
+        ])
+        model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+        model.client = client
+        model.attempt = 0
+        model.set_log_ref("v:1/4 c:1/1 s:1/1")
+        model._call("generate", "brief", "prompt")
+        model._call("critique", "brief", "prompt")
+        attempts = [next(message["__attempt"] for message in messages if "__attempt" in message) for messages in client.messages]
+        refs = [next(message["__ref"] for message in messages if "__ref" in message) for messages in client.messages]
+        self.assertEqual(attempts, [1, 1])
+        self.assertEqual(refs, ["v:1/4 c:1/1 s:1/1", "v:1/4 c:1/1 s:1/1"])
 
     def test_call_exhaustion_raises_llm_call_error_for_transport_and_non_object_json(self) -> None:
         scenarios = {
@@ -227,6 +257,13 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertEqual(len(list(user.glob("*/*.j2"))), len(STAGES) * 3)
         for stage in STAGES:
             self.assertTrue((root / "schemas" / f"{stage}.json").is_file(), stage)
+
+    def test_threads_revision_preserves_author_truth_while_removing_only_unsupported_future_claims(self) -> None:
+        prompt = OpenAIStoryModel._render(
+            "revision", "threads", candidate={}, critique={"issues": []}, context={},
+        )
+        self.assertIn("`author_truth` はCanonの作者真実であり、削除・空文化しない", prompt)
+        self.assertIn("`initial_state` に混入した未確定の将来変化", prompt)
 
     def test_every_current_stage_has_renderable_generation_critique_and_revision_contract(self) -> None:
         for stage in STAGES:

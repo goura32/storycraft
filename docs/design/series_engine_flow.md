@@ -16,15 +16,36 @@ flowchart TD
     World --> Timeline[時間初期台帳]
     Timeline --> Threads[主要項目初期台帳]
     Threads --> Canon[Canonの横断確認・確定]
-    Canon --> VolumeMap[volume_map: existing thread IDの巻別配分]
-    VolumeMap --> Chapters[対象巻の章一覧]
-    Chapters --> Cards[対象章の場面カード]
-    Cards --> Prose[本文]
-    Prose --> Continuity[継続性抽出・状態更新]
-    Continuity --> More{巻内に未執筆場面があるか}
-    More -- はい --> Cards
-    More -- いいえ --> Summary[巻要約]
-    Summary --> MoreVolumes{未執筆巻があるか}
+    Canon --> VolumeMap[volume_map: 既存thread IDの巻別配分]
+
+    subgraph PerVolume[巻ごと: volume_map順に反復]
+        direction TD
+        Chapters[対象巻の章一覧を1回生成]
+        Chapters --> SelectChapter[未処理の章を選択]
+
+        subgraph PerChapter[章ごと: 章一覧の順に反復]
+            direction TD
+            SelectChapter --> SelectScene[未執筆の場面を選択]
+
+            subgraph PerScene[場面ごと: chapter.scene_count回反復]
+                direction TD
+                SelectScene --> Card[場面カード]
+                Card --> Prose[本文を凍結]
+                Prose --> Continuity[継続性抽出・状態更新]
+                Continuity --> AdoptScene[本文・要約・状態更新を一体で採用]
+            end
+
+            AdoptScene --> MoreScenes{この章に未執筆場面があるか}
+            MoreScenes -- はい --> SelectScene
+        end
+
+        MoreScenes -- いいえ --> MoreChapters{この巻に未処理の章があるか}
+        MoreChapters -- はい --> SelectChapter
+        MoreChapters -- いいえ --> Summary[巻要約を1回生成]
+    end
+
+    VolumeMap --> Chapters
+    Summary --> MoreVolumes{volume_mapに未処理の巻があるか}
     MoreVolumes -- はい --> Chapters
     MoreVolumes -- いいえ --> Closure[完結確認]
     Closure --> Output[Markdown出力]
@@ -32,6 +53,7 @@ flowchart TD
 
 `volume_map` は確定Canonの既存thread IDを、各巻の `introduce`、`advance`、`resolve` 操作へ配分する。新しい人物、設定、因果、出来事、結末条件は作らない。表示用の `reader_question` は最終巻以外にだけ置き、結末到達条件の唯一の正本はbriefの `ending` とする。全巻の詳細章・場面・本文を最初に固定しない。各巻の章一覧は、その巻の開始時に、確定Canonと対象巻の操作、前巻までの採用済み要約を入力として作る。
 
+図中の各LLM工程は、別文書の共通ライフサイクル（草稿 → 構造検証 → 批評 → 必要時revision → 最終批評 → 採用）を個別に通る。ここで示す矢印は、**採用済み正本を次の単位へ渡す外側の反復順**である。場面は`scene_card`、`scene`、`continuity`の三工程を完了して初めて採用済み場面になる。
 ## 正本と更新権限
 
 | 正本 | 固定情報 | 現在状態 | 更新できる工程 |
@@ -60,13 +82,13 @@ flowchart TD
 | 初期台帳 | brief、先行台帳 | 新規項目の内容と開始状態 | 永続ID、先行台帳の固定情報 |
 | volume_map | 確定Canonの既存thread IDとbrief | 巻順、thread操作、表示用の問い | 新しい人物・設定・因果・出来事・結末条件、未知ID |
 | 巻・章設計 | 対象volume_map、確定Canon、前巻要約 | 章の目的、開始・終了状態、場面数 | 将来巻の詳細、本文 |
-| 場面カード | 対象章、局所台帳、前場面要約 | POV、開始終了時刻、場所、登場人物、必須行動、伏線操作、開示・秘匿、許可更新 | 新しい主要設定、未提示主要項目 |
+| 場面カード | 対象章、局所台帳、前場面要約、同巻の時刻下限 | POV、開始終了時刻、場所、登場人物、必須行動、伏線操作、開示・秘匿、許可更新 | 新しい主要設定、未提示主要項目、同巻の確定済み終了時刻より前への逆行 |
 | 本文 | 場面カード、writer view、前場面要約 | 自然な日本語の完成本文 | 状態更新、要約、本文外事実 |
-| 継続性抽出 | 凍結本文、場面カード、許可更新候補 | 本文根拠つき要約と実際の状態更新 | 本文の修正、本文外事実、未許可更新 |
+| 継続性抽出 | 凍結本文、場面カード、許可更新候補 | 本文から完全一致で抜き出した根拠つき要約と実際の状態更新 | 本文の修正、本文外事実、未許可更新、要約・改変した根拠文字列 |
 | 巻要約 | 対象巻の採用済み本文と状態 | 次巻への事実ベースの引継ぎ | 台帳・本文の上書き |
 | 完結監査 | 全採用状態と主要項目 | 根拠不足・未回収の指摘 | 完結の自己承認、未回収項目の書換え |
 
-批評者は対象工程の候補・入力・出力契約を読み、修正可能で根拠のあるissueだけを返す。修正者は対象工程の所有範囲だけを変更し、指摘されていない正しいID・順序・本文事実を失わない。
+批評者は対象工程の候補・入力・出力契約を読み、修正可能で根拠のあるissueだけを返す。修正者は対象工程の所有範囲だけを変更し、指摘されていない正しいID・順序・本文事実を失わない。定義済みのrevision回数を尽くした後の最終批評でissueが残った場合、最後に構造契約を通過した候補を受容して下流へ進む。残存issueと受容理由は`state.json`の`quality_acceptances`および出力の`quality-acceptances.json`に保存し、隠さない。最終批評が実行・検証できなかった場合、または候補が構造契約を満たさない場合は停止する。
 
 ## 本文と継続性の採用
 

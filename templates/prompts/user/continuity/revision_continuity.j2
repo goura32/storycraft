@@ -6,7 +6,7 @@
 - 批評の `suggestion` を新事実として採用しない（操作の指示としてのみ使う）
 - `source_scene_id` はこの場面のscene_idに固定
 - `id` は `allowed_update_ids` のみ使用、重複しない
-- `field` は許可フィールドのみ
+- `field` は更新対象に対応する直接キーのみ（人物: `emotion` / `situation` / `recent_goal`、major thread: `status` / `progress`）。完全パスやrelationship更新は禁止
 - `evidence` は **本文からそのままコピーした10〜80文字**（要約・書き換え・追記禁止）
 - 同一キャラクターへの複数更新、同一ID重複使用を解消
 - fixed_profile、台帳固定項目、current_state全体置換をしない

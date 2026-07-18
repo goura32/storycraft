@@ -1,6 +1,7 @@
 """完成したシリーズ原稿の検証と原子的出力。"""
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -58,6 +59,10 @@ class OutputWriter:
                 paths.append(path)
             series = staging / "series.md"
             series.write_text("\n\n".join(path.read_text(encoding="utf-8") for path in paths), encoding="utf-8")
+            (staging / "quality-acceptances.json").write_text(
+                json.dumps(state["quality_acceptances"], ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
             self.validate_output(paths, series)
             backup = self.workspace / ".output-previous"
             if backup.exists():

@@ -48,7 +48,7 @@ class FlowModel:
             }]}
         if stage == "timeline":
             return {"timelines": [{
-                "kind": "期限", "description": "嵐まで七日", "related_ids": ["char-0001", "entity-0001"],
+                "kind": "期限", "description": "嵐まで七日", "sequence": 0, "related_ids": ["char-0001", "entity-0001"],
                 "fixed_rule": "嵐の後は船が来ない", "initial_state": {"status": "予定"},
             }]}
         if stage == "threads":
@@ -77,7 +77,7 @@ class FlowModel:
                 "purpose": "秘密に近づく", "required_events": ["灯りを見つける"],
                 "thread_actions": [{"thread_id": "thread-0001", "action": ("introduce", "advance", "advance", "resolve")[context["volume"]["number"] - 1]}],
                 "reader_disclosure": "父の不在", "withheld_information": "父の真実", "presentation_rules": "澪の観察だけで描く", "end_change": "秘密への距離が縮まる",
-                "visible_ids": ["char-0001", "entity-0001", "thread-0001"],
+                "visible_ids": ["char-0001", "entity-0001", "time-0001", "thread-0001"],
                 "allowed_update_ids": ["thread-0001"],
             }
         if stage == "scene":
@@ -94,7 +94,11 @@ class FlowModel:
                 }],
             }
         if stage == "volume_summary":
-            return {"volume_summary": f"第{context['volume']['number']}巻の要約", "unresolved_thread_ids": []}
+            unresolved = [
+                thread["id"] for thread in context["threads"]
+                if thread["importance"] == "major" and thread["current_state"]["status"] != "resolved"
+            ]
+            return {"volume_summary": f"第{context['volume']['number']}巻の要約", "unresolved_thread_ids": unresolved}
         if stage == "closure":
             return {"resolved_ids": ["thread-0001"], "ending_evidence": "島に残る", "ending_authority": BRIEF["ending"]}
         raise AssertionError(f"unexpected stage: {stage}")
@@ -126,7 +130,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
             ],
         )
         state = SeriesService(self.workspace).store.load()
-        self.assertEqual(state["version"], 4)
+        self.assertEqual(state["version"], 5)
         self.assertEqual(state["characters"][0]["id"], "char-0001")
         self.assertEqual(state["relationships"][0]["id"], "rel-0001")
         self.assertEqual(state["world"][0]["id"], "entity-0001")
@@ -157,7 +161,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         scene_contexts = [context for stage, context in model.calls if stage == "scene"]
         self.assertTrue(scene_contexts)
         self.assertNotIn("ledgers", scene_contexts[0])
-        self.assertEqual(set(scene_contexts[0]["writer_view"]), {"char-0001", "entity-0001", "thread-0001"})
+        self.assertEqual(set(scene_contexts[0]["writer_view"]), {"char-0001", "entity-0001", "time-0001", "thread-0001"})
 
     def test_continuity_rejects_update_without_literal_prose_evidence(self) -> None:
         with self.assertRaisesRegex(ContractError, "本文根拠"):
@@ -173,6 +177,26 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         self.assertTrue(resumed.completed)
         self.assertEqual([stage for stage, _ in model.calls].count("characters"), 1)
         self.assertEqual([stage for stage, _ in model.calls].count("threads"), 1)
+    def test_volume_card_actions_reject_targets_outside_its_volume_plan(self) -> None:
+        class ExtraActionModel(FlowModel):
+            def generate(self, stage: str, context: dict) -> dict:
+                value = super().generate(stage, context)
+                if stage == "scene_card" and context["volume"]["number"] == 1:
+                    value["thread_actions"].append({"thread_id": "thread-0001", "action": "resolve"})
+                return value
+
+        with self.assertRaisesRegex(ContractError, "巻配分の対象外"):
+            SeriesService(self.workspace).run(BRIEF, ExtraActionModel())
+    def test_volume_card_actions_reject_duplicates_across_scene_cards(self) -> None:
+        state = {
+            "cards": {
+                "v01-c01-s01": {"thread_actions": [{"thread_id": "thread-0001", "action": "introduce"}]},
+                "v01-c01-s02": {"thread_actions": [{"thread_id": "thread-0001", "action": "introduce"}]},
+            }
+        }
+        volume = {"number": 1, "thread_targets": [{"thread_id": "thread-0001", "required_action": "introduce"}]}
+        with self.assertRaisesRegex(ContractError, "重複"):
+            SeriesService(self.workspace)._validate_volume_thread_targets(state, volume)
 
 
 if __name__ == "__main__":

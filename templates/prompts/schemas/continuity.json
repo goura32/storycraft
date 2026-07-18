@@ -31,14 +31,15 @@
           },
           "field": {
             "type": "string",
-            "description": "更新フィールド名。例：threads.current_state.status, threads.current_state.progress, characters.current_state.emotion, relationships.current_state.emotion 等"
+            "enum": ["status", "progress", "emotion", "situation", "recent_goal"],
+            "description": "更新する current_state の直接キー。人物は emotion/situation/recent_goal、major threadはstatus/progressだけを使う。完全パスは使わない。"
           },
           "value": {
             "description": "新しい値。フィールド型に合わせる（status: open/in_progress/resolved, progress: 0.0-1.0, emotion/situation/recent_goal: string等）"
           },
           "evidence": {
             "type": "string",
-            "description": "本文中の該当箇所（引用または要約）。この更新の描写根拠として本文に存在する文字列。"
+            "description": "更新根拠として scene.content からそのままコピーした連続文字列。要約・書き換え・追記・句読点や鍵括弧の省略は禁止。本文検索で完全一致しなければならない。"
           }
         }
       }

@@ -6,7 +6,10 @@
 
 `start_time_id` と `end_time_id` は既存の `timeline` 配列内の `id`（例: `time-0001` 等）から**そのままコピー**して使うこと。新しいタイムラインIDを作らない。入力に含まれる `timeline` 配列を確認し、そこにある `id` のみを指定すること。自由記述・意訳・部分一致は禁止。
 
-`visible_ids` には入力の `ledgers` に存在する `char-XXXX`、`entity-XXXX`、`time-XXXX`、`thread-XXXX` のみを含める。
+### 巻内の時系列（hard contract）
+入力の `same_volume_time_floor` は、この巻ですでに確定した場面の終了時刻のうち最大のものを示す。`same_volume_time_floor` がnullでなければ、`start_time_id` は **`allowed_start_time_ids` に列挙されたIDだけ**から選び、`same_volume_time_floor.sequence` より前の時刻を絶対に選ばない。`end_time_id` は `start_time_id` と同じか後のsequenceにする。出力前に、時刻選択がこの条件を満たすことを確認する。
+
+`visible_ids` には入力の `ledgers` に存在する `char-XXXX`、`rel-XXXX`、`entity-XXXX`、`time-XXXX`、`thread-XXXX` のみを含める。少なくとも `pov_character_id`、`location_id`、`start_time_id`、`end_time_id`、全 `character_ids`、全 `thread_actions[].thread_id` を含める。
 
 `allowed_update_ids` には `visible_ids` に含まれる ID のうち、更新対象とするものだけを**そのまま**（`.current_state` 等のサフィックスなし）で列挙する。`time-XXXX` と `rel-XXXX` は更新不可。
 

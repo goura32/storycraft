@@ -8,7 +8,7 @@
 3. **state_updates の各エントリ**:
    - `source_scene_id`: この場面のscene_idと一致するか
    - `id`: `allowed_update_ids` に含まれるIDか
-   - `field`: 許可フィールドか（threads.current_state.status/progress, characters.current_state.emotion/situation/recent_goal, relationships.current_state.emotion 等）
+   - `field`: 更新対象ID種別に合う直接キーか（人物: emotion/situation/recent_goal、major thread: status/progress）。`threads.current_state.status` のようなパスやrelationship更新は不正
    - `value`: 型・範囲が妥当か（status: open/in_progress/resolved, progress: 0.0-1.0等）
    - `evidence`: **本文からそのままコピーした10〜80文字**か（要約・書き換え・追記禁止、本文検索で完全一致必須）
 4. **重複禁止**: 同一キャラクターへの複数更新、同一IDの重複使用がないか

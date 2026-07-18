@@ -15,6 +15,17 @@ class StateContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workspace = Path(tempfile.mkdtemp(prefix="storycraft-state-contract-"))
 
+    def test_stage_logs_include_start_completion_and_scene_progress(self) -> None:
+        service = SeriesService(self.workspace)
+        with self.assertLogs("storycraft", level="INFO") as captured:
+            service.run(BRIEF, FlowModel())
+        logs = "\n".join(captured.output)
+        progress = "v:1/4 c:1/1 s:1/1"
+        self.assertIn(f"工程開始: {progress} stage=scene_card", logs)
+        self.assertIn(f"工程完了: {progress} stage=scene_card", logs)
+        self.assertIn(f"工程開始: {progress} stage=scene", logs)
+        self.assertIn(f"工程完了: {progress} stage=continuity", logs)
+
     def test_failed_scene_persists_stop_reason_and_target_unit(self) -> None:
         service = SeriesService(self.workspace)
         with self.assertRaisesRegex(ContractError, "本文根拠"):
@@ -96,7 +107,7 @@ class StateContractTests(unittest.TestCase):
         with patch("storycraft.series_store.os.fsync") as fsync:
             service.store.save(state)
         self.assertGreaterEqual(fsync.call_count, 2)
-        self.assertEqual(service.store.load()["version"], 4)
+        self.assertEqual(service.store.load()["version"], 5)
 
     def test_output_rejects_missing_planned_scene_before_creating_files(self) -> None:
         service = SeriesService(self.workspace)
@@ -122,6 +133,22 @@ class StateContractTests(unittest.TestCase):
             service._write_output(state)
         self.assertEqual((self.workspace / "output" / "series.md").read_text(encoding="utf-8"), previous)
 
+    def test_output_publishes_quality_acceptance_manifest(self) -> None:
+        import json
+
+        service = SeriesService(self.workspace)
+        service.run(BRIEF, FlowModel())
+        state = service.store.load()
+        acceptance = {
+            "stage": "brief", "unit": None, "reason": "max_critique_passes_exhausted",
+            "max_critique_passes": 1, "final_review_pass": 2,
+            "issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}],
+        }
+        state["quality_acceptances"] = [acceptance]
+        service._write_output(state)
+        manifest = json.loads((self.workspace / "output" / "quality-acceptances.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest, [acceptance])
+
     def test_step_on_completed_series_does_not_rewrite_output(self) -> None:
         service = SeriesService(self.workspace)
         service.run(BRIEF, FlowModel())
@@ -129,7 +156,7 @@ class StateContractTests(unittest.TestCase):
         result = service.step(FlowModel())
         self.assertTrue(result.completed)
 
-    def test_unresolved_brief_review_is_adopted_and_allows_characters_stage(self) -> None:
+    def test_unresolved_major_brief_review_is_adopted_with_audit_and_allows_characters_stage(self) -> None:
         class UnresolvedBriefModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
 
@@ -154,8 +181,15 @@ class StateContractTests(unittest.TestCase):
         model = UnresolvedBriefModel()
         service._run_one(state, model)
         self.assertEqual(state["brief"], BRIEF)
-        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
-
+        self.assertEqual(
+            [attempt["kind"] for attempt in state["attempts"]],
+            ["draft", "critique", "revision", "critique", "quality_accepted_with_known_issues"],
+        )
+        self.assertEqual(state["quality_acceptances"], [{
+            "stage": "brief", "unit": None, "reason": "max_critique_passes_exhausted",
+            "max_critique_passes": 1, "final_review_pass": 2,
+            "issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}],
+        }])
         service._run_one(state, model)
         self.assertEqual(model.generated_stages, ["brief", "characters"])
         self.assertIsNotNone(state["characters"])
@@ -297,27 +331,93 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(state["brief"], BRIEF)
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
 
-    def test_revision_contract_loss_keeps_validated_draft_and_records_normalized_attempt(self) -> None:
-        class RevisionLossModel:
+    def test_malformed_critique_stops_without_adoption_or_quality_acceptance(self) -> None:
+        class MalformedCritiqueModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
             def generate(self, stage: str, context: dict) -> dict:
-                return {"scene_id": context["scene_id"], "required_events": ["発見"]}
+                return dict(BRIEF)
 
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
-                return {"issues": [{"severity": "minor", "field": "required_events", "description": "表現", "suggestion": "修正"}]}
+                return {"issues": "not-an-array"}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
-                return {"required_events": []}
+                raise AssertionError("critique契約違反時にrevisionしてはならない")
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(keywords=["女性向けロマンスファンタジー"])
+        with self.assertRaisesRegex(ContractError, "批評を検証できない"):
+            service._run_one(state, MalformedCritiqueModel())
+        self.assertIsNone(state["brief"])
+        self.assertEqual(state["quality_acceptances"], [])
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique_failed"])
+        self.assertEqual(state["attempts"][-1]["response"], {"issues": "not-an-array"})
+
+    def test_invalid_revision_is_rejected_but_last_valid_candidate_is_accepted_with_known_issues(self) -> None:
+        class InvalidRevisionModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def __init__(self) -> None:
+                self.generated_stages: list[str] = []
+
+            def generate(self, stage: str, context: dict) -> dict:
+                self.generated_stages.append(stage)
+                return dict(BRIEF)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}]}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return {}
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(keywords=["女性向けロマンスファンタジー"])
+        model = InvalidRevisionModel()
+        service._run_one(state, model)
+        self.assertEqual(state["brief"], BRIEF)
+        self.assertEqual(state["_active"]["phase"], "completed_with_known_issues")
+        self.assertEqual(model.generated_stages, ["brief"])
+        self.assertEqual(
+            [attempt["kind"] for attempt in state["attempts"]],
+            ["draft", "critique", "revision_rejected", "critique", "quality_accepted_with_known_issues"],
+        )
+
+    def test_revision_can_repair_a_critique_repairable_scene_card_field(self) -> None:
+        class RepairingModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def generate(self, stage: str, context: dict) -> dict:
+                return {"scene_id": context["scene_id"], "required_events": ["曖昧な出来事"]}
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                if candidate["required_events"] == ["曖昧な出来事"]:
+                    return {"issues": [{"severity": "major", "field": "required_events", "description": "具体性不足", "suggestion": "入力事実で書き直し"}]}
+                return {"issues": []}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return {"scene_id": context["scene_id"], "required_events": ["灯台の灯りを見つける"]}
 
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)
         candidate = service._improve(
-            "scene_card", {"scene_id": "v01-c01-s01"}, RevisionLossModel(), state,
-            lambda value: None,
+            "scene_card", {"scene_id": "v01-c01-s01"}, RepairingModel(), state,
+            lambda value: self.assertEqual(value["scene_id"], "v01-c01-s01"),
         )
-        self.assertEqual(candidate["scene_id"], "v01-c01-s01")
-        self.assertEqual(state["attempts"][-1]["kind"], "revision_failed")
-        for attempt in state["attempts"]:
-            self.assertTrue({"stage", "kind", "unit", "input", "response", "validation"}.issubset(attempt))
+        self.assertEqual(candidate["required_events"], ["灯台の灯りを見つける"])
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
+
+    def test_card_context_exposes_same_volume_time_floor_and_allowed_time_ids(self) -> None:
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        state["timeline"] = [
+            {"id": "time-0001", "sequence": 0},
+            {"id": "time-0002", "sequence": 1},
+            {"id": "time-0003", "sequence": 2},
+        ]
+        state["cards"] = {"v01-c01-s01": {"end_time_id": "time-0002"}}
+        context = service._card_context(state, {"number": 1}, {"number": 2}, 1, False)
+        self.assertEqual(context["same_volume_time_floor"], {"sequence": 1, "time_id": "time-0002"})
+        self.assertEqual(context["allowed_start_time_ids"], ["time-0002", "time-0003"])
 
     def test_continuity_update_requires_matching_source_scene_and_existing_state_field(self) -> None:
         service = SeriesService(self.workspace)
@@ -332,6 +432,24 @@ class StateContractTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ContractError, "場面ID|更新できないフィールド"):
             service._validate_continuity({"handoff_summary": "次へ", "state_updates": [update]}, "根拠", card, state, False)
+    def test_continuity_rejects_relationship_updates_even_when_the_field_exists(self) -> None:
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        state["threads"] = []
+        state["relationships"] = [{"id": "rel-0001", "current_state": {"emotion": "緊張"}}]
+        card = {"scene_id": "v01-c01-s01", "allowed_update_ids": ["rel-0001"], "thread_actions": []}
+        update = {"source_scene_id": "v01-c01-s01", "id": "rel-0001", "field": "emotion", "value": "信頼", "evidence": "根拠"}
+        with self.assertRaisesRegex(ContractError, "更新できない台帳種別"):
+            service._validate_continuity({"handoff_summary": "次へ", "state_updates": [update]}, "根拠", card, state, False)
+
+    def test_volume_summary_requires_every_unresolved_major_thread_exactly_once(self) -> None:
+        state = SeriesService(self.workspace)._new_state(BRIEF)
+        state["threads"] = [
+            {"id": "thread-0001", "importance": "major", "current_state": {"status": "open"}},
+            {"id": "thread-0002", "importance": "supporting", "current_state": {"status": "open"}},
+        ]
+        with self.assertRaisesRegex(ContractError, "未回収主要項目"):
+            SeriesService._validate_volume_summary({"volume_summary": "要約", "unresolved_thread_ids": []}, state)
 
 
 class SceneCardContractTests(unittest.TestCase):

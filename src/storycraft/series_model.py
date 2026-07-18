@@ -21,7 +21,11 @@ class OpenAIStoryModel:
 
     def __init__(self, settings, raw_dir) -> None:
         self.client = LLMClient(settings, raw_dir)
-        self.attempt = 0
+        self._seed_sequence = 0
+
+    def set_log_ref(self, ref: str) -> None:
+        """Workflowから受け取る対象座標。prompt本文には含めない。"""
+        self._log_ref = ref
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         return self._call("generate", stage, self._render("generate", stage, context=context))
@@ -54,20 +58,22 @@ class OpenAIStoryModel:
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
         failure_reason = "unknown"
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
+        ref = getattr(self, "_log_ref", stage)
         for retry_attempt in range(1, attempts + 1):
-            self.attempt += 1
+            self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1
+            seed = self._seed_sequence
             messages = [
                 {"role": "system", "content": get_template_loader().render_system()},
                 {"role": "user", "content": user_prompt},
-                {"__kind": kind, "__phase": stage, "__ref": stage, "__attempt": self.attempt},
+                {"__kind": kind, "__phase": stage, "__ref": ref, "__attempt": retry_attempt},
             ]
-            record = self.client.call_once(messages, {"type": "json_object"}, self.attempt)
+            record = self.client.call_once(messages, {"type": "json_object"}, seed)
             self.client.save_raw(record, messages)
             if record.error:
                 failure_reason = f"transport:{self._safe_error_type(record.error)}"
                 logger.error(
-                    "LLM通信エラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s error_type=%s",
-                    stage, kind, retry_attempt, attempts, self.attempt, self._safe_error_type(record.error),
+                    "LLM通信エラー: stage=%s kind=%s attempt=%s/%s error_type=%s",
+                    stage, kind, retry_attempt, attempts, self._safe_error_type(record.error),
                 )
                 continue
             try:
@@ -75,15 +81,15 @@ class OpenAIStoryModel:
             except json.JSONDecodeError as exc:
                 failure_reason = "json_decode_error"
                 logger.error(
-                    "LLM JSONパースエラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s error=%s",
-                    stage, kind, retry_attempt, attempts, self.attempt, exc,
+                    "LLM JSONパースエラー: stage=%s kind=%s attempt=%s/%s error=%s",
+                    stage, kind, retry_attempt, attempts, exc,
                 )
                 continue
             if isinstance(value, dict):
                 return value
             failure_reason = "json_non_object"
             logger.error(
-                "LLM JSON形式エラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s actual=%s",
-                stage, kind, retry_attempt, attempts, self.attempt, type(value).__name__,
+                "LLM JSON形式エラー: stage=%s kind=%s attempt=%s/%s actual=%s",
+                stage, kind, retry_attempt, attempts, type(value).__name__,
             )
         raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: reason={failure_reason}")

@@ -11,6 +11,7 @@
         "required": [
           "kind",
           "description",
+          "sequence",
           "related_ids",
           "fixed_rule",
           "initial_state"
@@ -24,10 +25,15 @@
             "type": "string",
             "description": "この時間要素が何を表すかの具体的説明。期間・頻度・変化の方向性・物語への影響を含める。"
           },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "物語開始からの正規化した時間順序。小さいほど早い。同一sequenceは同時点を表す。scene cardの開始・終了順を決定的に比較する。"
+          },
           "related_ids": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "関連する人物ID・世界要素ID・主要項目IDの配列。台帳登録済みのIDのみ。"
+            "description": "関連する人物ID・関係ID・世界要素IDの配列。台帳登録済みのIDのみ。threadsはまだ未生成なので参照しない。"
           },
           "fixed_rule": {
             "type": "string",

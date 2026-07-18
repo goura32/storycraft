@@ -1,6 +1,8 @@
 """シリーズ生成工程の状態遷移とモデル協調。"""
 from __future__ import annotations
 
+from collections import Counter
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,7 +22,7 @@ class SeriesWorkflow(ContractValidator):
         if keywords is not None and (not keywords or not all(isinstance(keyword, str) and keyword.strip() for keyword in keywords)):
             raise ContractError("keywords は空でない文字列を一つ以上指定してください")
         return {
-            "version": 4,
+            "version": 5,
             "brief": brief,
             "keywords": keywords,
             "volume_map": None,
@@ -35,6 +37,7 @@ class SeriesWorkflow(ContractValidator):
             "volume_summaries": {},
             "initial_ledgers_confirmed": False,
             "attempts": [],
+            "quality_acceptances": [],
             "closure": {},
             "completed": False,
             "last_completed_unit": None,
@@ -53,10 +56,49 @@ class SeriesWorkflow(ContractValidator):
             return self._result(state, self._volume_paths())
         except ContractError as exc:
             active = state.get("_active") or {"stage": "unknown", "unit": None}
+            logger.error(
+                "工程終了: %s stage=%s result=failed error=%s",
+                self._progress_label(state, {"scene_id": active.get("unit")}), active["stage"], exc,
+            )
             state["stopped_at"] = active
             state["stop_reason"] = str(exc)
             self.store.save(state)
             raise
+
+    @staticmethod
+    def _progress_label(state: dict[str, Any], context: dict[str, Any]) -> str:
+        """現在の対象を、運用ログで比較可能な巻・章・場面座標に整形する。"""
+        scene_id = context.get("scene_id")
+        volume = context.get("volume") if isinstance(context.get("volume"), dict) else {}
+        volume_number = volume.get("number")
+        chapter_number = None
+        scene_number = None
+        if isinstance(scene_id, str):
+            try:
+                volume_number = int(scene_id[1:3])
+                chapter_number = int(scene_id[5:7])
+                scene_number = int(scene_id[9:11])
+            except (TypeError, ValueError):
+                pass
+        volume_map = state.get("volume_map")
+        volumes = volume_map.get("volumes", []) if isinstance(volume_map, dict) else []
+        if not isinstance(volume_number, int) or not volumes:
+            return "v:-/-"
+        label = f"v:{volume_number}/{len(volumes)}"
+        chapters = state.get("chapters", {}).get(str(volume_number), [])
+        if not isinstance(chapter_number, int) or not chapters:
+            return label
+        chapter = next((item for item in chapters if item.get("number") == chapter_number), None)
+        if not isinstance(chapter, dict):
+            return label
+        label += f" c:{chapter_number}/{len(chapters)}"
+        if not isinstance(scene_number, int):
+            return label
+        return f"{label} s:{scene_number}/{chapter['scene_count']}"
+
+    def _finish_stage(self, state: dict[str, Any], stage: str, context: dict[str, Any], candidate: dict[str, Any], result: str) -> dict[str, Any]:
+        logger.info("工程完了: %s stage=%s result=%s", self._progress_label(state, context), stage, result)
+        return candidate
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
         if state["brief"] is None:
@@ -114,7 +156,7 @@ class SeriesWorkflow(ContractValidator):
                         continue
                     is_final_scene = self._is_final_scene(state, volume, chapter, scene_number)
                     card_context = self._card_context(state, volume, chapter, scene_number, is_final_scene)
-                    card = self._improve("scene_card", card_context, model, state, lambda item: self._validate_card(item, scene_id, state))
+                    card = self._improve("scene_card", card_context, model, state, lambda item: self._validate_card(item, scene_id, state, volume))
                     state["cards"][scene_id] = card
                     state["last_completed_unit"] = {"stage": "scene_card", "unit": scene_id}
                     prose_context = self._writer_context(state, card, scene_id, is_final_scene)
@@ -145,6 +187,11 @@ class SeriesWorkflow(ContractValidator):
         validator: Callable[[dict[str, Any]], None], *, review: bool = True,
     ) -> dict[str, Any]:
         state["_active"] = {"stage": stage, "unit": context.get("scene_id"), "phase": "generate"}
+        progress = self._progress_label(state, context)
+        set_log_ref = getattr(model, "set_log_ref", None)
+        if callable(set_log_ref):
+            set_log_ref(progress)
+        logger.info("工程開始: %s stage=%s", progress, stage)
         self.store.save(state)
         candidate: dict[str, Any] | None = None
         error = ""
@@ -169,7 +216,7 @@ class SeriesWorkflow(ContractValidator):
         if not review:
             state["_active"]["phase"] = "completed"
             self.store.save(state)
-            return candidate
+            return self._finish_stage(state, stage, context, candidate, "accepted")
 
         # 批評→修正ループ（max_critique_passes 回まで）。
         # Workflow はテスト/外部実装の StoryModel も受け入れるため、OpenAIStoryModel 固有の
@@ -184,7 +231,9 @@ class SeriesWorkflow(ContractValidator):
                 pass_num=pass_num, max_passes=max_passes, final=False,
             )
             if critique is None:
-                return current_candidate
+                state["_active"]["phase"] = "failed"
+                self.store.save(state)
+                raise ContractError(f"{stage} の批評を検証できないため停止しました")
             if critique["issues"]:
                 logger.info(f"批評指摘: stage={stage} pass={pass_num}/{max_passes} 件数={len(critique['issues'])} severities={[i['severity'] for i in critique['issues']]}")
                 if logger.isEnabledFor(10):  # DEBUG
@@ -194,7 +243,7 @@ class SeriesWorkflow(ContractValidator):
                 logger.info(f"批評合格: {stage} pass={pass_num}")
                 state["_active"]["phase"] = "completed"
                 self.store.save(state)
-                return current_candidate
+                return self._finish_stage(state, stage, context, current_candidate, "accepted")
             logger.warning(f"批評指摘あり: {stage} pass={pass_num}/{max_passes} issues={len(critique['issues'])}")
             # 修正実行
             state["_active"]["phase"] = f"revision_pass_{pass_num}"
@@ -205,17 +254,22 @@ class SeriesWorkflow(ContractValidator):
                 if not isinstance(revised, dict):
                     raise ContractError("修正版がオブジェクトではありません")
                 validator(revised)
-                self._validate_revision_preserves_contract(stage, current_candidate, revised)
             except LLMCallError as exc:
                 self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
                 state["_active"]["phase"] = "failed"
                 self.store.save(state)
                 raise ContractError(f"{stage} の修正に失敗したため停止しました: {exc}") from exc
+            except ContractError as exc:
+                self._record_attempt(state, stage, "revision_rejected", context, revised, str(exc))
+                state["_active"]["phase"] = f"revision_pass_{pass_num}_rejected"
+                self.store.save(state)
+                logger.warning("修正版を構造契約違反として不採用: stage=%s pass=%s error=%s", stage, pass_num, exc)
+                continue
             except Exception as exc:
                 self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
                 state["_active"]["phase"] = "failed"
                 self.store.save(state)
-                return current_candidate
+                raise ContractError(f"{stage} の修正版処理に失敗したため停止しました: {exc}") from exc
             self._record_attempt(state, stage, "revision", context, revised, "accepted")
             current_candidate = revised
         # 最終revisionも必ず検査する。ここを省くと、最終revisionが全issueを解消しても
@@ -226,16 +280,33 @@ class SeriesWorkflow(ContractValidator):
             pass_num=final_pass, max_passes=max_passes, final=True,
         )
         if final_critique is None:
-            return current_candidate
+            state["_active"]["phase"] = "failed"
+            self.store.save(state)
+            raise ContractError(f"{stage} の最終批評を検証できないため停止しました")
         if not final_critique["issues"]:
             logger.info(f"批評合格: {stage} pass={final_pass} (final revision verified)")
             state["_active"]["phase"] = "completed"
             self.store.save(state)
-            return current_candidate
-        logger.warning(f"批評未解決: {stage} max_revisions={max_passes} final_issues={len(final_critique['issues'])}")
-        state["_active"]["phase"] = "completed"
-        self.store.save(state)
-        return current_candidate
+            return self._finish_stage(state, stage, context, current_candidate, "accepted")
+        acceptance = {
+            "stage": stage,
+            "unit": context.get("scene_id"),
+            "reason": "max_critique_passes_exhausted",
+            "max_critique_passes": max_passes,
+            "final_review_pass": final_pass,
+            "issues": final_critique["issues"],
+        }
+        state["quality_acceptances"].append(acceptance)
+        self._record_attempt(state, stage, "quality_accepted_with_known_issues", context, acceptance, "accepted_with_known_issues")
+        logger.warning(
+            "既知の品質課題を受容して採用: stage=%s max_revisions=%s final_issues=%s severities=%s",
+            stage, max_passes, len(final_critique["issues"]),
+            [issue["severity"] for issue in final_critique["issues"]],
+        )
+        state["_active"]["phase"] = "completed_with_known_issues"
+        # 親工程がcandidateをstateへ反映した直後にまとめて永続化する。
+        # ここで保存すると、受容記録だけが残ってcandidateが未採用の状態になり得る。
+        return self._finish_stage(state, stage, context, current_candidate, "accepted_with_known_issues")
 
     def _review_candidate(
         self, stage: str, candidate: dict[str, Any], context: dict[str, Any], model: StoryModel,
@@ -246,6 +317,7 @@ class SeriesWorkflow(ContractValidator):
         state["_active"] = active
         active["phase"] = "critique_final" if final else f"critique_pass_{pass_num}"
         self.store.save(state)
+        critique: Any = None
         try:
             critique = model.critique(stage, candidate, context)
             self._validate_critique(critique)
@@ -256,7 +328,7 @@ class SeriesWorkflow(ContractValidator):
             label = "最終批評" if final else "批評"
             raise ContractError(f"{stage} の{label}に失敗したため停止しました: {exc}") from exc
         except Exception as exc:
-            self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
+            self._record_attempt(state, stage, "critique_failed", context, critique, str(exc))
             active["phase"] = "failed"
             self.store.save(state)
             return None
@@ -275,15 +347,16 @@ class SeriesWorkflow(ContractValidator):
         })
 
     def _validate_volume_thread_targets(self, state: dict[str, Any], volume: dict[str, Any]) -> None:
-        required = {(target["thread_id"], target["required_action"]) for target in volume["thread_targets"]}
-        actual = {
+        actual = Counter(
             (action["thread_id"], action["action"])
             for scene_id, card in state["cards"].items()
             if scene_id.startswith(f"v{volume['number']:02d}-")
             for action in card.get("thread_actions", [])
-        }
-        missing = required - actual
-        if missing:
+        )
+        required = Counter((target["thread_id"], target["required_action"]) for target in volume["thread_targets"])
+        if actual != required:
+            if actual - required:
+                raise ContractError("場面カードに巻配分の対象外または重複した主要項目操作があります")
             raise ContractError("巻配分で必須の主要項目操作が場面カードにありません")
 
     def _validate_initial_ledgers(self, state: dict[str, Any]) -> None:
@@ -316,7 +389,25 @@ class SeriesWorkflow(ContractValidator):
 
     def _card_context(self, state: dict[str, Any], volume: dict[str, Any], chapter: dict[str, Any], scene_number: int, is_final_scene: bool) -> dict[str, Any]:
         scene_id = self._scene_id(volume["number"], chapter["number"], scene_number)
-        return {"scene_id": scene_id, "volume": volume, "chapter": chapter, "scene_number": scene_number, "ledgers": self._ledger_context(state), "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "", "is_final_scene": is_final_scene}
+        time_by_id = {record["id"]: record for record in state["timeline"]}
+        volume_prefix = scene_id.split("-c", 1)[0] + "-"
+        prior_end_ids = [
+            card["end_time_id"] for prior_scene_id, card in state["cards"].items()
+            if prior_scene_id.startswith(volume_prefix)
+        ]
+        floor = max((time_by_id[time_id] for time_id in prior_end_ids), key=lambda record: record["sequence"], default=None)
+        allowed_start_time_ids = [
+            record["id"] for record in state["timeline"]
+            if floor is None or record["sequence"] >= floor["sequence"]
+        ]
+        return {
+            "scene_id": scene_id, "volume": volume, "chapter": chapter, "scene_number": scene_number,
+            "ledgers": self._ledger_context(state),
+            "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "",
+            "is_final_scene": is_final_scene,
+            "same_volume_time_floor": {"sequence": floor["sequence"], "time_id": floor["id"]} if floor else None,
+            "allowed_start_time_ids": allowed_start_time_ids,
+        }
 
     def _writer_context(self, state: dict[str, Any], card: dict[str, Any], scene_id: str, is_final_scene: bool) -> dict[str, Any]:
         visible = {record["id"]: record for key in ("characters", "relationships", "world", "timeline", "threads") for record in state[key] or [] if record["id"] in card["visible_ids"]}

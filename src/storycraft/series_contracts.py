@@ -148,6 +148,9 @@ class ContractValidator:
         for record in records:
             ContractValidator._require(record, "kind", "description", "related_ids", "fixed_rule")
             ContractValidator._initial_state(record)
+            sequence = record.get("sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
+                raise ContractError("時間台帳の sequence が不正です")
             if not isinstance(record["related_ids"], list) or not set(record["related_ids"]).issubset(known_ids):
                 raise ContractError("時間台帳が未知IDを参照しています")
             if "id" in record:
@@ -186,12 +189,13 @@ class ContractValidator:
             if not isinstance(chapter.get("scene_count"), int) or not 1 <= chapter["scene_count"] <= 4:
                 raise ContractError("場面数は1〜4でなければなりません")
 
-    def _validate_card(self, card: dict[str, Any], scene_id: str, state: dict[str, Any]) -> None:
+    def _validate_card(self, card: dict[str, Any], scene_id: str, state: dict[str, Any], volume: dict[str, Any] | None = None) -> None:
         self._require(card, "scene_id", "pov_character_id", "location_id", "start_time_id", "end_time_id", "character_ids", "purpose", "required_events", "thread_actions", "reader_disclosure", "withheld_information", "presentation_rules", "end_change", "visible_ids", "allowed_update_ids")
         if card["scene_id"] != scene_id:
             raise ContractError("場面カードのIDが実行対象と一致しません")
         characters = {record["id"] for record in state["characters"]}
-        times = {record["id"] for record in state["timeline"]}
+        time_records = {record["id"]: record for record in state["timeline"]}
+        times = set(time_records)
         world = {record["id"] for record in state["world"]}
         threads = {record["id"] for record in state["threads"]}
         known = self._known_ids(state)
@@ -199,20 +203,49 @@ class ContractValidator:
             raise ContractError("場面カードの視点人物または場所が不正です")
         if card["start_time_id"] not in times or card["end_time_id"] not in times:
             raise ContractError("場面カードの時刻が不正です")
+        if time_records[card["start_time_id"]]["sequence"] > time_records[card["end_time_id"]]["sequence"]:
+            raise ContractError("場面カードの開始時刻が終了時刻より後です")
+        volume_prefix = scene_id.split("-c", 1)[0] + "-"
+        previous_ends = [
+            time_records[prior_card["end_time_id"]]["sequence"]
+            for prior_scene_id, prior_card in state["cards"].items()
+            if prior_scene_id.startswith(volume_prefix)
+        ]
+        if previous_ends and time_records[card["start_time_id"]]["sequence"] < max(previous_ends):
+            raise ContractError("場面カードの時刻が同一巻の既存場面より逆行しています")
         if not isinstance(card["character_ids"], list) or not card["character_ids"] or not set(card["character_ids"]).issubset(characters):
             raise ContractError("場面カードの登場人物が不正です")
+        if card["pov_character_id"] not in card["character_ids"]:
+            raise ContractError("場面カードの視点人物は登場人物に含めなければなりません")
         if not isinstance(card["thread_actions"], list):
             raise ContractError("場面カードの伏線操作が不正です")
+        action_pairs: set[tuple[str, str]] = set()
         for action in card["thread_actions"]:
             self._require(action, "thread_id", "action")
+            pair = (action["thread_id"], action["action"])
             if action["thread_id"] not in threads or action["action"] not in {"introduce", "advance", "resolve"}:
                 raise ContractError("場面カードの伏線操作が不正です")
+            if pair in action_pairs:
+                raise ContractError("場面カードの伏線操作が重複しています")
+            action_pairs.add(pair)
+        if volume is not None:
+            planned = {(target["thread_id"], target["required_action"]) for target in volume["thread_targets"]}
+            if not action_pairs.issubset(planned):
+                raise ContractError("場面カードに巻配分の対象外の主要項目操作があります")
         for field in ("visible_ids", "allowed_update_ids"):
             values = card[field]
             if not isinstance(values, list) or len(values) != len(set(values)) or not set(values).issubset(known):
                 raise ContractError(f"場面カードの {field} が不正です")
+        required_visible = {
+            card["pov_character_id"], card["location_id"], card["start_time_id"], card["end_time_id"],
+            *card["character_ids"], *(action["thread_id"] for action in card["thread_actions"]),
+        }
+        if not required_visible.issubset(card["visible_ids"]):
+            raise ContractError("場面カードの visible_ids に必須の参照IDがありません")
         if not set(card["allowed_update_ids"]).issubset(card["visible_ids"]):
             raise ContractError("状態更新の許可IDは可視IDの部分集合でなければなりません")
+        if not all(identifier.startswith(("char-", "thread-")) for identifier in card["allowed_update_ids"]):
+            raise ContractError("状態更新は人物または主要項目だけに許可できます")
 
     @staticmethod
     def _validate_scene(value: dict[str, Any]) -> None:
@@ -239,13 +272,26 @@ class ContractValidator:
             if target is None:
                 raise ContractError("状態更新が未知IDを参照しています")
             field = update["field"]
-            if field == "status":
-                if not update["id"].startswith("thread-") or update["value"] not in {"open", "in_progress", "resolved"}:
-                    raise ContractError("主要項目以外のstatus更新または不正な状態です")
-                if update["value"] == "resolved":
-                    resolved.add(update["id"])
-            elif field == "current_state" or field not in target["current_state"]:
-                raise ContractError("更新できないフィールドです")
+            if update["id"].startswith("thread-"):
+                if target.get("importance") != "major":
+                    raise ContractError("supporting主要項目は状態更新できません")
+                if field == "status":
+                    if update["value"] not in {"open", "in_progress", "resolved"}:
+                        raise ContractError("主要項目の状態が不正です")
+                    if update["value"] == "resolved":
+                        if (update["id"], "resolve") not in {(action["thread_id"], action["action"]) for action in card["thread_actions"]}:
+                            raise ContractError("主要項目を回収するには場面カードの resolve 操作が必要です")
+                        resolved.add(update["id"])
+                elif field == "progress":
+                    if not isinstance(update["value"], (int, float)) or isinstance(update["value"], bool) or not 0.0 <= update["value"] <= 1.0:
+                        raise ContractError("主要項目の進捗は0.0〜1.0の数値でなければなりません")
+                else:
+                    raise ContractError("主要項目の更新フィールドが不正です")
+            elif update["id"].startswith("char-"):
+                if field not in {"emotion", "situation", "recent_goal"} or not isinstance(update["value"], str) or not update["value"].strip():
+                    raise ContractError("人物の更新フィールドまたは値が不正です")
+            else:
+                raise ContractError("更新できない台帳種別です")
         if is_final_scene and not unresolved.issubset(resolved):
             raise ContractError("最終場面で主要項目がすべて回収されていません")
 
@@ -253,9 +299,13 @@ class ContractValidator:
     def _validate_volume_summary(value: dict[str, Any], state: dict[str, Any]) -> None:
         if not isinstance(value.get("volume_summary"), str) or not value["volume_summary"].strip() or not isinstance(value.get("unresolved_thread_ids"), list):
             raise ContractError("巻要約が不正です")
-        known = {record["id"] for record in state["threads"]}
-        if not set(value["unresolved_thread_ids"]).issubset(known):
-            raise ContractError("巻要約が未知の主要項目を参照しています")
+        expected = {
+            record["id"] for record in state["threads"]
+            if record["importance"] == "major" and record["current_state"].get("status") != "resolved"
+        }
+        actual = value["unresolved_thread_ids"]
+        if len(actual) != len(set(actual)) or set(actual) != expected:
+            raise ContractError("巻要約の未回収主要項目が現在状態と一致しません")
 
     def _validate_closure(self, value: dict[str, Any], state: dict[str, Any]) -> None:
         resolved = value.get("resolved_ids")

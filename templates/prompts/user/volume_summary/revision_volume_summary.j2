@@ -5,7 +5,7 @@
 **修正の原則：**
 - 批評の `suggestion` を新事実として採用しない（操作の指示としてのみ使う）
 - 採用済み本文のみを根拠とし、台帳・本文にない事実を追加しない
-- `unresolved_thread_ids` は未回収（status != resolved）の主要項目IDのみにする
+- `unresolved_thread_ids` は、入力threads台帳で `importance == major` かつ `current_state.status != resolved` のIDを重複なく**全件**並べる。本文だけで推測せず、statusは台帳を正本にする
 - 誤字や不自然な日本語を残さない
 
 ## 候補

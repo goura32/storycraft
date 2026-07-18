@@ -4,7 +4,8 @@
 
 **修正の原則：**
 - 批評の `suggestion` を新事実として採用しない（操作の指示としてのみ使う）
-- 全IDの一致、形式、整合性、所有範囲、更新制約を保つ
+- `scene_id` と入力台帳に存在するID参照だけは正しく保つ。一方、批評で問題になった `character_ids`、`thread_actions`、`required_events`、`visible_ids`、`allowed_update_ids`、時刻、目的、開示・隠蔽・演出は、入力Canonと巻配分に再適合させるために修正してよい
+- 時刻は入力の `same_volume_time_floor` と `allowed_start_time_ids` を必ず確認し、同じ巻で確定済みの終了時刻より前に戻さない。`start_time_id` は `allowed_start_time_ids` から選び、`end_time_id` は開始と同じか後のsequenceにする
 - 誤字や不自然な日本語を残さない
 
 ## 候補

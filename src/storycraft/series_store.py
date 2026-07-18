@@ -27,14 +27,14 @@ class StateStore:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ContractError("保存状態が壊れています") from exc
-        if data.get("version") != 4:
+        if data.get("version") != 5:
             raise ContractError("この保存状態は現行のシリーズ形式ではありません")
         required = {
             "brief", "keywords", "volume_map", "characters", "relationships", "world", "timeline", "threads",
             "chapters", "cards", "scenes", "volume_summaries", "initial_ledgers_confirmed",
-            "attempts", "closure", "completed", "last_completed_unit", "stopped_at", "stop_reason",
+            "attempts", "quality_acceptances", "closure", "completed", "last_completed_unit", "stopped_at", "stop_reason",
         }
-        if not required.issubset(data) or not isinstance(data["attempts"], list):
+        if not required.issubset(data) or not isinstance(data["attempts"], list) or not isinstance(data["quality_acceptances"], list):
             raise ContractError("保存状態が製品契約を満たしていません")
         return data
 

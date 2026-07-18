@@ -13,7 +13,7 @@
     },
     "ending_evidence": {
       "type": "string",
-      "description": "最終場面本文中の、結末の根拠となる該当箇所（引用または要約）。brief.ending と整合する描写であること。"
+      "description": "最終場面本文から一字一句そのまま抜き出す、結末の根拠となる非空の短い逐語引用。要約・言い換えは禁止。"
     },
     "ending_authority": {
       "type": "string",
