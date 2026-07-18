@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .log import logger
-from .series_contracts import ContractError, ContractValidator, RunResult, StoryModel
+from .series_contracts import ContractError, ContractValidator, LLMCallError, RunResult, StoryModel
 from .series_output import OutputWriter
 
 
@@ -60,10 +60,7 @@ class SeriesWorkflow(ContractValidator):
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
         if state["brief"] is None:
-            brief = self._improve(
-                "brief", {"keywords": state["keywords"]}, model, state, self._validate_brief,
-                require_clean_review=True,
-            )
+            brief = self._improve("brief", {"keywords": state["keywords"]}, model, state, self._validate_brief)
             state["brief"] = brief
             state["last_completed_unit"] = {"stage": "brief", "unit": None}
             return None
@@ -146,7 +143,6 @@ class SeriesWorkflow(ContractValidator):
     def _improve(
         self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any],
         validator: Callable[[dict[str, Any]], None], *, review: bool = True,
-        require_clean_review: bool = False,
     ) -> dict[str, Any]:
         state["_active"] = {"stage": stage, "unit": context.get("scene_id"), "phase": "generate"}
         self.store.save(state)
@@ -188,12 +184,15 @@ class SeriesWorkflow(ContractValidator):
             try:
                 critique = model.critique(stage, current_candidate, context)
                 self._validate_critique(critique)
+            except LLMCallError as exc:
+                self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
+                state["_active"]["phase"] = "failed"
+                self.store.save(state)
+                raise ContractError(f"{stage} の批評に失敗したため停止しました: {exc}") from exc
             except Exception as exc:
                 self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
                 state["_active"]["phase"] = "failed"
                 self.store.save(state)
-                if require_clean_review:
-                    raise ContractError(f"{stage} の批評に失敗したため採用しません: {exc}") from exc
                 return current_candidate
             self._record_attempt(state, stage, "critique", context, critique, "accepted")
             if critique["issues"]:
@@ -210,18 +209,22 @@ class SeriesWorkflow(ContractValidator):
             # 修正実行
             state["_active"]["phase"] = f"revision_pass_{pass_num}"
             self.store.save(state)
+            revised: dict[str, Any] | None = None
             try:
                 revised = model.revision(stage, current_candidate, critique, context)
                 if not isinstance(revised, dict):
                     raise ContractError("修正版がオブジェクトではありません")
                 validator(revised)
                 self._validate_revision_preserves_contract(stage, current_candidate, revised)
+            except LLMCallError as exc:
+                self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
+                state["_active"]["phase"] = "failed"
+                self.store.save(state)
+                raise ContractError(f"{stage} の修正に失敗したため停止しました: {exc}") from exc
             except Exception as exc:
                 self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
                 state["_active"]["phase"] = "failed"
                 self.store.save(state)
-                if require_clean_review:
-                    raise ContractError(f"{stage} の修正に失敗したため採用しません: {exc}") from exc
                 return current_candidate
             self._record_attempt(state, stage, "revision", context, revised, "accepted")
             current_candidate = revised
@@ -233,12 +236,15 @@ class SeriesWorkflow(ContractValidator):
         try:
             final_critique = model.critique(stage, current_candidate, context)
             self._validate_critique(final_critique)
+        except LLMCallError as exc:
+            self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
+            state["_active"]["phase"] = "failed"
+            self.store.save(state)
+            raise ContractError(f"{stage} の最終批評に失敗したため停止しました: {exc}") from exc
         except Exception as exc:
             self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
             state["_active"]["phase"] = "failed"
             self.store.save(state)
-            if require_clean_review:
-                raise ContractError(f"{stage} の最終批評に失敗したため採用しません: {exc}") from exc
             return current_candidate
         self._record_attempt(state, stage, "critique", context, final_critique, "accepted")
         if not final_critique["issues"]:
@@ -247,10 +253,8 @@ class SeriesWorkflow(ContractValidator):
             self.store.save(state)
             return current_candidate
         logger.warning(f"批評未解決: {stage} max_revisions={max_passes} final_issues={len(final_critique['issues'])}")
-        state["_active"]["phase"] = "failed" if require_clean_review else "completed"
+        state["_active"]["phase"] = "completed"
         self.store.save(state)
-        if require_clean_review:
-            raise ContractError(f"{stage} の批評が未解決のため採用しません")
         return current_candidate
 
     @staticmethod

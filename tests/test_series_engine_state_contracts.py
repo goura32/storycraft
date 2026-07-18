@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from storycraft.series_engine import ContractError, SeriesService
+from storycraft.series_contracts import ContractError, LLMCallError
+from storycraft.series_engine import SeriesService
 from test_series_engine_flow import BRIEF, FlowModel
 
 
@@ -128,28 +129,107 @@ class StateContractTests(unittest.TestCase):
         result = service.step(FlowModel())
         self.assertTrue(result.completed)
 
-    def test_unresolved_brief_review_blocks_adoption_and_downstream_stages(self) -> None:
+    def test_unresolved_brief_review_is_adopted_and_allows_characters_stage(self) -> None:
         class UnresolvedBriefModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
 
+            def __init__(self) -> None:
+                self._flow = FlowModel()
+                self.generated_stages: list[str] = []
+
             def generate(self, stage: str, context: dict) -> dict:
-                if stage != "brief":
-                    raise AssertionError(stage)
-                return dict(BRIEF)
+                self.generated_stages.append(stage)
+                return dict(BRIEF) if stage == "brief" else self._flow.generate(stage, context)
 
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
-                return {"issues": [{"severity": "major", "field": "protagonist", "description": "簡体字が残っている", "suggestion": "日本語修正"}]}
+                if stage == "brief":
+                    return {"issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}]}
+                return {"issues": []}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
                 return dict(candidate)
 
         service = SeriesService(self.workspace)
         state = service._new_state(keywords=["女性向けロマンスファンタジー"])
-        with self.assertRaisesRegex(ContractError, "brief の批評が未解決"):
-            service._run_one(state, UnresolvedBriefModel())
-        self.assertIsNone(state["brief"])
-        self.assertIsNone(state["characters"])
+        model = UnresolvedBriefModel()
+        service._run_one(state, model)
+        self.assertEqual(state["brief"], BRIEF)
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
+
+        service._run_one(state, model)
+        self.assertEqual(model.generated_stages, ["brief", "characters"])
+        self.assertIsNotNone(state["characters"])
+
+    def test_critique_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
+        class FailingCritiqueModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def generate(self, stage: str, context: dict) -> dict:
+                self_stage.assertEqual(stage, "characters")
+                return FlowModel().generate(stage, context)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                raise LLMCallError("LLM通信の再試行上限に達しました")
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                raise AssertionError("critique failure must not revision")
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        self_stage = self
+        with self.assertRaisesRegex(ContractError, "characters の批評に失敗"):
+            service._run_one(state, FailingCritiqueModel())
+        self.assertIsNone(state["characters"])
+        self.assertEqual(state["_active"]["phase"], "failed")
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique_failed"])
+
+    def test_revision_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
+        class FailingRevisionModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def generate(self, stage: str, context: dict) -> dict:
+                return FlowModel().generate(stage, context)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": [{"severity": "minor", "field": "characters", "description": "改善点", "suggestion": "修正"}]}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                raise LLMCallError("LLM通信の再試行上限に達しました")
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        with self.assertRaisesRegex(ContractError, "characters の修正に失敗"):
+            service._run_one(state, FailingRevisionModel())
+        self.assertIsNone(state["characters"])
+        self.assertEqual(state["_active"]["phase"], "failed")
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision_failed"])
+
+    def test_final_critique_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
+        class FailingFinalCritiqueModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def __init__(self) -> None:
+                self.critique_calls = 0
+
+            def generate(self, stage: str, context: dict) -> dict:
+                return FlowModel().generate(stage, context)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                self.critique_calls += 1
+                if self.critique_calls == 1:
+                    return {"issues": [{"severity": "minor", "field": "characters", "description": "改善点", "suggestion": "修正"}]}
+                raise LLMCallError("LLM通信の再試行上限に達しました")
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return dict(candidate)
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        with self.assertRaisesRegex(ContractError, "characters の最終批評に失敗"):
+            service._run_one(state, FailingFinalCritiqueModel())
+        self.assertIsNone(state["characters"])
+        self.assertEqual(state["_active"]["phase"], "failed")
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique_failed"])
 
     def test_final_revision_is_reviewed_and_adopted_when_clean(self) -> None:
         class ResolvingBriefModel:

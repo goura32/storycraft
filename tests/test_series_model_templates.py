@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from storycraft.llm import CallRecord
 from storycraft.prompt_template import get_template_loader
+from storycraft.series_contracts import LLMCallError
 from storycraft.series_model import OpenAIStoryModel
 
 
@@ -28,6 +29,22 @@ class _CapturingClient:
 
     def save_raw(self, _record: CallRecord, _messages: list[dict]) -> None:
         pass
+
+
+class _SequenceClient:
+    def __init__(self, records: list[CallRecord]) -> None:
+        self.settings = SimpleNamespace(retry={"max_attempts": len(records)})
+        self.records = records
+        self.calls = 0
+        self.raw_saves = 0
+
+    def call_once(self, _messages: list[dict], _response_format: dict, _seed: int) -> CallRecord:
+        record = self.records[self.calls]
+        self.calls += 1
+        return record
+
+    def save_raw(self, _record: CallRecord, _messages: list[dict]) -> None:
+        self.raw_saves += 1
 
 
 class _TemplateLoader:
@@ -61,6 +78,28 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
             [("generate", "brief", {"stage": "brief", "context": {"keywords": ["霧の島"]}, "output_schema": "外部スキーマ:generate/brief"})],
         )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたbriefプロンプト")
+
+    def test_call_exhaustion_raises_llm_call_error_for_transport_and_non_object_json(self) -> None:
+        scenarios = {
+            "transport": [
+                CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, error="ConnectionError: offline"),
+                CallRecord(kind="generate", phase="brief", ref="brief", attempt=2, seed=2, error="ConnectionError: offline"),
+            ],
+            "non_object_json": [
+                CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, content="[]"),
+                CallRecord(kind="generate", phase="brief", ref="brief", attempt=2, seed=2, content="[]"),
+            ],
+        }
+        for name, records in scenarios.items():
+            with self.subTest(name=name):
+                client = _SequenceClient(records)
+                model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+                model.client = client
+                model.attempt = 0
+                with self.assertRaisesRegex(LLMCallError, "brief のLLM呼び出しに失敗"):
+                    model._call("generate", "brief", "prompt")
+                self.assertEqual(client.calls, 2)
+                self.assertEqual(client.raw_saves, 2)
 
     def test_real_brief_and_volume_map_prompts_express_ownership_boundaries(self) -> None:
         brief = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島", "4巻"]})

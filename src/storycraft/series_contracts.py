@@ -10,6 +10,10 @@ class ContractError(ValueError):
     """利用者入力または生成結果が製品契約を満たさない。"""
 
 
+class LLMCallError(ContractError):
+    """設定済みretry後もLLM呼び出しまたはJSON parseに成功しなかった。"""
+
+
 class StoryModel(Protocol):
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]: ...
 

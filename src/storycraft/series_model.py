@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from .llm import LLMClient
-from .series_engine import ContractError
+from .series_contracts import ContractError, LLMCallError
 from .prompt_template import get_template_loader
 
 
@@ -66,4 +66,4 @@ class OpenAIStoryModel:
             if isinstance(value, dict):
                 return value
             last_error = "JSONオブジェクトを返しませんでした"
-        raise ContractError(f"{stage} の生成に失敗しました: {last_error}")
+        raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: {last_error}")
