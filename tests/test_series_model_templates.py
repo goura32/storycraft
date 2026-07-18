@@ -66,11 +66,20 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         brief = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島", "4巻"]})
         volume_map = OpenAIStoryModel._render("generate", "volume_map", context={})
         self.assertIn("keywords", brief)
-        self.assertIn("内容評価は行わない", brief)
+        self.assertIn("自動レビュー", brief)
         self.assertIn("Canon", volume_map)
         self.assertIn("新しい人物、世界設定、因果、秘密、出来事、回収条件を作らない", volume_map)
         self.assertIn("`thread_targets`", volume_map)
         self.assertIn("`brief.ending` は結末の唯一の正本", volume_map)
+
+    def test_brief_quality_templates_enforce_reviewed_adoption_boundaries(self) -> None:
+        generate = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島"]})
+        critique = OpenAIStoryModel._render("critique", "brief", candidate={}, context={"keywords": ["霧の島"]})
+        revision = OpenAIStoryModel._render("revision", "brief", candidate={}, critique={"issues": []}, context={"keywords": ["霧の島"]})
+        self.assertNotIn("内容評価は行わない", generate)
+        self.assertIn("自動レビュー", generate)
+        self.assertIn("未公表の秘密", critique)
+        self.assertIn("未公表の秘密", revision)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
