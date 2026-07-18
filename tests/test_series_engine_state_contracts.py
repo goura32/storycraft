@@ -21,10 +21,10 @@ class StateContractTests(unittest.TestCase):
             service.run(BRIEF, FlowModel())
         logs = "\n".join(captured.output)
         progress = "v:1/4 c:1/1 s:1/1"
-        self.assertIn(f"工程開始: {progress} stage=scene_card", logs)
-        self.assertIn(f"工程完了: {progress} stage=scene_card", logs)
-        self.assertIn(f"工程開始: {progress} stage=scene", logs)
-        self.assertIn(f"工程完了: {progress} stage=continuity", logs)
+        self.assertIn("工程開始: stage=scene_card v:1/4,c:1/1,s:1/1", logs)
+        self.assertIn("工程完了: stage=scene_card v:1/4,c:1/1,s:1/1", logs)
+        self.assertIn("工程開始: stage=scene v:1/4,c:1/1,s:1/1", logs)
+        self.assertIn("工程完了: stage=continuity v:1/4,c:1/1,s:1/1", logs)
 
     def test_failed_scene_persists_stop_reason_and_target_unit(self) -> None:
         service = SeriesService(self.workspace)
@@ -229,6 +229,7 @@ class StateContractTests(unittest.TestCase):
         with self.assertLogs("storycraft", level="INFO") as captured:
             service._improve("quality_probe", {}, AlwaysIssuesModel(), state, lambda value: None)
         output = "\n".join(captured.output)
+        self.assertIn("工程開始: stage=quality_probe v:-/-", output)
         self.assertIn("批評結果: stage=quality_probe quality_pass=1/3 final=False issues=1", output)
         self.assertIn("批評結果: stage=quality_probe quality_pass=2/3 final=False issues=1", output)
         self.assertIn("批評結果: stage=quality_probe quality_pass=3/3 final=True issues=1", output)

@@ -54,7 +54,8 @@ class CallRecord:
 
     def log_identity(self) -> str:
         quality = f" quality_pass={self.quality_pass}" if self.quality_pass else ""
-        return f"phase={self.phase} ref={self.ref} kind={self.kind}{quality} retry={self.attempt}/{self.retry_total}"
+        coordinate = "" if self.ref == self.phase else f" {self.ref.replace(' ', ',')}"
+        return f"stage={self.phase}{coordinate} kind={self.kind}{quality} retry={self.attempt}/{self.retry_total}"
 
     def to_dict(self) -> dict:
         return {
@@ -129,7 +130,7 @@ class LLMClient:
                 while not stream_finished.wait(progress_interval):
                     elapsed = time.time() - start
                     logger.info(
-                        "LLM待機: %s 経過=%.1fs chunks=%s thinking_chars=%s content_chars=%s",
+                        "LLM待機: %s 経過=%.2fs chunks=%s thinking=%s content=%s",
                         rec.log_identity(), elapsed, received_chunks, thinking_chars, content_chars,
                     )
 

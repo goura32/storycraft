@@ -191,7 +191,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
             chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: stream))
         )
         messages = [{
-            "__kind": "critique", "__phase": "brief", "__ref": "brief",
+            "__kind": "critique", "__phase": "scene_card", "__ref": "v:1/4 c:7/8 s:1/2",
             "__attempt": 1, "__retry_total": 2, "__quality_pass": "2/2",
         }]
 
@@ -200,17 +200,20 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
 
         output = "\n".join(captured.output)
         self.assertEqual(record.content, "本文")
-        self.assertIn("LLM開始: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
-        self.assertIn("LLM終了: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
-        self.assertIn("INFO:storycraft:LLM待機: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
-        self.assertIn("経過=", output)
-        self.assertIn("chunks=0 thinking_chars=0 content_chars=0", output)
+        self.assertIn("LLM開始: stage=scene_card v:1/4,c:7/8,s:1/2 kind=critique quality_pass=2/2 retry=1/2", output)
+        self.assertIn("LLM終了: stage=scene_card v:1/4,c:7/8,s:1/2 kind=critique quality_pass=2/2 retry=1/2", output)
+        self.assertIn("INFO:storycraft:LLM待機: stage=scene_card v:1/4,c:7/8,s:1/2 kind=critique quality_pass=2/2 retry=1/2", output)
+        self.assertRegex(output, r"経過=\d+\.\d{2}s")
+        self.assertIn("chunks=0 thinking=0 content=0", output)
         self.assertNotIn("WARNING:storycraft:LLM待機", output)
         self.assertNotIn("状態=", output)
         self.assertNotIn("最終受信から=", output)
         self.assertNotIn("first_event_timeout=", output)
         self.assertNotIn("idle_timeout=", output)
         self.assertNotIn("attempt=", output)
+        self.assertNotIn("phase=", output)
+        self.assertNotIn("ref=", output)
+        self.assertNotIn("thinking_chars=", output)
         self.assertNotIn("LLM呼び出し開始", output)
         self.assertNotIn("LLM思考開始", output)
         self.assertNotIn("LLM生成開始", output)

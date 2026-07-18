@@ -57,8 +57,8 @@ class SeriesWorkflow(ContractValidator):
         except ContractError as exc:
             active = state.get("_active") or {"stage": "unknown", "unit": None}
             logger.error(
-                "工程終了: %s stage=%s result=failed error=%s",
-                self._progress_label(state, {"scene_id": active.get("unit")}), active["stage"], exc,
+                "工程終了: stage=%s %s result=failed error=%s",
+                active["stage"], self._progress_label(state, {"scene_id": active.get("unit")}).replace(" ", ","), exc,
             )
             state["stopped_at"] = active
             state["stop_reason"] = str(exc)
@@ -97,7 +97,7 @@ class SeriesWorkflow(ContractValidator):
         return f"{label} s:{scene_number}/{chapter['scene_count']}"
 
     def _finish_stage(self, state: dict[str, Any], stage: str, context: dict[str, Any], candidate: dict[str, Any], result: str) -> dict[str, Any]:
-        logger.info("工程完了: %s stage=%s result=%s", self._progress_label(state, context), stage, result)
+        logger.info("工程完了: stage=%s %s result=%s", stage, self._progress_label(state, context).replace(" ", ","), result)
         return candidate
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
@@ -194,7 +194,7 @@ class SeriesWorkflow(ContractValidator):
         set_log_quality_pass = getattr(model, "set_log_quality_pass", None)
         if callable(set_log_quality_pass):
             set_log_quality_pass()
-        logger.info("工程開始: %s stage=%s", progress, stage)
+        logger.info("工程開始: stage=%s %s", stage, progress.replace(" ", ","))
         self.store.save(state)
         candidate: dict[str, Any] | None = None
         error = ""
