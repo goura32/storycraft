@@ -218,12 +218,12 @@ class SeriesWorkflow(ContractValidator):
             self.store.save(state)
             return self._finish_stage(state, stage, context, candidate, "accepted")
 
-        # 批評→修正ループ（max_critique_passes 回まで）。
+        # 批評→修正ループ（max_critique_passes 回まで、既定は最小の1回）。
         # Workflow はテスト/外部実装の StoryModel も受け入れるため、OpenAIStoryModel 固有の
         # model.client.settings へは依存しない。
         settings = getattr(getattr(model, "client", None), "settings", None)
         quality = getattr(settings, "quality", {})
-        max_passes = quality.get("max_critique_passes", 3) if isinstance(quality, dict) else 3
+        max_passes = quality.get("max_critique_passes", 1) if isinstance(quality, dict) else 1
         current_candidate = candidate
         for pass_num in range(1, max_passes + 1):
             critique = self._review_candidate(

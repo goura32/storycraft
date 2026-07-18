@@ -105,7 +105,8 @@ llm:
 retry:
   max_attempts: 4
 quality:
-  max_improvement_passes: 1
+  # 批評でissueが残った場合のrevision上限。既定値・最小値は1。
+  max_critique_passes: 1
 ```
 
 以下の環境変数でもLLM接続を上書きできます。

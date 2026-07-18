@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from .series_contracts import ContractError
+
 DEFAULTS: dict[str, Any] = {
     "llm": {
         "base_url": "http://ws1.local:11434/v1",
@@ -21,7 +23,7 @@ DEFAULTS: dict[str, Any] = {
         "max_attempts": 4,
     },
     "quality": {
-        "max_critique_passes": 3,
+        "max_critique_passes": 1,
         "improvement_directions": [
             "地の文を削り、くどさを排除する",
             "対話を自然にする",
@@ -77,6 +79,9 @@ class Settings:
             cfg["llm"]["idle_timeout_seconds"] = float(os.environ["STORYCRAFT_LLM_IDLE_TIMEOUT"])
         if os.environ.get("STORYCRAFT_LLM_FIRST_TIMEOUT"):
             cfg["llm"]["first_event_timeout_seconds"] = float(os.environ["STORYCRAFT_LLM_FIRST_TIMEOUT"])
+        max_critique_passes = cfg["quality"].get("max_critique_passes")
+        if isinstance(max_critique_passes, bool) or not isinstance(max_critique_passes, int) or max_critique_passes < 1:
+            raise ContractError("quality.max_critique_passes は1以上の整数で指定してください")
         return cls(
             llm=cfg["llm"],
             retry=cfg["retry"],
