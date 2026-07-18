@@ -254,7 +254,7 @@ class SeriesWorkflow(ContractValidator):
             revised: dict[str, Any] | None = None
             set_log_quality_pass = getattr(model, "set_log_quality_pass", None)
             if callable(set_log_quality_pass):
-                set_log_quality_pass(f"revision:{pass_num}/{max_passes}")
+                set_log_quality_pass(f"{pass_num}/{max_passes + 1}")
             try:
                 revised = model.revision(stage, current_candidate, critique, context)
                 if not isinstance(revised, dict):

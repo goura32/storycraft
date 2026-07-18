@@ -215,6 +215,13 @@ class StateContractTests(unittest.TestCase):
         class AlwaysIssuesModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 2}))
 
+            def __init__(self) -> None:
+                self.quality_pass = ""
+                self.revision_quality_passes: list[str] = []
+
+            def set_log_quality_pass(self, quality_pass: str = "") -> None:
+                self.quality_pass = quality_pass
+
             def generate(self, stage: str, context: dict) -> dict:
                 return {"value": 0}
 
@@ -222,14 +229,17 @@ class StateContractTests(unittest.TestCase):
                 return {"issues": [{"severity": "minor", "field": "value", "description": "改善点", "suggestion": "修正"}]}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                self.revision_quality_passes.append(self.quality_pass)
                 return {"value": candidate["value"] + 1}
 
         service = SeriesService(self.workspace)
         state = service._new_state(keywords=["ログ検証"])
+        model = AlwaysIssuesModel()
         with self.assertLogs("storycraft", level="INFO") as captured:
-            service._improve("quality_probe", {}, AlwaysIssuesModel(), state, lambda value: None)
+            service._improve("quality_probe", {}, model, state, lambda value: None)
         output = "\n".join(captured.output)
         self.assertIn("工程開始: stage=quality_probe v:-/-", output)
+        self.assertEqual(model.revision_quality_passes, ["1/3", "2/3"])
         self.assertIn("批評結果: stage=quality_probe quality_pass=1/3 final=False issues=1", output)
         self.assertIn("批評結果: stage=quality_probe quality_pass=2/3 final=False issues=1", output)
         self.assertIn("批評結果: stage=quality_probe quality_pass=3/3 final=True issues=1", output)
