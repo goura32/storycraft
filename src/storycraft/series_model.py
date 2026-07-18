@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .log import logger
 from .llm import LLMClient
 from .series_contracts import ContractError, LLMCallError
 from .prompt_template import get_template_loader
@@ -43,10 +44,17 @@ class OpenAIStoryModel:
             return loader.render_user(kind, stage, stage=stage, output_schema=output_schema, **kwargs)
         return loader.render_user(kind, stage, stage=stage, output_schema=output_schema, **kwargs)
 
+    @staticmethod
+    def _safe_error_type(error: str) -> str:
+        """標準ログには接続先由来のエラー本文を出さない。"""
+        raw_type = error.split(":", 1)[0]
+        safe_type = "".join(char if char.isalnum() or char in "._-" else "_" for char in raw_type)
+        return safe_type[:80] or "unknown"
+
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
-        last_error = ""
-        attempts = int(self.client.settings.retry.get("max_attempts", 1))
-        for _ in range(max(attempts, 1)):
+        failure_reason = "unknown"
+        attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
+        for retry_attempt in range(1, attempts + 1):
             self.attempt += 1
             messages = [
                 {"role": "system", "content": get_template_loader().render_system()},
@@ -56,14 +64,26 @@ class OpenAIStoryModel:
             record = self.client.call_once(messages, {"type": "json_object"}, self.attempt)
             self.client.save_raw(record, messages)
             if record.error:
-                last_error = record.error
+                failure_reason = f"transport:{self._safe_error_type(record.error)}"
+                logger.error(
+                    "LLM通信エラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s error_type=%s",
+                    stage, kind, retry_attempt, attempts, self.attempt, self._safe_error_type(record.error),
+                )
                 continue
             try:
                 value = json.loads(record.content)
-            except json.JSONDecodeError:
-                last_error = "JSONを返しませんでした"
+            except json.JSONDecodeError as exc:
+                failure_reason = "json_decode_error"
+                logger.error(
+                    "LLM JSONパースエラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s error=%s",
+                    stage, kind, retry_attempt, attempts, self.attempt, exc,
+                )
                 continue
             if isinstance(value, dict):
                 return value
-            last_error = "JSONオブジェクトを返しませんでした"
-        raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: {last_error}")
+            failure_reason = "json_non_object"
+            logger.error(
+                "LLM JSON形式エラー: stage=%s kind=%s attempt=%s/%s global_attempt=%s actual=%s",
+                stage, kind, retry_attempt, attempts, self.attempt, type(value).__name__,
+            )
+        raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: reason={failure_reason}")

@@ -172,8 +172,6 @@ class LLMClient:
         except Exception as e:  # noqa: BLE001
             rec.error = f"{type(e).__name__}: {e}"
             rec.finished_at = time.time()
-            duration = round(rec.finished_at - rec.started_at, 2)
-            logger.error(f"LLM呼び出し失敗: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s エラー={rec.error}")
         return rec
 
     def call_once(self, messages, response_format, seed: int) -> CallRecord:

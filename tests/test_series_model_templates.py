@@ -1,12 +1,16 @@
 """実送信promptがbrief/Canon/volume_map契約を使うことを確認する。"""
 from __future__ import annotations
 
+import contextlib
+import io
 from pathlib import Path
 from types import SimpleNamespace
+import sys
 import unittest
 from unittest.mock import patch
 
-from storycraft.llm import CallRecord
+from storycraft import cli
+from storycraft.llm import CallRecord, LLMClient
 from storycraft.prompt_template import get_template_loader
 from storycraft.series_contracts import LLMCallError
 from storycraft.series_model import OpenAIStoryModel
@@ -100,6 +104,86 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
                     model._call("generate", "brief", "prompt")
                 self.assertEqual(client.calls, 2)
                 self.assertEqual(client.raw_saves, 2)
+
+    def test_call_logs_transport_and_json_parse_errors_for_each_retry(self) -> None:
+        scenarios = {
+            "transport": (
+                [
+                    CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, error="ConnectionError: secret-token\nFORGED"),
+                    CallRecord(kind="generate", phase="brief", ref="brief", attempt=2, seed=2, error="ConnectionError: secret-token\nFORGED"),
+                ],
+                "LLM通信エラー",
+            ),
+            "json_parse": (
+                [
+                    CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, content="not json"),
+                    CallRecord(kind="generate", phase="brief", ref="brief", attempt=2, seed=2, content="not json"),
+                ],
+                "LLM JSONパースエラー",
+            ),
+        }
+        for name, (records, message) in scenarios.items():
+            with self.subTest(name=name):
+                client = _SequenceClient(records)
+                model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+                model.client = client
+                model.attempt = 0
+                with self.assertLogs("storycraft", level="ERROR") as captured:
+                    with self.assertRaises(LLMCallError):
+                        model._call("generate", "brief", "prompt")
+                output = "\n".join(captured.output)
+                self.assertEqual(output.count(message), 2)
+                self.assertIn("attempt=1/2", output)
+                self.assertIn("attempt=2/2", output)
+                if name == "transport":
+                    self.assertIn("error_type=ConnectionError", output)
+                    self.assertNotIn("secret-token", output)
+                    self.assertNotIn("FORGED", output)
+
+    def test_llm_client_returns_transport_failure_without_duplicate_error_log(self) -> None:
+        def fail_create(**kwargs: object) -> object:
+            raise ConnectionError("secret-token\\nFORGED")
+
+        client = LLMClient.__new__(LLMClient)
+        client.settings = SimpleNamespace(llm={"model": "test"})
+        client.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fail_create)))
+        messages = [{"__kind": "generate", "__phase": "brief", "__ref": "brief", "__attempt": 1}]
+        with self.assertNoLogs("storycraft", level="ERROR"):
+            record = client.call_once(messages, {"type": "json_object"}, 1)
+        self.assertEqual(record.error, "ConnectionError: secret-token\\nFORGED")
+
+    def test_cli_logs_safe_exhausted_transport_error_once_per_layer(self) -> None:
+        model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+        model.client = _SequenceClient([
+            CallRecord(
+                kind="generate", phase="brief", ref="brief", attempt=1, seed=1,
+                error="ConnectionError: secret-token\nFORGED",
+            ),
+        ])
+        model.attempt = 0
+
+        def fail_run(args: object) -> None:
+            model._call("generate", "brief", "prompt")
+
+        stderr = io.StringIO()
+        with patch.object(sys, "argv", ["storycraft", "run", "--out", "/tmp/output", "--keywords", "test"]), \
+             patch("storycraft.cli.cmd_run", side_effect=fail_run), \
+             self.assertLogs("storycraft", level="ERROR") as captured, \
+             contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as exited:
+                cli.main()
+
+        output = "\n".join(captured.output)
+        stderr_output = stderr.getvalue()
+        self.assertEqual(exited.exception.code, 2)
+        self.assertEqual(output.count("LLM通信エラー"), 1)
+        self.assertEqual(output.count("契約エラーにより終了します"), 1)
+        self.assertIn("error_type=ConnectionError", output)
+        self.assertNotIn("secret-token", output)
+        self.assertNotIn("FORGED", output)
+        self.assertIn("reason=transport:ConnectionError", stderr_output)
+        self.assertNotIn("secret-token", stderr_output)
+        self.assertNotIn("FORGED", stderr_output)
 
     def test_real_brief_and_volume_map_prompts_express_ownership_boundaries(self) -> None:
         brief = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島", "4巻"]})

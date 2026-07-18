@@ -195,6 +195,10 @@ class SeriesWorkflow(ContractValidator):
                 self.store.save(state)
                 return current_candidate
             self._record_attempt(state, stage, "critique", context, critique, "accepted")
+            logger.info(
+                "批評結果: stage=%s pass=%s/%s final=False issues=%s",
+                stage, pass_num, max_passes, len(critique["issues"]),
+            )
             if critique["issues"]:
                 logger.info(f"批評指摘: stage={stage} pass={pass_num}/{max_passes} 件数={len(critique['issues'])} severities={[i['severity'] for i in critique['issues']]}")
                 if logger.isEnabledFor(10):  # DEBUG
@@ -247,6 +251,10 @@ class SeriesWorkflow(ContractValidator):
             self.store.save(state)
             return current_candidate
         self._record_attempt(state, stage, "critique", context, final_critique, "accepted")
+        logger.info(
+            "批評結果: stage=%s pass=%s/%s final=True issues=%s",
+            stage, final_pass, max_passes, len(final_critique["issues"]),
+        )
         if not final_critique["issues"]:
             logger.info(f"批評合格: {stage} pass={final_pass} (final revision verified)")
             state["_active"]["phase"] = "completed"

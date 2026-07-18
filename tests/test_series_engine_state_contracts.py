@@ -160,6 +160,28 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(model.generated_stages, ["brief", "characters"])
         self.assertIsNotNone(state["characters"])
 
+    def test_every_critique_logs_issue_count_including_final_critique(self) -> None:
+        class AlwaysIssuesModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 2}))
+
+            def generate(self, stage: str, context: dict) -> dict:
+                return {"value": 0}
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": [{"severity": "minor", "field": "value", "description": "改善点", "suggestion": "修正"}]}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return {"value": candidate["value"] + 1}
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(keywords=["ログ検証"])
+        with self.assertLogs("storycraft", level="INFO") as captured:
+            service._improve("quality_probe", {}, AlwaysIssuesModel(), state, lambda value: None)
+        output = "\n".join(captured.output)
+        self.assertIn("批評結果: stage=quality_probe pass=1/2 final=False issues=1", output)
+        self.assertIn("批評結果: stage=quality_probe pass=2/2 final=False issues=1", output)
+        self.assertIn("批評結果: stage=quality_probe pass=3/2 final=True issues=1", output)
+
     def test_critique_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
         class FailingCritiqueModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
