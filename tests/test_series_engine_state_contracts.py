@@ -209,7 +209,7 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(critique, {"issues": []})
         self.assertEqual(state["_active"]["phase"], "critique_final")
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["critique"])
-        self.assertIn("批評結果: stage=quality_probe pass=1/0 final=True issues=0", "\n".join(captured.output))
+        self.assertIn("批評結果: stage=quality_probe quality_pass=1/1 final=True issues=0", "\n".join(captured.output))
 
     def test_every_critique_logs_issue_count_including_final_critique(self) -> None:
         class AlwaysIssuesModel:
@@ -229,9 +229,9 @@ class StateContractTests(unittest.TestCase):
         with self.assertLogs("storycraft", level="INFO") as captured:
             service._improve("quality_probe", {}, AlwaysIssuesModel(), state, lambda value: None)
         output = "\n".join(captured.output)
-        self.assertIn("批評結果: stage=quality_probe pass=1/2 final=False issues=1", output)
-        self.assertIn("批評結果: stage=quality_probe pass=2/2 final=False issues=1", output)
-        self.assertIn("批評結果: stage=quality_probe pass=3/2 final=True issues=1", output)
+        self.assertIn("批評結果: stage=quality_probe quality_pass=1/3 final=False issues=1", output)
+        self.assertIn("批評結果: stage=quality_probe quality_pass=2/3 final=False issues=1", output)
+        self.assertIn("批評結果: stage=quality_probe quality_pass=3/3 final=True issues=1", output)
 
     def test_critique_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
         class FailingCritiqueModel:
