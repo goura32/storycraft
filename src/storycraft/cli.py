@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,26 @@ from .config import Settings
 from .series_engine import ContractError, SeriesService
 from .series_model import OpenAIStoryModel
 from .log import logger, add_file_handler
+
+
+_process_started_at: float | None = None
+_process_exit_reason = "normal"
+
+
+def _flush_logs() -> None:
+    """終了直前のログをファイルへ確実に反映する。"""
+    for handler in logger.handlers:
+        handler.flush()
+
+
+def _handle_termination_signal(signum: int, _frame: Any) -> None:
+    """SIGTERMを無言で終わらせず、finally経由で終了記録を残す。"""
+    global _process_exit_reason
+    signal_name = signal.Signals(signum).name
+    _process_exit_reason = f"signal:{signal_name}"
+    logger.warning("終了シグナル受信: %s。終了処理を開始します", signal_name)
+    _flush_logs()
+    raise SystemExit(128 + signum)
 
 
 def _load_brief(path: str) -> dict[str, Any]:
@@ -30,6 +53,7 @@ def _setup_logging(workspace: Path) -> None:
     log_path = workspace / "storycraft.log"
     add_file_handler(log_path)
     logger.info(f"ログ出力先: {log_path}")
+    logger.info("プロセス監視開始: pid=%s workspace=%s", os.getpid(), workspace)
 
 
 def _service_and_model(args) -> tuple[SeriesService, OpenAIStoryModel]:
@@ -81,10 +105,40 @@ def main() -> None:
             initial.add_argument("--keywords", action="append", help="brief生成に渡す自由なキーワード。複数回指定できる")
         command.set_defaults(handler=handler)
     args = parser.parse_args()
+    global _process_started_at, _process_exit_reason
+    _process_started_at = time.monotonic()
+    _process_exit_reason = "normal"
+    signal.signal(signal.SIGTERM, _handle_termination_signal)
+    exit_code = 0
     try:
         args.handler(args)
+    except KeyboardInterrupt:
+        _process_exit_reason = "keyboard_interrupt"
+        exit_code = 130
+        logger.warning("ユーザー中断を受信しました")
+        raise
     except ContractError as error:
+        _process_exit_reason = "contract_error"
+        exit_code = 2
+        logger.error("契約エラーにより終了します: %s", error)
         parser.error(str(error))
+    except SystemExit as error:
+        exit_code = int(error.code) if isinstance(error.code, int) else 1
+        if _process_exit_reason == "normal":
+            _process_exit_reason = "system_exit"
+        raise
+    except BaseException as error:  # noqa: BLE001
+        _process_exit_reason = f"unhandled:{type(error).__name__}"
+        exit_code = 1
+        logger.exception("未処理例外により終了します")
+        raise
+    finally:
+        elapsed = time.monotonic() - _process_started_at
+        logger.info(
+            "プロセス終了: command=%s reason=%s exit_code=%s elapsed=%.2fs",
+            args.command, _process_exit_reason, exit_code, elapsed,
+        )
+        _flush_logs()
 
 
 if __name__ == "__main__":
