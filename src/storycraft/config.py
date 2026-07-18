@@ -18,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
         "stream": True,
         "first_event_timeout_seconds": 3600,
         "idle_timeout_seconds": 600,
+        "stream_progress_log_interval_seconds": 60,
     },
     "retry": {
         "max_attempts": 4,

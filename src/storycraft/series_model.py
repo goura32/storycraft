@@ -27,6 +27,10 @@ class OpenAIStoryModel:
         """Workflowから受け取る対象座標。prompt本文には含めない。"""
         self._log_ref = ref
 
+    def set_log_quality_pass(self, quality_pass: str = "") -> None:
+        """品質ループ回次。LLM通信retryとは別の運用ログ用メタデータ。"""
+        self._log_quality_pass = quality_pass
+
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         return self._call("generate", stage, self._render("generate", stage, context=context))
 
@@ -65,7 +69,11 @@ class OpenAIStoryModel:
             messages = [
                 {"role": "system", "content": get_template_loader().render_system()},
                 {"role": "user", "content": user_prompt},
-                {"__kind": kind, "__phase": stage, "__ref": ref, "__attempt": retry_attempt},
+                {
+                    "__kind": kind, "__phase": stage, "__ref": ref,
+                    "__attempt": retry_attempt, "__retry_total": attempts,
+                    "__quality_pass": getattr(self, "_log_quality_pass", ""),
+                },
             ]
             record = self.client.call_once(messages, {"type": "json_object"}, seed)
             self.client.save_raw(record, messages)

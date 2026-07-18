@@ -191,6 +191,9 @@ class SeriesWorkflow(ContractValidator):
         set_log_ref = getattr(model, "set_log_ref", None)
         if callable(set_log_ref):
             set_log_ref(progress)
+        set_log_quality_pass = getattr(model, "set_log_quality_pass", None)
+        if callable(set_log_quality_pass):
+            set_log_quality_pass()
         logger.info("工程開始: %s stage=%s", progress, stage)
         self.store.save(state)
         candidate: dict[str, Any] | None = None
@@ -249,6 +252,9 @@ class SeriesWorkflow(ContractValidator):
             state["_active"]["phase"] = f"revision_pass_{pass_num}"
             self.store.save(state)
             revised: dict[str, Any] | None = None
+            set_log_quality_pass = getattr(model, "set_log_quality_pass", None)
+            if callable(set_log_quality_pass):
+                set_log_quality_pass(f"revision:{pass_num}/{max_passes}")
             try:
                 revised = model.revision(stage, current_candidate, critique, context)
                 if not isinstance(revised, dict):
@@ -318,6 +324,9 @@ class SeriesWorkflow(ContractValidator):
         active["phase"] = "critique_final" if final else f"critique_pass_{pass_num}"
         self.store.save(state)
         critique: Any = None
+        set_log_quality_pass = getattr(model, "set_log_quality_pass", None)
+        if callable(set_log_quality_pass):
+            set_log_quality_pass(f"{pass_num}/{max_passes + 1}")
         try:
             critique = model.critique(stage, candidate, context)
             self._validate_critique(critique)

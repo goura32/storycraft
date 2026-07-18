@@ -190,16 +190,19 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         client.client = SimpleNamespace(
             chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: stream))
         )
-        messages = [{"__kind": "generate", "__phase": "brief", "__ref": "brief", "__attempt": 1}]
+        messages = [{
+            "__kind": "critique", "__phase": "brief", "__ref": "brief",
+            "__attempt": 1, "__retry_total": 2, "__quality_pass": "2/2",
+        }]
 
         with self.assertLogs("storycraft", level="INFO") as captured:
             record = client.call_once(messages, {"type": "json_object"}, 1)
 
         output = "\n".join(captured.output)
         self.assertEqual(record.content, "本文")
-        self.assertIn("LLM開始: phase=brief ref=brief kind=generate attempt=1", output)
-        self.assertIn("LLM終了: phase=brief ref=brief kind=generate attempt=1", output)
-        self.assertIn("INFO:storycraft:LLM待機: phase=brief ref=brief kind=generate attempt=1", output)
+        self.assertIn("LLM開始: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
+        self.assertIn("LLM終了: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
+        self.assertIn("INFO:storycraft:LLM待機: phase=brief ref=brief kind=critique quality_pass=2/2 retry=1/2", output)
         self.assertIn("経過=", output)
         self.assertIn("chunks=0 thinking_chars=0 content_chars=0", output)
         self.assertNotIn("WARNING:storycraft:LLM待機", output)
@@ -207,6 +210,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertNotIn("最終受信から=", output)
         self.assertNotIn("first_event_timeout=", output)
         self.assertNotIn("idle_timeout=", output)
+        self.assertNotIn("attempt=", output)
         self.assertNotIn("LLM呼び出し開始", output)
         self.assertNotIn("LLM思考開始", output)
         self.assertNotIn("LLM生成開始", output)

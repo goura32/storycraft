@@ -44,11 +44,17 @@ class CallRecord:
     ref: str
     attempt: int
     seed: int
+    retry_total: int = 1
+    quality_pass: str = ""
     started_at: float = field(default_factory=time.time)
     finished_at: float = 0.0
     content: str = ""
     meta_chunks: list[dict] = field(default_factory=list)  # {t, kind, chars}
     error: str | None = None
+
+    def log_identity(self) -> str:
+        quality = f" quality_pass={self.quality_pass}" if self.quality_pass else ""
+        return f"phase={self.phase} ref={self.ref} kind={self.kind}{quality} retry={self.attempt}/{self.retry_total}"
 
     def to_dict(self) -> dict:
         return {
@@ -56,6 +62,8 @@ class CallRecord:
             "phase": self.phase,
             "ref": self.ref,
             "attempt": self.attempt,
+            "retry_total": self.retry_total,
+            "quality_pass": self.quality_pass,
             "seed": self.seed,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -94,8 +102,10 @@ class LLMClient:
             ref=meta.get("__ref", ""),
             attempt=meta.get("__attempt", 1),
             seed=seed,
+            retry_total=meta.get("__retry_total", 1),
+            quality_pass=meta.get("__quality_pass", ""),
         )
-        logger.info(f"LLM開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
+        logger.info("LLM開始: %s", rec.log_identity())
         try:
             stream = self.client.chat.completions.create(
                             model=llm["model"],
@@ -119,10 +129,8 @@ class LLMClient:
                 while not stream_finished.wait(progress_interval):
                     elapsed = time.time() - start
                     logger.info(
-                        "LLM待機: phase=%s ref=%s kind=%s attempt=%s "
-                        "経過=%.1fs chunks=%s thinking_chars=%s content_chars=%s",
-                        rec.phase, rec.ref, rec.kind, rec.attempt,
-                        elapsed, received_chunks, thinking_chars, content_chars,
+                        "LLM待機: %s 経過=%.1fs chunks=%s thinking_chars=%s content_chars=%s",
+                        rec.log_identity(), elapsed, received_chunks, thinking_chars, content_chars,
                     )
 
             watchdog = threading.Thread(target=log_stream_stall, name=f"llm-watchdog-{rec.phase}", daemon=True)
@@ -160,7 +168,7 @@ class LLMClient:
                 watchdog.join(timeout=1)
             rec.finished_at = time.time()
             duration = round(rec.finished_at - rec.started_at, 2)
-            logger.info(f"LLM終了: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s content_chars={content_chars}")
+            logger.info("LLM終了: %s 所要時間=%ss content_chars=%s", rec.log_identity(), duration, content_chars)
         except Exception as e:  # noqa: BLE001
             rec.error = f"{type(e).__name__}: {e}"
             rec.finished_at = time.time()
