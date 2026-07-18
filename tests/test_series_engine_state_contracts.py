@@ -160,6 +160,23 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(model.generated_stages, ["brief", "characters"])
         self.assertIsNotNone(state["characters"])
 
+    def test_review_candidate_records_final_attempt_and_logs_final_metadata(self) -> None:
+        class CleanCritiqueModel:
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": []}
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(BRIEF)
+        with self.assertLogs("storycraft", level="INFO") as captured:
+            critique = service._review_candidate(
+                "quality_probe", {"value": 0}, {}, CleanCritiqueModel(), state,
+                pass_num=1, max_passes=0, final=True,
+            )
+        self.assertEqual(critique, {"issues": []})
+        self.assertEqual(state["_active"]["phase"], "critique_final")
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["critique"])
+        self.assertIn("批評結果: stage=quality_probe pass=1/0 final=True issues=0", "\n".join(captured.output))
+
     def test_every_critique_logs_issue_count_including_final_critique(self) -> None:
         class AlwaysIssuesModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 2}))
