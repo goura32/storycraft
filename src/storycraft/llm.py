@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -25,6 +26,14 @@ from .series_contracts import ContractError
 STATUS_THINKING = "thinking"
 STATUS_CONTENT = "content"
 STATUS_SAVING = "saving"
+
+
+def _raw_filename_component(value: str) -> str:
+    """監査メタを保ったまま、ファイル名だけを移植可能な文字列へ正規化する。"""
+    # 進捗refの総数（v:1/4 等）はログ/JSONメタには残し、ファイル名では省く。
+    value = re.sub(r"/\d+", "", value)
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._")
+    return normalized or "unknown"
 
 
 @dataclass
@@ -206,7 +215,9 @@ class LLMClient:
             "received": rec.to_dict(),
             "content": rec.content,
         }
-        json_path = self.raw_dir / f"{idx:04d}_{rec.kind}_{rec.ref}.json"
+        json_path = self.raw_dir / (
+            f"{idx:04d}_{_raw_filename_component(rec.kind)}_{_raw_filename_component(rec.ref)}.json"
+        )
         json_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
         json_path.with_suffix(".md").write_text(
             self._raw_markdown(json_path.with_suffix(".md").name, sent_messages, rec.content),

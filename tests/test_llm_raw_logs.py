@@ -55,6 +55,26 @@ class RawLogMarkdownTests(unittest.TestCase):
             "]}\n",
         )
 
+    def test_save_raw_sanitizes_progress_ref_only_in_filename(self) -> None:
+        raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-parent-")) / "raw"
+        client = LLMClient.__new__(LLMClient)
+        client.raw_dir = raw_dir
+        record = CallRecord(
+            kind="generate",
+            phase="scene",
+            ref="v:1/4 c:6/8 s:2/3",
+            attempt=1,
+            seed=1,
+            content="{}",
+        )
+
+        client.save_raw(record, [])
+
+        json_path = raw_dir / "0000_generate_v_1_c_6_s_2.json"
+        self.assertTrue(json_path.exists())
+        self.assertEqual(list(raw_dir.rglob("*.json")), [json_path])
+        self.assertEqual(json.loads(json_path.read_text(encoding="utf-8"))["received"]["ref"], record.ref)
+
 
 if __name__ == "__main__":
     unittest.main()
