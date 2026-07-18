@@ -6,6 +6,7 @@ import io
 from pathlib import Path
 from types import SimpleNamespace
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -169,6 +170,48 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
                     self.assertIn("error_type=ConnectionError", output)
                     self.assertNotIn("secret-token", output)
                     self.assertNotIn("FORGED", output)
+
+    def test_llm_client_uses_compact_start_and_end_logs(self) -> None:
+        thinking = SimpleNamespace(reasoning="考", content=None)
+        content = SimpleNamespace(reasoning=None, content="本文")
+        def delayed_stream():
+            time.sleep(0.03)
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=thinking)])
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=content)])
+
+        stream = delayed_stream()
+        client = LLMClient.__new__(LLMClient)
+        client.settings = SimpleNamespace(llm={
+            "model": "test", "thinking": True,
+            "first_event_timeout_seconds": 3600,
+            "idle_timeout_seconds": 600,
+            "stream_progress_log_interval_seconds": 0.01,
+        })
+        client.client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: stream))
+        )
+        messages = [{"__kind": "generate", "__phase": "brief", "__ref": "brief", "__attempt": 1}]
+
+        with self.assertLogs("storycraft", level="INFO") as captured:
+            record = client.call_once(messages, {"type": "json_object"}, 1)
+
+        output = "\n".join(captured.output)
+        self.assertEqual(record.content, "本文")
+        self.assertIn("LLM開始: phase=brief ref=brief kind=generate attempt=1", output)
+        self.assertIn("LLM終了: phase=brief ref=brief kind=generate attempt=1", output)
+        self.assertIn("INFO:storycraft:LLM待機: phase=brief ref=brief kind=generate attempt=1", output)
+        self.assertIn("経過=", output)
+        self.assertIn("chunks=0 thinking_chars=0 content_chars=0", output)
+        self.assertNotIn("WARNING:storycraft:LLM待機", output)
+        self.assertNotIn("状態=", output)
+        self.assertNotIn("最終受信から=", output)
+        self.assertNotIn("first_event_timeout=", output)
+        self.assertNotIn("idle_timeout=", output)
+        self.assertNotIn("LLM呼び出し開始", output)
+        self.assertNotIn("LLM思考開始", output)
+        self.assertNotIn("LLM生成開始", output)
+        self.assertNotIn("LLMストリーム接続済み", output)
+        self.assertNotIn("LLM呼び出し完了", output)
 
     def test_llm_client_returns_transport_failure_without_duplicate_error_log(self) -> None:
         def fail_create(**kwargs: object) -> object:

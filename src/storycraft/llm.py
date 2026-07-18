@@ -95,7 +95,7 @@ class LLMClient:
             attempt=meta.get("__attempt", 1),
             seed=seed,
         )
-        logger.info(f"LLM呼び出し開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} seed={seed}")
+        logger.info(f"LLM開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
         try:
             stream = self.client.chat.completions.create(
                             model=llm["model"],
@@ -104,7 +104,6 @@ class LLMClient:
                             stream=True,
                             extra_body={"think": bool(llm.get("thinking", True)), "seed": seed},
                         )
-            first_event_timeout = llm.get("first_event_timeout_seconds", 3600)
             idle_timeout = llm.get("idle_timeout_seconds", 600)
             progress_interval = llm.get("stream_progress_log_interval_seconds", 30)
             start = time.time()
@@ -112,8 +111,6 @@ class LLMClient:
             received_chunks = 0
             thinking_chars = 0
             content_chars = 0
-            thinking_started = False
-            content_started = False
             stream_finished = threading.Event()
 
             # OpenAI SDKの同期ストリーム反復は next(chunk) 待機中にブロックする。
@@ -121,22 +118,13 @@ class LLMClient:
             def log_stream_stall() -> None:
                 while not stream_finished.wait(progress_interval):
                     elapsed = time.time() - start
-                    silence = time.time() - last_recv
-                    phase = "content" if content_started else "thinking" if thinking_started else "first_event_wait"
-                    logger.warning(
-                        "LLMストリーム待機中: phase=%s ref=%s kind=%s attempt=%s "
-                        "状態=%s 経過=%.1fs 最終受信から=%.1fs chunks=%s thinking_chars=%s content_chars=%s "
-                        "first_event_timeout=%ss idle_timeout=%ss",
-                        rec.phase, rec.ref, rec.kind, rec.attempt, phase, elapsed, silence,
-                        received_chunks, thinking_chars, content_chars, first_event_timeout, idle_timeout,
+                    logger.info(
+                        "LLM待機: phase=%s ref=%s kind=%s attempt=%s "
+                        "経過=%.1fs chunks=%s thinking_chars=%s content_chars=%s",
+                        rec.phase, rec.ref, rec.kind, rec.attempt,
+                        elapsed, received_chunks, thinking_chars, content_chars,
                     )
 
-            logger.info(
-                "LLMストリーム接続済み: phase=%s ref=%s kind=%s attempt=%s "
-                "first_event_timeout=%ss idle_timeout=%ss progress_log_interval=%ss",
-                rec.phase, rec.ref, rec.kind, rec.attempt,
-                first_event_timeout, idle_timeout, progress_interval,
-            )
             watchdog = threading.Thread(target=log_stream_stall, name=f"llm-watchdog-{rec.phase}", daemon=True)
             watchdog.start()
             try:
@@ -151,9 +139,6 @@ class LLMClient:
                     reasoning = getattr(delta, "reasoning", None)
                     if reasoning:
                         reasoning = str(reasoning)
-                        if not thinking_started:
-                            logger.info(f"LLM思考開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
-                            thinking_started = True
                         thinking_chars += len(reasoning)
                         rec.meta_chunks.append(
                             {"t": round(now - start, 2), "kind": STATUS_THINKING,
@@ -163,9 +148,6 @@ class LLMClient:
                     content = getattr(delta, "content", None)
                     if content:
                         content = str(content)
-                        if not content_started:
-                            logger.info(f"LLM生成開始: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt}")
-                            content_started = True
                         rec.content += content
                         content_chars += len(content)
                         rec.meta_chunks.append(
@@ -178,7 +160,7 @@ class LLMClient:
                 watchdog.join(timeout=1)
             rec.finished_at = time.time()
             duration = round(rec.finished_at - rec.started_at, 2)
-            logger.info(f"LLM呼び出し完了: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s 文字数={len(rec.content)}")
+            logger.info(f"LLM終了: phase={rec.phase} ref={rec.ref} kind={rec.kind} attempt={rec.attempt} 所要時間={duration}s content_chars={content_chars}")
         except Exception as e:  # noqa: BLE001
             rec.error = f"{type(e).__name__}: {e}"
             rec.finished_at = time.time()
