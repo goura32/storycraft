@@ -4,6 +4,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from storycraft.series_engine import ContractError, SeriesService
 from test_series_engine_flow import BRIEF, FlowModel
@@ -126,6 +127,29 @@ class StateContractTests(unittest.TestCase):
         service._write_output = lambda state: self.fail("completed series must not write output")  # type: ignore[method-assign]
         result = service.step(FlowModel())
         self.assertTrue(result.completed)
+
+    def test_unresolved_brief_review_blocks_adoption_and_downstream_stages(self) -> None:
+        class UnresolvedBriefModel:
+            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
+
+            def generate(self, stage: str, context: dict) -> dict:
+                if stage != "brief":
+                    raise AssertionError(stage)
+                return dict(BRIEF)
+
+            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
+                return {"issues": [{"severity": "major", "field": "protagonist", "description": "簡体字が残っている", "suggestion": "日本語修正"}]}
+
+            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
+                return dict(candidate)
+
+        service = SeriesService(self.workspace)
+        state = service._new_state(keywords=["女性向けロマンスファンタジー"])
+        with self.assertRaisesRegex(ContractError, "brief の批評が未解決"):
+            service._run_one(state, UnresolvedBriefModel())
+        self.assertIsNone(state["brief"])
+        self.assertIsNone(state["characters"])
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision"])
 
     def test_revision_contract_loss_keeps_validated_draft_and_records_normalized_attempt(self) -> None:
         class RevisionLossModel:

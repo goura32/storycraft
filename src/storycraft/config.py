@@ -21,7 +21,7 @@ DEFAULTS: dict[str, Any] = {
         "max_attempts": 4,
     },
     "quality": {
-        "max_improvement_passes": 1,
+        "max_critique_passes": 3,
         "improvement_directions": [
             "地の文を削り、くどさを排除する",
             "対話を自然にする",

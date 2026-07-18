@@ -32,12 +32,16 @@
     },
     "volumes": {
       "type": "integer",
+      "minimum": 4,
+      "maximum": 10,
       "description": "全巻数。4〜10の整数。未定なら省略可。"
     },
     "chapters_per_volume": {
       "type": "array",
-      "items": { "type": "integer" },
-      "description": "各巻のチャプター数配列。volumes と同長で各要素 1〜12。未定なら省略可。"
+      "minItems": 4,
+      "maxItems": 10,
+      "items": { "type": "integer", "minimum": 1, "maximum": 12 },
+      "description": "各巻のチャプター数配列。volumes と同長で各要素 1〜12。未定なら省略可。配列長とvolumesの一致は実行時契約でも検証される。"
     }
   }
 }

@@ -60,7 +60,10 @@ class SeriesWorkflow(ContractValidator):
 
     def _run_one(self, state: dict[str, Any], model: StoryModel) -> str | None:
         if state["brief"] is None:
-            brief = self._improve("brief", {"keywords": state["keywords"]}, model, state, self._validate_brief, review=False)
+            brief = self._improve(
+                "brief", {"keywords": state["keywords"]}, model, state, self._validate_brief,
+                require_clean_review=True,
+            )
             state["brief"] = brief
             state["last_completed_unit"] = {"stage": "brief", "unit": None}
             return None
@@ -140,8 +143,13 @@ class SeriesWorkflow(ContractValidator):
         state["completed"] = True
         return None
 
-    def _improve(self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any], validator: Callable[[dict[str, Any]], None], *, review: bool = True) -> dict[str, Any]:
-        state["_active"] = {"stage": stage, "unit": context.get("scene_id")}
+    def _improve(
+        self, stage: str, context: dict[str, Any], model: StoryModel, state: dict[str, Any],
+        validator: Callable[[dict[str, Any]], None], *, review: bool = True,
+        require_clean_review: bool = False,
+    ) -> dict[str, Any]:
+        state["_active"] = {"stage": stage, "unit": context.get("scene_id"), "phase": "generate"}
+        self.store.save(state)
         candidate: dict[str, Any] | None = None
         error = ""
         for _ in range(4):
@@ -160,35 +168,70 @@ class SeriesWorkflow(ContractValidator):
         if candidate is None:
             raise ContractError(f"{stage} の草稿を検証できませんでした: {error}")
         self._record_attempt(state, stage, "draft", context, candidate, "accepted")
+        state["_active"]["phase"] = "draft_accepted"
+        self.store.save(state)
         if not review:
+            state["_active"]["phase"] = "completed"
+            self.store.save(state)
             return candidate
-        try:
-            critique = model.critique(stage, candidate, context)
-            self._validate_critique(critique)
-        except Exception as exc:
-            self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
-            return candidate
-        self._record_attempt(state, stage, "critique", context, critique, "accepted")
-        if critique["issues"]:
-            logger.info(f"批評指摘: stage={stage} 件数={len(critique['issues'])} severities={[i['severity'] for i in critique['issues']]}")
-            if logger.isEnabledFor(10):  # DEBUG
-                for i, issue in enumerate(critique["issues"]):
-                    logger.debug(f"  issue[{i}]: field={issue.get('field')} severity={issue.get('severity')} desc={issue.get('description')[:80]}...")
-        if not critique["issues"]:
-            return candidate
-        logger.warning(f"批評指摘あり: {stage} issues={len(critique['issues'])}")
-        revised: dict[str, Any] | None = None
-        try:
-            revised = model.revision(stage, candidate, critique, context)
-            if not isinstance(revised, dict):
-                raise ContractError("修正版がオブジェクトではありません")
-            validator(revised)
-            self._validate_revision_preserves_contract(stage, candidate, revised)
-        except Exception as exc:
-            self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
-            return candidate
-        self._record_attempt(state, stage, "revision", context, revised, "accepted")
-        return revised
+
+        # 批評→修正ループ（max_critique_passes 回まで）。
+        # Workflow はテスト/外部実装の StoryModel も受け入れるため、OpenAIStoryModel 固有の
+        # model.client.settings へは依存しない。
+        settings = getattr(getattr(model, "client", None), "settings", None)
+        quality = getattr(settings, "quality", {})
+        max_passes = quality.get("max_critique_passes", 3) if isinstance(quality, dict) else 3
+        current_candidate = candidate
+        for pass_num in range(1, max_passes + 1):
+            state["_active"]["phase"] = f"critique_pass_{pass_num}"
+            self.store.save(state)
+            try:
+                critique = model.critique(stage, current_candidate, context)
+                self._validate_critique(critique)
+            except Exception as exc:
+                self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
+                state["_active"]["phase"] = "failed"
+                self.store.save(state)
+                if require_clean_review:
+                    raise ContractError(f"{stage} の批評に失敗したため採用しません: {exc}") from exc
+                return current_candidate
+            self._record_attempt(state, stage, "critique", context, critique, "accepted")
+            if critique["issues"]:
+                logger.info(f"批評指摘: stage={stage} pass={pass_num}/{max_passes} 件数={len(critique['issues'])} severities={[i['severity'] for i in critique['issues']]}")
+                if logger.isEnabledFor(10):  # DEBUG
+                    for i, issue in enumerate(critique["issues"]):
+                        logger.debug(f"  issue[{i}]: field={issue.get('field')} severity={issue.get('severity')} desc={issue.get('description')[:80]}...")
+            if not critique["issues"]:
+                logger.info(f"批評合格: {stage} pass={pass_num}")
+                state["_active"]["phase"] = "completed"
+                self.store.save(state)
+                return current_candidate
+            logger.warning(f"批評指摘あり: {stage} pass={pass_num}/{max_passes} issues={len(critique['issues'])}")
+            # 修正実行
+            state["_active"]["phase"] = f"revision_pass_{pass_num}"
+            self.store.save(state)
+            try:
+                revised = model.revision(stage, current_candidate, critique, context)
+                if not isinstance(revised, dict):
+                    raise ContractError("修正版がオブジェクトではありません")
+                validator(revised)
+                self._validate_revision_preserves_contract(stage, current_candidate, revised)
+            except Exception as exc:
+                self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
+                state["_active"]["phase"] = "failed"
+                self.store.save(state)
+                if require_clean_review:
+                    raise ContractError(f"{stage} の修正に失敗したため採用しません: {exc}") from exc
+                return current_candidate
+            self._record_attempt(state, stage, "revision", context, revised, "accepted")
+            current_candidate = revised
+        # 最大パスまで回しても解消しない場合は、briefのような後続の根に当たる工程を失敗にする。
+        logger.warning(f"批評未解決: {stage} max_passes={max_passes} 到達")
+        state["_active"]["phase"] = "failed" if require_clean_review else "completed"
+        self.store.save(state)
+        if require_clean_review:
+            raise ContractError(f"{stage} の批評が未解決のため採用しません")
+        return current_candidate
 
     @staticmethod
     def _record_attempt(state: dict[str, Any], stage: str, kind: str, input_value: dict[str, Any], response: Any, validation: str) -> None:
