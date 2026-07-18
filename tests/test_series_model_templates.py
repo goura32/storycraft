@@ -85,6 +85,9 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("候補にない誤字・表現・事実を作らない", critique)
         self.assertIn("未公表または暗示された秘密や伏線", revision)
         self.assertIn("結末の方向性・読後感", revision)
+        self.assertIn("将来の対処・直面・克服・関係発展", critique)
+        self.assertIn("将来の対処・直面・克服・関係発展", revision)
+        self.assertIn("動詞と目的語の結び付き", critique)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
