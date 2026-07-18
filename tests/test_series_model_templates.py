@@ -78,6 +78,8 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         revision = OpenAIStoryModel._render("revision", "brief", candidate={}, critique={"issues": []}, context={"keywords": ["霧の島"]})
         self.assertNotIn("内容評価は行わない", generate)
         self.assertIn("自動レビュー", generate)
+        self.assertIn("物語開始時点", critique)
+        self.assertIn("物語開始時点", revision)
         self.assertIn("未公表または暗示された秘密や伏線", critique)
         self.assertIn("未公表または暗示された秘密や伏線", revision)
 
