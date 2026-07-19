@@ -343,6 +343,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("主人公との直接的な関係", critique)
         self.assertIn("解決の過程や手段", critique)
         self.assertIn("`avoid` の各文", critique)
+        self.assertIn("抽象語の組合せ", critique)
         self.assertIn("直接的で簡潔な関係事実", revision)
         self.assertIn("指摘されたfield以外を変更しない", revision)
         self.assertIn("完全なroot object", revision)
