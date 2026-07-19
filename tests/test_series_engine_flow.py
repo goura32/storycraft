@@ -43,31 +43,33 @@ class FlowModel:
         if stage == "characters":
             return {"characters": [{
                 "name": "澪", "role": "主人公", "narrative_function": "秘密を解く",
-                "fixed_profile": "灯台守の娘", "initial_state": {"current_goal": "父を探す", "current_location": "灯台"},
+                "fixed_profile": "灯台守の娘", 
+                "initial_state": {"emotion": "父を探す焦燥と灯台を守る責任感", "situation": "灯台守として父の不在を補う", "recent_goal": "父の行方を知りたい"},
             }]}
         if stage == "relationships":
             assert context["characters"][0]["id"] == "char-0001"
             return {"relationships": [{
                 "character_a_id": "char-0001", "character_b_id": "char-0001",
-                "fixed_meaning": "自分自身への疑念", "initial_state": {"current_state": "揺れている"},
+                "fixed_meaning": "自分自身への疑念", 
+                "initial_state": {"emotion": "揺れている", "situation": "父の真実を知りつつある", "recent_goal": "真実を受け入れる"},
             }]}
         if stage == "world":
             return {"entities": [{
                 "kind": "場所", "name": "霧の灯台", "stable_fact": "島の北端にある",
-                "use_or_access_rule": "灯台守だけが上階へ入れる", "initial_state": {"current_state": "稼働中"},
+                "use_or_access_rule": "灯台守だけが上階へ入れる", "initial_state": {"status": "稼働中", "current_holder_or_manager": "澪", "recent_change": "なし"},
             }]}
         if stage == "timeline":
             return {"timelines": [{
                 "kind": "期限", "description": "嵐まで七日", "sequence": 0, "related_ids": ["char-0001", "entity-0001"],
-                "fixed_rule": "嵐の後は船が来ない", "initial_state": {"status": "予定"},
+                "fixed_rule": "嵐の後は船が来ない", "initial_state": {"current_value": "予定", "next_change_trigger": "嵐", "estimate_until_next": "七日"},
             }]}
         if stage == "threads":
             return {"threads": [{
                 "kind": "謎", "importance": "major", "description": "父の失踪理由",
                 "author_truth": "父は島を守るために去った", "reader_knowledge": "父は失踪した",
-                "character_knowledge": {"char-0001": "父は戻らない"}, "presentation_rule": "直接説明しない",
+                "character_knowledge": {"char-0001": "father is gone"}, "presentation_rule": "直接説明しない",
                 "resolution_condition": "真実を受け入れる",
-                "initial_state": {"status": "open"},
+                "initial_state": {"status": "open", "progress": 0.0},
             }]}
         if stage == "volume_map":
             return {"volumes": [

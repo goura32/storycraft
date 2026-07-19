@@ -35,6 +35,7 @@
           "initial_state": {
             "type": "object",
             "description": "物語開始直後の主観的状態。感情・置かれている状況・直近の目的のみ。他者の内面・プロット解説・未来の行為・本文外の因果は書かない。",
+            "required": ["emotion", "situation", "recent_goal"],
             "properties": {
               "emotion": {
                 "type": "string",

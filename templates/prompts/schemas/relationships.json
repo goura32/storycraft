@@ -30,6 +30,7 @@
           "initial_state": {
             "type": "object",
             "description": "物語開始時点の関係状態。感情・距離感・認識のズレ・直近のきっかけのみ。他者の内面・未来の変化・本文外の因果は書かない。",
+            "required": ["emotion", "situation", "recent_goal"],
             "properties": {
               "emotion": {
                 "type": "string",

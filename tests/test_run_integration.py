@@ -30,7 +30,7 @@ class FirstLedgerModel:
     def generate(self, stage: str, context: dict) -> dict:
         if stage != "characters":
             raise AssertionError(stage)
-        return {"characters": [{"name": "澪", "role": "主人公", "narrative_function": "父を探す", "fixed_profile": "灯台守", "initial_state": {"goal": "父を探す"}}]}
+        return {"characters": [{"name": "澪", "role": "主人公", "narrative_function": "父を探す", "fixed_profile": "灯台守", "initial_state": {"emotion": "父を探す焦燥と灯台を守る責任感", "situation": "島の灯台守として父の不在を補う", "recent_goal": "父の消息を知りたい"}}]}
 
     def critique(self, stage: str, candidate: dict, context: dict) -> dict:
         return {"issues": []}

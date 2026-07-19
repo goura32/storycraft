@@ -152,7 +152,7 @@ class ContractValidator:
             raise ContractError("世界台帳が配列ではありません")
         for record in records:
             ContractValidator._require(record, "kind", "name", "stable_fact", "use_or_access_rule")
-            ContractValidator._initial_state(record)
+            ContractValidator._validate_world_initial_state(record)
             if "id" in record:
                 raise ContractError("世界IDはプログラムが採番します")
 
@@ -163,7 +163,7 @@ class ContractValidator:
             raise ContractError("時間台帳が配列ではありません")
         for record in records:
             ContractValidator._require(record, "kind", "description", "related_ids", "fixed_rule")
-            ContractValidator._initial_state(record)
+            ContractValidator._validate_timeline_initial_state(record)
             sequence = record.get("sequence")
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
                 raise ContractError("時間台帳の sequence が不正です")
@@ -180,7 +180,7 @@ class ContractValidator:
         major_count = 0
         for record in records:
             ContractValidator._require(record, "kind", "importance", "description", "author_truth", "reader_knowledge", "character_knowledge", "presentation_rule", "resolution_condition")
-            state = ContractValidator._initial_state(record)
+            state = ContractValidator._validate_threads_initial_state(record)
             if record["importance"] not in {"major", "supporting"} or state.get("status") not in {"open", "in_progress", "resolved"}:
                 raise ContractError("主要項目の状態または重要度が不正です")
             if not isinstance(record["character_knowledge"], dict) or not set(record["character_knowledge"]).issubset(known_ids):
@@ -191,6 +191,16 @@ class ContractValidator:
                 major_count += 1
         if major_count == 0:
             raise ContractError("主要項目台帳には major が必要です")
+
+    @staticmethod
+    def _validate_threads_initial_state(record: dict[str, Any]) -> dict[str, Any]:
+        state = record.get("initial_state")
+        if not isinstance(state, dict) or not state:
+            raise ContractError("開始時の現在状態がありません")
+        for field in ("status", "progress"):
+            if field not in state:
+                raise ContractError(f"initial_state に必須項目がありません: {field}")
+        return state
 
     @staticmethod
     def _validate_chapters(value: dict[str, Any], volume: dict[str, Any], brief: dict[str, Any]) -> None:
@@ -366,10 +376,33 @@ class ContractValidator:
                 raise ContractError(f"必須項目がありません: {field}")
 
     @staticmethod
+    def _validate_world_initial_state(record: dict[str, Any]) -> dict[str, Any]:
+        state = record.get("initial_state")
+        if not isinstance(state, dict) or not state:
+            raise ContractError("開始時の現在状態がありません")
+        for field in ("status", "current_holder_or_manager", "recent_change"):
+            if not isinstance(state.get(field), str) or not state[field].strip():
+                raise ContractError(f"initial_state に必須項目がありません: {field}")
+        return state
+
+    @staticmethod
+    def _validate_timeline_initial_state(record: dict[str, Any]) -> dict[str, Any]:
+        state = record.get("initial_state")
+        if not isinstance(state, dict) or not state:
+            raise ContractError("開始時の現在状態がありません")
+        for field in ("current_value", "next_change_trigger", "estimate_until_next"):
+            if not isinstance(state.get(field), str) or not state[field].strip():
+                raise ContractError(f"initial_state に必須項目がありません: {field}")
+        return state
+
+    @staticmethod
     def _initial_state(record: dict[str, Any]) -> dict[str, Any]:
         state = record.get("initial_state")
         if not isinstance(state, dict) or not state:
             raise ContractError("開始時の現在状態がありません")
+        for field in ("emotion", "situation", "recent_goal"):
+            if not isinstance(state.get(field), str) or not state[field].strip():
+                raise ContractError(f"initial_state に必須項目がありません: {field}")
         return state
 
     @staticmethod
