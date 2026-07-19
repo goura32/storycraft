@@ -343,33 +343,6 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(state["brief"], BRIEF)
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
 
-    def test_malformed_critique_is_retried_before_valid_critique_is_adopted(self) -> None:
-        class TransientMalformedCritiqueModel:
-            client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
-
-            def __init__(self) -> None:
-                self.critique_calls = 0
-
-            def generate(self, stage: str, context: dict) -> dict:
-                return dict(BRIEF)
-
-            def critique(self, stage: str, candidate: dict, context: dict) -> dict:
-                self.critique_calls += 1
-                if self.critique_calls == 1:
-                    return {"issues": [{"severity": "major", "field": "protagonist", "description": "改善点"}]}
-                return {"issues": []}
-
-            def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
-                raise AssertionError("issuesが空ならrevisionしてはならない")
-
-        service = SeriesService(self.workspace)
-        state = service._new_state(keywords=["女性向けロマンスファンタジー"])
-        model = TransientMalformedCritiqueModel()
-        service._run_one(state, model)
-        self.assertEqual(model.critique_calls, 2)
-        self.assertEqual(state["brief"], BRIEF)
-        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique_rejected", "critique"])
-
     def test_malformed_critique_stops_without_adoption_or_quality_acceptance(self) -> None:
         class MalformedCritiqueModel:
             client = SimpleNamespace(settings=SimpleNamespace(quality={"max_critique_passes": 1}))
@@ -389,10 +362,7 @@ class StateContractTests(unittest.TestCase):
             service._run_one(state, MalformedCritiqueModel())
         self.assertIsNone(state["brief"])
         self.assertEqual(state["quality_acceptances"], [])
-        self.assertEqual(
-            [attempt["kind"] for attempt in state["attempts"]],
-            ["draft", "critique_rejected", "critique_rejected", "critique_rejected", "critique_failed"],
-        )
+        self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique_failed"])
         self.assertEqual(state["attempts"][-1]["response"], {"issues": "not-an-array"})
 
     def test_invalid_revision_is_rejected_but_last_valid_candidate_is_accepted_with_known_issues(self) -> None:
