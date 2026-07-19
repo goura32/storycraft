@@ -156,7 +156,12 @@ class SeriesWorkflow(ContractValidator):
                         continue
                     is_final_scene = self._is_final_scene(state, volume, chapter, scene_number)
                     card_context = self._card_context(state, volume, chapter, scene_number, is_final_scene)
-                    card = self._improve("scene_card", card_context, model, state, lambda item: self._validate_card(item, scene_id, state, volume))
+                    card = self._improve(
+                        "scene_card", card_context, model, state,
+                        lambda item: self._validate_card(
+                            item, scene_id, state, volume, card_context["required_thread_actions"],
+                        ),
+                    )
                     state["cards"][scene_id] = card
                     state["last_completed_unit"] = {"stage": "scene_card", "unit": scene_id}
                     prose_context = self._writer_context(state, card, scene_id, is_final_scene)
@@ -417,7 +422,31 @@ class SeriesWorkflow(ContractValidator):
             "is_final_scene": is_final_scene,
             "same_volume_time_floor": {"sequence": floor["sequence"], "time_id": floor["id"]} if floor else None,
             "allowed_start_time_ids": allowed_start_time_ids,
+            "required_thread_actions": self._required_thread_actions(state, volume, scene_id),
         }
+
+    def _required_thread_actions(self, state: dict[str, Any], volume: dict[str, Any], scene_id: str) -> list[dict[str, str]]:
+        """巻配分の各主要項目操作を、意味に沿う一つの場面へ決定的に割り当てる。"""
+        chapters = state["chapters"].get(str(volume["number"]), [])
+        if not chapters or not volume.get("thread_targets"):
+            return []
+        slots = [
+            self._scene_id(volume["number"], chapter["number"], number)
+            for chapter in chapters
+            for number in range(1, chapter["scene_count"] + 1)
+        ]
+        if not slots:
+            return []
+        grouped = {action: [] for action in ("introduce", "advance", "resolve")}
+        for target in volume["thread_targets"]:
+            grouped[target["required_action"]].append(target)
+        targets_by_slot: dict[str, list[dict[str, str]]] = {}
+        anchors = {"introduce": 0, "advance": (len(slots) - 1) // 2, "resolve": len(slots) - 1}
+        for action, targets in grouped.items():
+            for offset, target in enumerate(targets):
+                slot = slots[min(anchors[action] + offset, len(slots) - 1)]
+                targets_by_slot.setdefault(slot, []).append({"thread_id": target["thread_id"], "action": action})
+        return targets_by_slot.get(scene_id, [])
 
     def _writer_context(self, state: dict[str, Any], card: dict[str, Any], scene_id: str, is_final_scene: bool) -> dict[str, Any]:
         visible = {record["id"]: record for key in ("characters", "relationships", "world", "timeline", "threads") for record in state[key] or [] if record["id"] in card["visible_ids"]}

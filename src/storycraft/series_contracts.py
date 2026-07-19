@@ -1,6 +1,7 @@
 """シリーズ工程の契約型と決定的検証。"""
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -189,7 +190,10 @@ class ContractValidator:
             if not isinstance(chapter.get("scene_count"), int) or not 1 <= chapter["scene_count"] <= 4:
                 raise ContractError("場面数は1〜4でなければなりません")
 
-    def _validate_card(self, card: dict[str, Any], scene_id: str, state: dict[str, Any], volume: dict[str, Any] | None = None) -> None:
+    def _validate_card(
+        self, card: dict[str, Any], scene_id: str, state: dict[str, Any], volume: dict[str, Any] | None = None,
+        required_thread_actions: list[dict[str, str]] | None = None,
+    ) -> None:
         self._require(card, "scene_id", "pov_character_id", "location_id", "start_time_id", "end_time_id", "character_ids", "purpose", "required_events", "thread_actions", "reader_disclosure", "withheld_information", "presentation_rules", "end_change", "visible_ids", "allowed_update_ids")
         if card["scene_id"] != scene_id:
             raise ContractError("場面カードのIDが実行対象と一致しません")
@@ -228,7 +232,11 @@ class ContractValidator:
             if pair in action_pairs:
                 raise ContractError("場面カードの伏線操作が重複しています")
             action_pairs.add(pair)
-        if volume is not None:
+        if required_thread_actions is not None:
+            required_pairs = Counter((action["thread_id"], action["action"]) for action in required_thread_actions)
+            if Counter(action_pairs) != required_pairs:
+                raise ContractError("場面カードの主要項目操作がこの場面への割当と一致しません")
+        elif volume is not None:
             planned = {(target["thread_id"], target["required_action"]) for target in volume["thread_targets"]}
             if not action_pairs.issubset(planned):
                 raise ContractError("場面カードに巻配分の対象外の主要項目操作があります")

@@ -71,14 +71,18 @@ class FlowModel:
                 "start_state": "開始", "end_state": "変化", "scene_count": 1,
             }]}
         if stage == "scene_card":
+            thread_actions = context["required_thread_actions"]
+            visible_ids = ["char-0001", "entity-0001", "time-0001"]
+            if thread_actions:
+                visible_ids.append("thread-0001")
             return {
                 "scene_id": context["scene_id"], "pov_character_id": "char-0001", "location_id": "entity-0001",
                 "start_time_id": "time-0001", "end_time_id": "time-0001", "character_ids": ["char-0001"],
                 "purpose": "秘密に近づく", "required_events": ["灯りを見つける"],
-                "thread_actions": [{"thread_id": "thread-0001", "action": ("introduce", "advance", "advance", "resolve")[context["volume"]["number"] - 1]}],
+                "thread_actions": thread_actions,
                 "reader_disclosure": "父の不在", "withheld_information": "父の真実", "presentation_rules": "澪の観察だけで描く", "end_change": "秘密への距離が縮まる",
-                "visible_ids": ["char-0001", "entity-0001", "time-0001", "thread-0001"],
-                "allowed_update_ids": ["thread-0001"],
+                "visible_ids": visible_ids,
+                "allowed_update_ids": ["thread-0001"] if thread_actions else [],
             }
         if stage == "scene":
             ending = " 澪は島に残る。" if context["is_final_scene"] else ""
@@ -86,12 +90,15 @@ class FlowModel:
         if stage == "continuity":
             content = context["content"]
             final = context["is_final_scene"]
-            return {
-                "handoff_summary": f"灯りが揺れた。{context['scene_id']}で次へ進む。",
-                "state_updates": [{
+            updates = []
+            if context["card"]["allowed_update_ids"]:
+                updates = [{
                     "source_scene_id": context["scene_id"], "id": "thread-0001", "field": "status", "value": "resolved" if final else "in_progress",
                     "evidence": "存在しない根拠" if self.invalid_evidence else "灯りが揺れた。",
-                }],
+                }]
+            return {
+                "handoff_summary": f"灯りが揺れた。{context['scene_id']}で次へ進む。",
+                "state_updates": updates,
             }
         if stage == "volume_summary":
             unresolved = [
@@ -177,6 +184,45 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
         self.assertTrue(resumed.completed)
         self.assertEqual([stage for stage, _ in model.calls].count("characters"), 1)
         self.assertEqual([stage for stage, _ in model.calls].count("threads"), 1)
+    def test_volume_targets_are_assigned_to_exactly_one_scene_card(self) -> None:
+        class TwoSceneModel(FlowModel):
+            def generate(self, stage: str, context: dict) -> dict:
+                if stage == "volume_chapters" and context["volume"]["number"] == 1:
+                    return {"chapters": [{
+                        "number": 1, "title": "第1章", "purpose": "真実へ進む",
+                        "start_state": "開始", "end_state": "変化", "scene_count": 2,
+                    }]}
+                return super().generate(stage, context)
+
+        model = TwoSceneModel()
+        service = SeriesService(self.workspace)
+        result = service.run(BRIEF, model)
+        self.assertTrue(result.completed)
+        cards = service.store.load()["cards"]
+        self.assertEqual(cards["v01-c01-s01"]["thread_actions"], [{"thread_id": "thread-0001", "action": "introduce"}])
+        self.assertEqual(cards["v01-c01-s02"]["thread_actions"], [])
+        contexts = [context for stage, context in model.calls if stage == "scene_card" and context["volume"]["number"] == 1]
+        self.assertEqual(contexts[0]["required_thread_actions"], [{"thread_id": "thread-0001", "action": "introduce"}])
+        self.assertEqual(contexts[1]["required_thread_actions"], [])
+
+    def test_scene_card_rejects_action_not_assigned_to_its_scene(self) -> None:
+        class DuplicateActionModel(FlowModel):
+            def generate(self, stage: str, context: dict) -> dict:
+                if stage == "volume_chapters" and context["volume"]["number"] == 1:
+                    return {"chapters": [{
+                        "number": 1, "title": "第1章", "purpose": "真実へ進む",
+                        "start_state": "開始", "end_state": "変化", "scene_count": 2,
+                    }]}
+                value = super().generate(stage, context)
+                if stage == "scene_card" and context["scene_id"] == "v01-c01-s02":
+                    value["thread_actions"] = [{"thread_id": "thread-0001", "action": "introduce"}]
+                    value["visible_ids"].append("thread-0001")
+                    value["allowed_update_ids"] = ["thread-0001"]
+                return value
+
+        with self.assertRaisesRegex(ContractError, "場面への割当"):
+            SeriesService(self.workspace).run(BRIEF, DuplicateActionModel())
+
     def test_volume_card_actions_reject_targets_outside_its_volume_plan(self) -> None:
         class ExtraActionModel(FlowModel):
             def generate(self, stage: str, context: dict) -> dict:
@@ -185,7 +231,7 @@ class SeriesEngineFlowAcceptanceTests(unittest.TestCase):
                     value["thread_actions"].append({"thread_id": "thread-0001", "action": "resolve"})
                 return value
 
-        with self.assertRaisesRegex(ContractError, "巻配分の対象外"):
+        with self.assertRaisesRegex(ContractError, "場面への割当|巻配分の対象外"):
             SeriesService(self.workspace).run(BRIEF, ExtraActionModel())
     def test_volume_card_actions_reject_duplicates_across_scene_cards(self) -> None:
         state = {
