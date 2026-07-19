@@ -12,7 +12,7 @@ GENERATED_BRIEF = {
     "title": "霧の島の灯",
     "genre": "海洋幻想譚",
     "protagonist": "澪",
-    "key_people": "父",
+    "key_people": [{"name": "父", "present_position": "島の灯台守", "initial_relation_to_protagonist": "澪の父"}],
     "want": "父の暗号と島の秘密をたどる",
     "avoid": "救いのない結末",
     "ending": "澪が自らの居場所を選ぶ",

@@ -12,7 +12,11 @@ BRIEF = {
     "title": "霧の島の灯",
     "genre": "海洋幻想譚",
     "protagonist": "灯台守の娘・澪",
-    "key_people": "父・航海士・島医者",
+    "key_people": [
+        {"name": "父", "present_position": "灯台守", "initial_relation_to_protagonist": "主人公の父"},
+        {"name": "航海士", "present_position": "島を訪れる航海士", "initial_relation_to_protagonist": "主人公の相談相手"},
+        {"name": "島医者", "present_position": "島の診療所を営む医師", "initial_relation_to_protagonist": "主人公の幼なじみ"},
+    ],
     "want": "父の失踪と灯台の秘密を解く",
     "avoid": "救いのない結末",
     "ending": "澪が父の真実を受け入れ、島に残る",

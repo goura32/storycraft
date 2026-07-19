@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -301,13 +302,32 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("物語開始時点", critique)
         self.assertIn("物語開始時点", revision)
         self.assertIn("未公表または暗示された秘密や伏線", critique)
-        self.assertIn("結末の方向性・読後感", critique)
+        self.assertIn("終着点と読後感", critique)
         self.assertIn("候補にない誤字・表現・事実を作らない", critique)
         self.assertIn("未公表または暗示された秘密や伏線", revision)
-        self.assertIn("結末の方向性・読後感", revision)
+        self.assertIn("終着点と読後感", revision)
         self.assertIn("将来の対処・直面・克服・関係発展", critique)
         self.assertIn("将来の対処・直面・克服・関係発展", revision)
         self.assertIn("動詞と目的語の結び付き", critique)
+
+    def test_brief_templates_treat_keywords_as_reference_and_require_structured_people(self) -> None:
+        generate = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["2巻構成"]})
+        critique = OpenAIStoryModel._render("critique", "brief", candidate={}, context={"keywords": ["2巻構成"]})
+        revision = OpenAIStoryModel._render("revision", "brief", candidate={}, critique={"issues": []}, context={"keywords": ["2巻構成"]})
+        schema = json.loads(Path("templates/prompts/schemas/brief.json").read_text(encoding="utf-8"))
+
+        self.assertIn("参考情報", generate)
+        self.assertIn("採用しない", generate)
+        self.assertIn("巻数・章数はkeywordsの文言から機械的に決めず", generate)
+        self.assertIn("不一致だけではissueにしない", critique)
+        self.assertIn("keywordsへの一致を目的として巻数", revision)
+        self.assertEqual(schema["properties"]["key_people"]["type"], "array")
+        self.assertEqual(
+            schema["properties"]["key_people"]["items"]["required"],
+            ["name", "present_position", "initial_relation_to_protagonist"],
+        )
+        self.assertIn("開始時点", schema["properties"]["protagonist"]["description"])
+        self.assertIn("物語上の役割は書かない", schema["properties"]["protagonist"]["description"])
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"

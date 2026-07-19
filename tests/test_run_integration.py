@@ -12,7 +12,7 @@ BRIEF = {
     "title": "霧の島の灯",
     "genre": "海洋幻想譚",
     "protagonist": "澪",
-    "key_people": "父",
+    "key_people": [{"name": "父", "present_position": "島の灯台守", "initial_relation_to_protagonist": "主人公の父"}],
     "want": "父を探す",
     "avoid": "救いのない結末",
     "ending": "島に残る",
