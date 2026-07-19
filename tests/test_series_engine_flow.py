@@ -11,7 +11,13 @@ from storycraft.series_engine import ContractError, SeriesService
 BRIEF = {
     "title": "霧の島の灯",
     "genre": "海洋幻想譚",
-    "protagonist": "灯台守の娘・澪",
+    "protagonist": {
+        "name": "澪",
+        "present_position": "灯台守の娘",
+        "core_trait": "責任感が強い",
+        "current_pressure": "父の失踪後も灯台を維持している",
+        "initial_wish": "父の行方を知りたい",
+    },
     "key_people": [
         {"name": "父", "present_position": "灯台守", "initial_relation_to_protagonist": "主人公の父"},
         {"name": "航海士", "present_position": "島を訪れる航海士", "initial_relation_to_protagonist": "主人公の相談相手"},

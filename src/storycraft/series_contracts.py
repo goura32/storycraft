@@ -51,9 +51,15 @@ class ContractValidator:
     def _validate_brief(brief: dict[str, Any]) -> None:
         if not isinstance(brief, dict):
             raise ContractError("企画はオブジェクトでなければなりません")
-        for key in ("title", "genre", "protagonist", "want", "avoid", "ending"):
+        for key in ("title", "genre", "want", "avoid", "ending"):
             if not isinstance(brief.get(key), str) or not brief[key].strip():
                 raise ContractError(f"企画の必須項目がありません: {key}")
+        protagonist = brief.get("protagonist")
+        if not isinstance(protagonist, dict):
+            raise ContractError("企画の主人公情報が不正です")
+        for key in ("name", "present_position", "core_trait", "current_pressure", "initial_wish"):
+            if not isinstance(protagonist.get(key), str) or not protagonist[key].strip():
+                raise ContractError(f"企画の主人公の必須項目がありません: {key}")
         key_people = brief.get("key_people")
         if not isinstance(key_people, list) or not key_people:
             raise ContractError("企画の主要人物群が不正です")

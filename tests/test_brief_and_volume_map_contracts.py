@@ -11,7 +11,13 @@ from storycraft.series_engine import ContractError, SeriesService
 GENERATED_BRIEF = {
     "title": "霧の島の灯",
     "genre": "海洋幻想譚",
-    "protagonist": "澪",
+    "protagonist": {
+        "name": "澪",
+        "present_position": "島の灯台守の娘",
+        "core_trait": "好奇心が強く粘り強い",
+        "current_pressure": "父の不在で灯台の仕事を支えなければならない",
+        "initial_wish": "父の残した手掛かりを理解したい",
+    },
     "key_people": [{"name": "父", "present_position": "島の灯台守", "initial_relation_to_protagonist": "澪の父"}],
     "want": "父の暗号と島の秘密をたどる",
     "avoid": "救いのない結末",
@@ -52,6 +58,14 @@ class BriefAndVolumeMapContractTests(unittest.TestCase):
         self.assertEqual(state["brief"], GENERATED_BRIEF)
         self.assertEqual(state["keywords"], ["霧の島", "灯台", "女性向け幻想譚", "4巻"])
         self.assertEqual(model.calls, [("brief", {"keywords": state["keywords"]})])
+
+    def test_brief_rejects_missing_structured_protagonist_field(self) -> None:
+        invalid = dict(GENERATED_BRIEF)
+        invalid["protagonist"] = dict(GENERATED_BRIEF["protagonist"])
+        del invalid["protagonist"]["current_pressure"]
+
+        with self.assertRaisesRegex(ContractError, "主人公の必須項目"):
+            SeriesService._validate_brief(invalid)
 
     def test_volume_map_requires_existing_thread_ids_and_a_complete_major_thread_arc(self) -> None:
         valid = {

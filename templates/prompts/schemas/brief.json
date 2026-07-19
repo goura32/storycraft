@@ -11,8 +11,16 @@
       "description": "ジャンル名。市場分類として通じる標準的な名称（例：女性向けロマンスファンタジー、異世界転生、ミステリー等）。"
     },
     "protagonist": {
-      "type": "string",
-      "description": "主人公。名前・物語開始時点の立場・性格の核・現在抱える圧力・開始時点の望みを、読者が共感できる具体像として記述する。秘密、未来の展開、結末への到達、物語上の役割は書かない。"
+      "type": "object",
+      "description": "主人公の開始時点の構造化情報。秘密、未来の展開、結末への到達、物語上の役割は書かない。",
+      "required": ["name", "present_position", "core_trait", "current_pressure", "initial_wish"],
+      "properties": {
+        "name": {"type": "string", "description": "主人公名。後続の人物台帳で維持する候補名。"},
+        "present_position": {"type": "string", "description": "物語開始時点の立場・所属・置かれた場所。将来の役割や秘密を書かない。"},
+        "core_trait": {"type": "string", "description": "開始時点で観察できる性格の核・信条・行動傾向。将来の成長や克服を書かない。"},
+        "current_pressure": {"type": "string", "description": "開始時点で主人公にかかる現在の圧力・制約・未解決の課題。将来の対処や解決方法を書かない。"},
+        "initial_wish": {"type": "string", "description": "開始時点で主人公が意識している直近の望み・目的。物語全体の結末や将来の到達点を書かない。"}
+      }
     },
     "key_people": {
       "type": "array",
@@ -34,11 +42,11 @@
     },
     "avoid": {
       "type": "string",
-      "description": "避けたい表現・展開・クリシェ・読後感の悪化要因。禁止事項・NG要素を具体的に列挙する。"
+      "description": "読者体験を損なう表現・反復・安易な解決・望まない読後感。題材を成立させる必要な表現手法、情報の段階的開示、必要な伏線一般を理由なく包括的に禁止しない。"
     },
     "ending": {
       "type": "string",
-      "description": "シリーズ完結時の着地イメージ。主人公らの最終状態・世界の変化・読後感の方向性（希望・喪失・静謐等）を記述する。詳細なプロットは書かない。"
+      "description": "シリーズ完結時の最終状態・世界または共同体の変化・読後感。未設定の秘密、因果史、敵対者、解決手段を新たな前提として導入しない。"
     },
     "volumes": {
       "type": "integer",

@@ -302,10 +302,10 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("物語開始時点", critique)
         self.assertIn("物語開始時点", revision)
         self.assertIn("未公表または暗示された秘密や伏線", critique)
-        self.assertIn("終着点と読後感", critique)
+        self.assertIn("最終状態・世界または共同体の変化・読後感", critique)
         self.assertIn("候補にない誤字・表現・事実を作らない", critique)
         self.assertIn("未公表または暗示された秘密や伏線", revision)
-        self.assertIn("終着点と読後感", revision)
+        self.assertIn("最終状態・世界または共同体の変化・読後感", revision)
         self.assertIn("将来の対処・直面・克服・関係発展", critique)
         self.assertIn("将来の対処・直面・克服・関係発展", revision)
         self.assertIn("動詞と目的語の結び付き", critique)
@@ -326,8 +326,16 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
             schema["properties"]["key_people"]["items"]["required"],
             ["name", "present_position", "initial_relation_to_protagonist"],
         )
-        self.assertIn("開始時点", schema["properties"]["protagonist"]["description"])
-        self.assertIn("物語上の役割は書かない", schema["properties"]["protagonist"]["description"])
+        self.assertEqual(schema["properties"]["protagonist"]["type"], "object")
+        self.assertEqual(
+            schema["properties"]["protagonist"]["required"],
+            ["name", "present_position", "core_trait", "current_pressure", "initial_wish"],
+        )
+        self.assertIn("包括的に禁止しない", generate)
+        self.assertIn("未設定の秘密", generate)
+        self.assertIn("必要な表現手法", critique)
+        self.assertIn("未設定の秘密", critique)
+        self.assertIn("不自然な複合名詞", critique)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
