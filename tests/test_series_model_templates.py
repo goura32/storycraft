@@ -345,6 +345,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("`avoid` の各文", critique)
         self.assertIn("直接的で簡潔な関係事実", revision)
         self.assertIn("指摘されたfield以外を変更しない", revision)
+        self.assertIn("完全なroot object", revision)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
