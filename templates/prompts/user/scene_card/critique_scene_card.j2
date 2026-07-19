@@ -11,7 +11,7 @@
 6. **場所整合**: `location_id` が world台帳のidか
 7. **thread_actions**: `action` が introduce/advance/resolve のいずれか。同一thread_idの重複操作なし
 8. **所有範囲内**: `reader_disclosure`/`withheld_information`/`presentation_rules`/`end_change` が scene_card の所有範囲を超えないか（秘密・作者真実・未来展開の新規作成なし）
-9. **更新制約**: `allowed_update_ids` が `visible_ids` の部分集合か。`time-XXXX` と `rel-XXXX` を含まないか
+9. **更新制約**: `allowed_update_ids` が `visible_ids` の部分集合で、**`char-XXXX` と `thread-XXXX` のみ**か。`entity-XXXX`、`time-XXXX`、`rel-XXXX` を含まないか
 10. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
 
 各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。

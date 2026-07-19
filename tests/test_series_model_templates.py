@@ -98,6 +98,23 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("same_volume_time_floor", prompt)
         self.assertIn("allowed_start_time_ids", prompt)
 
+    def test_scene_card_templates_allow_updates_only_for_characters_and_major_threads(self) -> None:
+        templates = [
+            Path("templates/prompts/user/scene_card/generate_scene_card.j2"),
+            Path("templates/prompts/user/scene_card/revision_scene_card.j2"),
+            Path("templates/prompts/user/scene_card/critique_scene_card.j2"),
+        ]
+        for template in templates:
+            with self.subTest(template=template.name):
+                contents = template.read_text(encoding="utf-8")
+                self.assertIn("char-XXXX", contents)
+                self.assertIn("thread-XXXX", contents)
+                self.assertIn("entity-XXXX", contents)
+        schema = Path("templates/prompts/schemas/scene_card.json").read_text(encoding="utf-8")
+        self.assertIn("char-XXXX", schema)
+        self.assertIn("thread-XXXX", schema)
+        self.assertIn("entity/time/relationship IDは含めない", schema)
+
     def test_attempt_counter_restarts_for_each_llm_operation(self) -> None:
         client = _SequenceClient([
             CallRecord(kind="generate", phase="brief", ref="brief", attempt=1, seed=1, content="{}"),

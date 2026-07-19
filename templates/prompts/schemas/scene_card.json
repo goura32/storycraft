@@ -76,7 +76,7 @@
     "allowed_update_ids": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "この場面で状態更新を許可されるIDの集合（visible_idsの部分集合）。continuity工程で更新対象になるもの。"
+      "description": "この場面で状態更新を許可されるIDの集合（visible_idsの部分集合）。continuity工程で更新対象になるもの。許可できるのは char-XXXX と thread-XXXX のみで、entity/time/relationship IDは含めない。"
     }
   }
 }

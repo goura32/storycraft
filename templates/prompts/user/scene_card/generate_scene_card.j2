@@ -13,7 +13,7 @@
 
 `visible_ids` には入力の `ledgers` に存在する `char-XXXX`、`rel-XXXX`、`entity-XXXX`、`time-XXXX`、`thread-XXXX` のみを含める。少なくとも `pov_character_id`、`location_id`、`start_time_id`、`end_time_id`、全 `character_ids`、全 `thread_actions[].thread_id` を含める。
 
-`allowed_update_ids` には `visible_ids` に含まれる ID のうち、更新対象とするものだけを**そのまま**（`.current_state` 等のサフィックスなし）で列挙する。`time-XXXX` と `rel-XXXX` は更新不可。
+`allowed_update_ids` には `visible_ids` に含まれる ID のうち、更新対象とするものだけを**そのまま**（`.current_state` 等のサフィックスなし）で列挙する。許可できるのは **`char-XXXX` と `thread-XXXX` のみ**。`entity-XXXX`、`time-XXXX`、`rel-XXXX` は更新不可。
 
 **書き方の指針：**
 - `scene_id`: 場面ID。形式: vXX-cXX-sXX（巻-章-場面）。例: v01-c01-s01
