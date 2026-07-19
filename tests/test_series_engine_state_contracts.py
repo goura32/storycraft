@@ -201,7 +201,7 @@ class StateContractTests(unittest.TestCase):
 
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)
-        with self.assertLogs("storycraft", level="INFO") as captured:
+        with self.assertNoLogs("storycraft", level="INFO"):
             critique = service._review_candidate(
                 "quality_probe", {"value": 0}, {}, CleanCritiqueModel(), state,
                 pass_num=1, max_passes=0, final=True,
@@ -209,7 +209,6 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(critique, {"issues": []})
         self.assertEqual(state["_active"]["phase"], "critique_final")
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["critique"])
-        self.assertIn("批評結果: stage=quality_probe quality_pass=1/1 final=True issues=0", "\n".join(captured.output))
 
     def test_every_critique_logs_issue_count_including_final_critique(self) -> None:
         class AlwaysIssuesModel:
@@ -240,9 +239,11 @@ class StateContractTests(unittest.TestCase):
         output = "\n".join(captured.output)
         self.assertIn("工程開始: stage=quality_probe v:-/-", output)
         self.assertEqual(model.revision_quality_passes, ["1/3", "2/3"])
-        self.assertIn("批評結果: stage=quality_probe quality_pass=1/3 final=False issues=1", output)
-        self.assertIn("批評結果: stage=quality_probe quality_pass=2/3 final=False issues=1", output)
-        self.assertIn("批評結果: stage=quality_probe quality_pass=3/3 final=True issues=1", output)
+        self.assertIn("批評指摘: stage=quality_probe v:-/- quality_pass=1/3 severities=['minor']", output)
+        self.assertIn("批評指摘: stage=quality_probe v:-/- quality_pass=2/3 severities=['minor']", output)
+        self.assertIn("批評指摘: stage=quality_probe v:-/- quality_pass=3/3 severities=['minor']", output)
+        self.assertNotIn("批評結果:", output)
+        self.assertNotIn("批評指摘あり:", output)
 
     def test_critique_call_failure_blocks_characters_stage_after_model_retries(self) -> None:
         class FailingCritiqueModel:
