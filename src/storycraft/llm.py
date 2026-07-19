@@ -37,6 +37,23 @@ def _raw_filename_component(value: str) -> str:
     return normalized or "unknown"
 
 
+def _raw_filename(rec: "CallRecord", index: int) -> str:
+    """生データ名へ工程を常に含め、工程に属さない座標は出力しない。"""
+    parts = [f"{index:04d}", _raw_filename_component(rec.kind), _raw_filename_component(rec.phase)]
+    scope_by_stage = {
+        "volume_chapters": ("v",),
+        "volume_summary": ("v",),
+        "scene_card": ("v", "c", "s"),
+        "scene": ("v", "c", "s"),
+        "continuity": ("v", "c", "s"),
+    }
+    for coordinate in scope_by_stage.get(rec.phase, ()):
+        match = re.search(rf"\b{coordinate}:\s*(\d+)", rec.ref)
+        if match:
+            parts.append(f"{coordinate}{match.group(1)}")
+    return "_".join(parts)
+
+
 @dataclass
 class CallRecord:
     kind: str
@@ -207,9 +224,7 @@ class LLMClient:
             "received": rec.to_dict(),
             "content": rec.content,
         }
-        json_path = self.raw_dir / (
-            f"{idx:04d}_{_raw_filename_component(rec.kind)}_{_raw_filename_component(rec.ref)}.json"
-        )
+        json_path = self.raw_dir / f"{_raw_filename(rec, idx)}.json"
         json_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
         json_path.with_suffix(".md").write_text(
             self._raw_markdown(json_path.with_suffix(".md").name, sent_messages, rec.content),
