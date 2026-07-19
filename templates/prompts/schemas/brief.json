@@ -18,7 +18,7 @@
         "name": {"type": "string", "description": "主人公名。後続の人物台帳で維持する候補名。"},
         "present_position": {"type": "string", "description": "物語開始時点の立場・所属・置かれた場所。将来の役割や秘密を書かない。"},
         "core_trait": {"type": "string", "description": "開始時点で観察できる性格の核・信条・行動傾向。将来の成長や克服を書かない。"},
-        "current_pressure": {"type": "string", "description": "開始時点で主人公にかかる現在の圧力・制約・未解決の課題。将来の対処や解決方法を書かない。"},
+        "current_pressure": {"type": "string", "description": "開始時点で主人公にかかる現在の圧力・制約・未解決の課題。自然な完結表現で書き、将来の対処や解決方法を書かない。"},
         "initial_wish": {"type": "string", "description": "開始時点で主人公が意識している直近の望み・目的。物語全体の結末や将来の到達点を書かない。"}
       }
     },
@@ -32,7 +32,7 @@
         "properties": {
           "name": {"type": "string", "description": "人物名。後続の人物台帳で維持する候補名。"},
           "present_position": {"type": "string", "description": "物語開始時点の立場・所属・主人公との接点。将来の役割や秘密を書かない。"},
-          "initial_relation_to_protagonist": {"type": "string", "description": "物語開始時点の主人公との関係。親密化、対立の決着、関係変化を予告しない。"}
+          "initial_relation_to_protagonist": {"type": "string", "description": "物語開始時点で既に成立している静的な主人公との関係。血縁、既存の職務関係、面識の有無、開始時点の対立だけを示し、共同作業・親密化・関係変化を予告しない。"}
         }
       }
     },
@@ -42,7 +42,7 @@
     },
     "avoid": {
       "type": "string",
-      "description": "読者体験を損なう表現・反復・安易な解決・望まない読後感。題材を成立させる必要な表現手法、情報の段階的開示、必要な伏線一般を理由なく包括的に禁止しない。"
+      "description": "読者体験を損なう表現・反復・安易な解決・望まない読後感。避ける対象だけを書き、肯定的な制作指示、維持すべき構成、実施すべき開示方法は書かない。題材を成立させる必要な表現手法、情報の段階的開示、必要な伏線一般を理由なく包括的に禁止しない。"
     },
     "ending": {
       "type": "string",

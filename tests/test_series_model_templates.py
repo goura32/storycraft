@@ -336,6 +336,9 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("必要な表現手法", critique)
         self.assertIn("未設定の秘密", critique)
         self.assertIn("不自然な複合名詞", critique)
+        self.assertIn("静的な開始時点の関係", generate)
+        self.assertIn("肯定的な制作指示", generate)
+        self.assertIn("不自然な断片", revision)
 
     def test_active_templates_and_schemas_have_only_current_stages(self) -> None:
         root = Path(__file__).parents[1] / "templates" / "prompts"
