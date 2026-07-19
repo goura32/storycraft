@@ -330,18 +330,34 @@ class SeriesWorkflow(ContractValidator):
             set_log_quality_pass(f"{pass_num}/{max_passes + 1}")
         try:
             critique = model.critique(stage, candidate, context)
-            self._validate_critique(critique)
         except LLMCallError as exc:
             self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
             active["phase"] = "failed"
             self.store.save(state)
             label = "最終批評" if final else "批評"
             raise ContractError(f"{stage} の{label}に失敗したため停止しました: {exc}") from exc
-        except Exception as exc:
-            self._record_attempt(state, stage, "critique_failed", context, critique, str(exc))
-            active["phase"] = "failed"
-            self.store.save(state)
-            return None
+
+        # 形式違反は採用せず、同一候補を最大3回まで再批評する。実モデルでは、内容は
+        # 妥当でも issue の必須フィールド一つを落とす一過性の出力があり得るためである。
+        # 再試行後も不正なら従来どおり fail-closed で停止し、全不正応答をstateへ残す。
+        for validation_retry in range(1, 4):
+            try:
+                self._validate_critique(critique)
+                break
+            except ContractError as exc:
+                self._record_attempt(state, stage, "critique_rejected", context, critique, str(exc))
+                if validation_retry == 3:
+                    self._record_attempt(state, stage, "critique_failed", context, critique, str(exc))
+                    active["phase"] = "failed"
+                    self.store.save(state)
+                    return None
+                logger.warning(
+                    "批評を構造契約違反として不採用、再試行: stage=%s retry=%s/3 error=%s",
+                    stage, validation_retry, exc,
+                )
+                critique = model.critique(stage, candidate, context)
+        else:  # pragma: no cover - loop always breaks or returns
+            raise AssertionError("批評検証の再試行制御に失敗しました")
         self._record_attempt(state, stage, "critique", context, critique, "accepted")
         if critique["issues"]:
             logger.warning(
