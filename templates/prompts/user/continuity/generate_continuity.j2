@@ -8,7 +8,7 @@
 
 同一キャラクターへの複数更新は禁止。1キャラクターにつき1フィールド1更新のみ許可。`allowed_update_ids` に含まれるIDを重複して使ってはいけない。
 
-根拠文字列 `evidence` は `scene.content`（入力内の本文）から**そのままコピーした連続文字列**だけを使う。要約、書き換え、追記、句読点・鍵括弧の省略は禁止。出力直前に各更新で **`evidence in scene.content` が真であること**を確認し、偽ならその更新を出力しない。
+根拠文字列 `evidence` は `scene.content`（入力内の本文）から**そのままコピーした連続文字列**だけを使う。要約、書き換え、追記、句読点・鍵括弧の省略は禁止。出力直前に各更新で **`evidence in scene.content` が真であること**を確認し、偽ならその更新を出力しない。**`evidence` は `scene.content` 内の任意の位置に `evidence` という文字列がそのまま現れること（大文字小文字・句読点・空白含む完全一致）を必須とする。一部の語句を言い換えたり、抜粋したりしてはならない。**
 
 **書き方の指針：**
 - `handoff_summary`: 次場面へ引き継ぐ要約。視点人物の心理状態・主要伏線の進捗・変化した関係/状態・次場面の示唆を簡潔に。約200〜800字
@@ -17,7 +17,7 @@
   - `id`: 更新対象の台帳エントリID（allowed_update_idsに含まれるもの）
   - `field`: 更新フィールドの直接キー。人物は `emotion` / `situation` / `recent_goal`、major threadは `status` / `progress` のみ。`threads.current_state.status` のようなパスは禁止
   - `value`: 新しい値。フィールド型に合わせる（status: open/in_progress/resolved, progress: 0.0-1.0, emotion/situation/recent_goal: string等）
-  - `evidence`: `scene.content`からそのままコピーした連続文字列（10〜80文字）。**要約・書き換え・追記・句読点や鍵括弧の省略は禁止**。出力前に `evidence in scene.content` が真であることを確認し、偽ならその更新を出力しない
+  - `evidence`: `scene.content`からそのままコピーした連続文字列（10〜80文字）。**要約・書き換え・追記・句読点や鍵括弧の省略は禁止**。出力前に `evidence in scene.content` が真であることを確認し、偽ならその更新を出力しない。**`evidence` は `scene.content` 内にそのまま現れる連続文字列（完全一致）でなければならない**
 
 ## 入力
 
