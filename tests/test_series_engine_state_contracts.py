@@ -418,6 +418,19 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(candidate["required_events"], ["灯台の灯りを見つける"])
         self.assertEqual([attempt["kind"] for attempt in state["attempts"]], ["draft", "critique", "revision", "critique"])
 
+    def test_revision_rejects_change_outside_cited_field(self) -> None:
+        candidate = {"characters": [{"initial_state": {"emotion": "緊張", "recent_goal": "帰宅"}}]}
+        revised = {"characters": [{"initial_state": {"emotion": "平静", "recent_goal": "手紙を探す"}}]}
+        critique = {"issues": [{"severity": "minor", "field": "characters[0].initial_state.emotion", "description": "緊張", "suggestion": "日本語表記を正す。"}]}
+        with self.assertRaisesRegex(ContractError, "引用されていないfield"):
+            SeriesService._validate_revision_scope(candidate, revised, critique)
+
+    def test_critique_rejects_field_outside_candidate(self) -> None:
+        candidate = {"world": [{"stable_fact": "書店"}]}
+        critique = {"issues": [{"severity": "minor", "field": "brief.protagonist.current_pressure", "description": "手纸", "suggestion": "日本語表記を正す。"}]}
+        with self.assertRaisesRegex(ContractError, "候補を指しません"):
+            SeriesService._validate_critique_fields(critique, candidate)
+
     def test_card_context_exposes_same_volume_time_floor_and_allowed_time_ids(self) -> None:
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)

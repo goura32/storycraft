@@ -128,6 +128,19 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("入力に根拠のない固有の制度", generate)
         self.assertIn("候補本文に実在する文字列", critique)
 
+    def test_initial_ledger_critique_and_revision_templates_are_evidence_bounded(self) -> None:
+        stages = ("brief", "characters", "relationships", "world", "timeline", "threads")
+        for stage in stages:
+            with self.subTest(stage=stage):
+                generate = Path(f"templates/prompts/user/{stage}/generate_{stage}.j2").read_text(encoding="utf-8")
+                critique = Path(f"templates/prompts/user/{stage}/critique_{stage}.j2").read_text(encoding="utf-8")
+                revision = Path(f"templates/prompts/user/{stage}/revision_{stage}.j2").read_text(encoding="utf-8")
+                if stage != "brief":
+                    self.assertIn("入力に根拠のない", generate)
+                self.assertIn("候補に実在する文字列", critique)
+                self.assertIn("全string field", critique)
+                self.assertIn("引用されたfieldだけを修正", revision)
+
     def test_volume_chapter_templates_preserve_volume_action_allocation(self) -> None:
         templates = [
             Path("templates/prompts/user/volume_chapters/generate_volume_chapters.j2").read_text(encoding="utf-8"),

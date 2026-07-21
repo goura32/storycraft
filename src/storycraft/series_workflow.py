@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import re
 
 from pathlib import Path
 from typing import Any, Callable
@@ -262,6 +263,7 @@ class SeriesWorkflow(ContractValidator):
                 if not isinstance(revised, dict):
                     raise ContractError("修正版がオブジェクトではありません")
                 validator(revised)
+                self._validate_revision_scope(current_candidate, revised, critique)
             except LLMCallError as exc:
                 self._record_attempt(state, stage, "revision_failed", context, revised, str(exc))
                 state["_active"]["phase"] = "failed"
@@ -331,6 +333,7 @@ class SeriesWorkflow(ContractValidator):
         try:
             critique = model.critique(stage, candidate, context)
             self._validate_critique(critique)
+            self._validate_critique_fields(critique, candidate)
         except LLMCallError as exc:
             self._record_attempt(state, stage, "critique_failed", context, None, str(exc))
             active["phase"] = "failed"
@@ -353,6 +356,75 @@ class SeriesWorkflow(ContractValidator):
                 [issue["severity"] for issue in critique["issues"]],
             )
         return critique
+
+    @staticmethod
+    def _field_tokens(field: str) -> tuple[str | int, ...]:
+        """Convert the review schema's dotted/indexed field path into a candidate path."""
+        if field.startswith("$."):
+            field = field[2:]
+        elif field == "$":
+            return ()
+        tokens: list[str | int] = []
+        position = 0
+        while position < len(field):
+            if field[position] == "[":
+                match = re.match(r"\[(\d+)\]", field[position:])
+                if match is None:
+                    raise ContractError("批評 issue の field パスが不正です")
+                tokens.append(int(match.group(1)))
+                position += match.end()
+            else:
+                match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", field[position:])
+                if match is None:
+                    raise ContractError("批評 issue の field パスが不正です")
+                tokens.append(match.group(0))
+                position += match.end()
+            if position < len(field) and field[position] == ".":
+                position += 1
+            elif position < len(field) and field[position] != "[":
+                raise ContractError("批評 issue の field パスが不正です")
+        return tuple(tokens)
+
+    @classmethod
+    def _validate_critique_fields(cls, critique: dict[str, Any], candidate: dict[str, Any]) -> None:
+        for issue in critique["issues"]:
+            value: Any = candidate
+            for token in cls._field_tokens(issue["field"]):
+                if isinstance(value, dict) and isinstance(token, str) and token in value:
+                    value = value[token]
+                elif isinstance(value, list) and isinstance(token, int) and 0 <= token < len(value):
+                    value = value[token]
+                else:
+                    raise ContractError("批評 issue の field が候補を指しません")
+
+    @classmethod
+    def _validate_revision_scope(cls, candidate: dict[str, Any], revised: dict[str, Any], critique: dict[str, Any]) -> None:
+        """A revision may alter only a field explicitly cited by the accepted critique."""
+        allowed = [cls._field_tokens(issue["field"]) for issue in critique["issues"]]
+
+        def changed_paths(before: Any, after: Any, prefix: tuple[str | int, ...] = ()) -> set[tuple[str | int, ...]]:
+            if type(before) is not type(after):
+                return {prefix}
+            if isinstance(before, dict):
+                paths: set[tuple[str | int, ...]] = set()
+                for key in set(before) | set(after):
+                    if key not in before or key not in after:
+                        paths.add(prefix + (key,))
+                    else:
+                        paths |= changed_paths(before[key], after[key], prefix + (key,))
+                return paths
+            if isinstance(before, list):
+                if len(before) != len(after):
+                    return {prefix}
+                paths = set()
+                for index, (old, new) in enumerate(zip(before, after)):
+                    paths |= changed_paths(old, new, prefix + (index,))
+                return paths
+            return {prefix} if before != after else set()
+
+        for path in changed_paths(candidate, revised):
+            if not any(path[:len(cited)] == cited for cited in allowed):
+                raise ContractError("修正版が批評で引用されていないfieldを変更しています")
 
     @staticmethod
     def _record_attempt(state: dict[str, Any], stage: str, kind: str, input_value: dict[str, Any], response: Any, validation: str) -> None:
