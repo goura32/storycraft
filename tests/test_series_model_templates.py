@@ -128,6 +128,23 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("入力に根拠のない固有の制度", generate)
         self.assertIn("候補本文に実在する文字列", critique)
 
+    def test_initial_ledger_prompts_prohibit_unsupported_state_expansion_and_require_detection(self) -> None:
+        brief_critique = Path("templates/prompts/user/brief/critique_brief.j2").read_text(encoding="utf-8")
+        characters_generate = Path("templates/prompts/user/characters/generate_characters.j2").read_text(encoding="utf-8")
+        characters_critique = Path("templates/prompts/user/characters/critique_characters.j2").read_text(encoding="utf-8")
+        relationships_generate = Path("templates/prompts/user/relationships/generate_relationships.j2").read_text(encoding="utf-8")
+        relationships_critique = Path("templates/prompts/user/relationships/critique_relationships.j2").read_text(encoding="utf-8")
+        self.assertIn("居住状態・継続行為・頻度", brief_critique)
+        self.assertIn("入力にない具体的な事実を補わない", characters_generate)
+        self.assertIn("入力にない固有の事実", characters_critique)
+        self.assertIn("双方に共通する内面・共同目的", relationships_generate)
+        self.assertIn("双方に共通する内面・共同目的", relationships_critique)
+
+    def test_world_critique_prompt_forbids_input_state_field_paths(self) -> None:
+        prompt = Path("templates/prompts/user/world/critique_world.j2").read_text(encoding="utf-8")
+        self.assertIn("候補のrootは `entities`", prompt)
+        self.assertIn("入力状態の `brief` / `characters` / `relationships` をfieldに使わない", prompt)
+
     def test_threads_critique_prompt_documents_quoted_id_key_paths(self) -> None:
         prompt = Path("templates/prompts/user/threads/critique_threads.j2").read_text(encoding="utf-8")
         self.assertIn('character_knowledge["char-0004"]', prompt)
