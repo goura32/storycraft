@@ -11,7 +11,7 @@
 6. **初期状態**: `status` が open/in_progress/resolved、`progress` が 0.0〜1.0、majorは open 始まりか
 7. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
 
-`issues: []` を返す前に候補の全string fieldを一つずつ再点検する。各 issue は候補を実際に指す `field`（JSONパス）、候補に実在する文字列をそのまま引用した `description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。候補外の入力・推測・語句をissueに混ぜない。
+`issues: []` を返す前に候補の全string fieldを一つずつ再点検する。各 issue は候補を実際に指す `field`（JSONパス）、候補に実在する文字列をそのまま引用した `description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。候補外の入力・推測・語句をissueに混ぜない。`field` 値では通常のキーをドット、配列要素を `[0]`、ハイフンを含む辞書キーをダブルクォート付き角括弧で記す。field値の形式は `threads[0].character_knowledge["char-0004"]`。JSON応答内ではダブルクォートをエスケープし、`"field": "threads[0].character_knowledge[\"char-0004\"]"` と書く。`character_knowledge.char-0004` とは書かない。
 
 ## 候補
 

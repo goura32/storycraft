@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import json
 import re
 
 from pathlib import Path
@@ -369,10 +370,18 @@ class SeriesWorkflow(ContractValidator):
         while position < len(field):
             if field[position] == "[":
                 match = re.match(r"\[(\d+)\]", field[position:])
-                if match is None:
-                    raise ContractError("批評 issue の field パスが不正です")
-                tokens.append(int(match.group(1)))
-                position += match.end()
+                if match is not None:
+                    tokens.append(int(match.group(1)))
+                    position += match.end()
+                else:
+                    match = re.match(r'\[("(?:[^"\\]|\\.)*")\]', field[position:])
+                    if match is None:
+                        raise ContractError("批評 issue の field パスが不正です")
+                    try:
+                        tokens.append(json.loads(match.group(1)))
+                    except json.JSONDecodeError as exc:
+                        raise ContractError("批評 issue の field パスが不正です") from exc
+                    position += match.end()
             else:
                 match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", field[position:])
                 if match is None:

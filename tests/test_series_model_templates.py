@@ -128,6 +128,12 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("入力に根拠のない固有の制度", generate)
         self.assertIn("候補本文に実在する文字列", critique)
 
+    def test_threads_critique_prompt_documents_quoted_id_key_paths(self) -> None:
+        prompt = Path("templates/prompts/user/threads/critique_threads.j2").read_text(encoding="utf-8")
+        self.assertIn('character_knowledge["char-0004"]', prompt)
+        self.assertIn('"field": "threads[0].character_knowledge[\\"char-0004\\"]"', prompt)
+        self.assertIn("ハイフンを含む辞書キー", prompt)
+
     def test_initial_ledger_critique_and_revision_templates_are_evidence_bounded(self) -> None:
         stages = ("brief", "characters", "relationships", "world", "timeline", "threads")
         for stage in stages:

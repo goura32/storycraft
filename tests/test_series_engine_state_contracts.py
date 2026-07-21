@@ -431,6 +431,27 @@ class StateContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "候補を指しません"):
             SeriesService._validate_critique_fields(critique, candidate)
 
+    def test_quoted_dictionary_key_path_with_hyphen_is_valid_and_scoped(self) -> None:
+        candidate = {"threads": [{"character_knowledge": {"char-0004": "knows", "char-0002": "unknown"}}]}
+        revised = {"threads": [{"character_knowledge": {"char-0004": "suspects", "char-0002": "unknown"}}]}
+        sibling_changed = {"threads": [{"character_knowledge": {"char-0004": "suspects", "char-0002": "learned"}}]}
+        critique = {"issues": [{
+            "severity": "minor",
+            "field": 'threads[0].character_knowledge["char-0004"]',
+            "description": '"knows" は根拠が不十分である。',
+            "suggestion": "入力に明記された事実だけで高水準に書き直す。",
+        }]}
+        SeriesService._validate_critique_fields(critique, candidate)
+        SeriesService._validate_revision_scope(candidate, revised, critique)
+        with self.assertRaisesRegex(ContractError, "引用されていないfield"):
+            SeriesService._validate_revision_scope(candidate, sibling_changed, critique)
+
+    def test_quoted_dictionary_key_path_decodes_json_escapes(self) -> None:
+        self.assertEqual(
+            SeriesService._field_tokens('items["escaped\\\"key"]'),
+            ("items", 'escaped"key'),
+        )
+
     def test_card_context_exposes_same_volume_time_floor_and_allowed_time_ids(self) -> None:
         service = SeriesService(self.workspace)
         state = service._new_state(BRIEF)
