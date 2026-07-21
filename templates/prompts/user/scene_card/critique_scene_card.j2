@@ -9,12 +9,12 @@
 4. **視点整合**: `pov_character_id` が `character_ids` に含まれるか
 5. **時間整合**: `start_time_id` と `end_time_id` が timeline台帳のidで、順序が正しいか
 6. **場所整合**: `location_id` が world台帳のidか
-7. **thread_actions**: `action` が introduce/advance/resolve のいずれか。同一thread_idの重複操作なし
-8. **所有範囲内**: `reader_disclosure`/`withheld_information`/`presentation_rules`/`end_change` が scene_card の所有範囲を超えないか（秘密・作者真実・未来展開の新規作成なし）
+7. **thread_actions**: `action` が introduce/advance/resolve のいずれか。同一thread_idの重複操作なし。`required_thread_actions` とID・actionが完全一致し、空配列なら `thread_actions` も空か
+8. **事実境界・連続性**: `purpose`/`required_events`/`reader_disclosure`/`withheld_information`/`end_change` の各事実が chapter、ledgers、`required_thread_actions`、`previous_scene_content` に根拠を持つか。**入力に根拠のない固有の制度・法令・条項・期限・数値・距離・組織内情・場所・証拠を新設していないか。** `previous_scene_content` の完了済み会話・発見・決定・開示を再演または反転していないか。主要項目の新規開示・進展・回収を `required_thread_actions` 外で行っていないか
 9. **更新制約**: `allowed_update_ids` が `visible_ids` の部分集合で、**`char-XXXX` と `thread-XXXX` のみ**か。`entity-XXXX`、`time-XXXX`、`rel-XXXX` を含まないか
 10. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
 
-各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。
+各 issue に `field`（候補内に実在するJSONパス）、`description`（候補の当該fieldに実在する語句を引用した確認可能な問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。候補にない語句・パス、好みや推測をissueにしてはならない。
 
 ## 候補
 

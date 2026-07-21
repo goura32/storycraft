@@ -104,6 +104,40 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("same_volume_time_floor", prompt)
         self.assertIn("allowed_start_time_ids", prompt)
 
+    def test_scene_card_templates_bind_events_to_input_facts_and_prior_scene(self) -> None:
+        generate = Path("templates/prompts/user/scene_card/generate_scene_card.j2").read_text(encoding="utf-8")
+        critique = Path("templates/prompts/user/scene_card/critique_scene_card.j2").read_text(encoding="utf-8")
+        revision = Path("templates/prompts/user/scene_card/revision_scene_card.j2").read_text(encoding="utf-8")
+        for prompt in (generate, critique, revision):
+            self.assertIn("previous_scene_content", prompt)
+            self.assertIn("入力に根拠のない", prompt)
+        self.assertIn("required_thread_actions", critique)
+
+    def test_continuity_templates_prohibit_future_handoff_forecasts(self) -> None:
+        for path in (
+            "templates/prompts/user/continuity/generate_continuity.j2",
+            "templates/prompts/user/continuity/critique_continuity.j2",
+        ):
+            prompt = Path(path).read_text(encoding="utf-8")
+            self.assertIn("将来の出来事の予告", prompt)
+            self.assertIn("そのままコピー", prompt)
+
+    def test_scene_templates_forbid_unrooted_details_and_require_candidate_grounding(self) -> None:
+        generate = Path("templates/prompts/user/scene/generate_scene.j2").read_text(encoding="utf-8")
+        critique = Path("templates/prompts/user/scene/critique_scene.j2").read_text(encoding="utf-8")
+        self.assertIn("入力に根拠のない固有の制度", generate)
+        self.assertIn("候補本文に実在する文字列", critique)
+
+    def test_volume_chapter_templates_preserve_volume_action_allocation(self) -> None:
+        templates = [
+            Path("templates/prompts/user/volume_chapters/generate_volume_chapters.j2").read_text(encoding="utf-8"),
+            Path("templates/prompts/user/volume_chapters/critique_volume_chapters.j2").read_text(encoding="utf-8"),
+            Path("templates/prompts/user/volume_chapters/revision_volume_chapters.j2").read_text(encoding="utf-8"),
+        ]
+        for prompt in templates:
+            self.assertIn("thread_targets", prompt)
+            self.assertIn("作者真実", prompt)
+
     def test_scene_card_templates_allow_updates_only_for_characters_and_major_threads(self) -> None:
         templates = [
             Path("templates/prompts/user/scene_card/generate_scene_card.j2"),

@@ -6,10 +6,10 @@
 1. **スキーマ適合**: 全必須項目が正しい型・形式で存在するか
 2. **章番号**: 1から連番で欠番なく並んでいるか
 3. **scene_count**: 1〜4の範囲か
-4. **整合性**: `start_state`/`end_state`/`purpose` が volume_map の該当巻配分と矛盾しないか
+4. **巻配分・秘密境界**: `start_state`/`end_state`/`purpose` が volume_map の該当巻配分と矛盾せず、`volume.thread_targets` のID・actionを越えて主要項目を進展・回収していないか。`introduce` の巻で作者真実、解決条件、将来の回収級情報を確定事実・証拠・犯人の内情として開示していないか
 5. **日本語品質**: 誤字・不自然な日本語・機械的翻訳調がないか
 
-各 issue に `field`（JSONパス）、`description`（確認できる具体的問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。
+各 issue に `field`（候補内に実在するJSONパス）、`description`（候補に実在する語句を引用した確認可能な問題）、`suggestion`（固定操作：削除/入力事実で書き直し/日本語修正）を入れる。候補にない語句・パス、好みや推測をissueにしてはならない。
 
 ## 候補
 

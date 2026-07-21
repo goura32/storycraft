@@ -11,6 +11,11 @@
 
 `required_thread_actions` は、この場面に**割り当て済みの主要項目操作の完全な一覧**である。`thread_actions` はこの一覧とID・actionとも完全一致させること。`required_thread_actions` が空配列なら `thread_actions` も必ず空配列にする。巻全体の `thread_targets` を各場面で繰り返さない。これ以外の主要項目操作は追加しない。
 
+### 事実境界と連続性（hard contract）
+`purpose`、`required_events`、`reader_disclosure`、`withheld_information`、`end_change` は、入力の chapter、ledgers、`required_thread_actions`、`previous_scene_content` に書かれた事実だけから組み立てる。**入力に根拠のない固有の制度・法令・条項・期限・数値・距離・組織内情・場所・証拠を新設してはならない。** 抽象的な指示を、そのような詳細で勝手に具体化しない。
+
+`previous_scene_content` が空でなければ、そこで既に起きた会話・発見・決定・情報開示を `required_events` や `end_change` に再指定しない。前場面の事実を反転せず、その未解決の現在状態からだけ次の変化を設計する。主要項目に関する新しい開示・進展・回収は、`required_thread_actions` に割り当てがある場合だけ設計できる。
+
 `visible_ids` には入力の `ledgers` に存在する `char-XXXX`、`rel-XXXX`、`entity-XXXX`、`time-XXXX`、`thread-XXXX` のみを含める。少なくとも `pov_character_id`、`location_id`、`start_time_id`、`end_time_id`、全 `character_ids`、全 `thread_actions[].thread_id` を含める。
 
 `allowed_update_ids` には `visible_ids` に含まれる ID のうち、更新対象とするものだけを**そのまま**（`.current_state` 等のサフィックスなし）で列挙する。許可できるのは **`char-XXXX` と `thread-XXXX` のみ**。`entity-XXXX`、`time-XXXX`、`rel-XXXX` は更新不可。

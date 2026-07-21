@@ -8,6 +8,7 @@
 - 時刻は入力の `same_volume_time_floor` と `allowed_start_time_ids` を必ず確認し、同じ巻で確定済みの終了時刻より前に戻さない。`start_time_id` は `allowed_start_time_ids` から選び、`end_time_id` は開始と同じか後のsequenceにする
 - `required_thread_actions` は今回の場面に割り当て済みの主要項目操作の完全な一覧である。修正版の `thread_actions` はこれとID・actionとも完全一致させ、空なら空配列のままにする
 - `allowed_update_ids` は `visible_ids` の部分集合とし、許可できるのは **`char-XXXX` と `thread-XXXX` のみ**。`entity-XXXX`、`time-XXXX`、`rel-XXXX` を削除する
+- `purpose`、`required_events`、`reader_disclosure`、`withheld_information`、`end_change` を出力前に chapter、ledgers、`required_thread_actions`、`previous_scene_content` と再照合する。**入力に根拠のない固有の制度・法令・条項・期限・数値・距離・組織内情・場所・証拠を追加・温存しない。** 前場面で完了した会話・発見・決定・開示を再演・反転しない
 - 誤字や不自然な日本語を残さない
 
 ## 候補

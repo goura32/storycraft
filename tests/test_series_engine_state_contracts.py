@@ -427,9 +427,11 @@ class StateContractTests(unittest.TestCase):
             {"id": "time-0003", "sequence": 2},
         ]
         state["cards"] = {"v01-c01-s01": {"end_time_id": "time-0002"}}
+        state["scenes"] = [{"scene_id": "v01-c01-s01", "content": "前場面で確定した会話。", "handoff_summary": "前場面の要約"}]
         context = service._card_context(state, {"number": 1}, {"number": 2}, 1, False)
         self.assertEqual(context["same_volume_time_floor"], {"sequence": 1, "time_id": "time-0002"})
         self.assertEqual(context["allowed_start_time_ids"], ["time-0002", "time-0003"])
+        self.assertEqual(context["previous_scene_content"], "前場面で確定した会話。")
 
     def test_continuity_update_requires_matching_source_scene_and_existing_state_field(self) -> None:
         service = SeriesService(self.workspace)

@@ -419,6 +419,7 @@ class SeriesWorkflow(ContractValidator):
             "scene_id": scene_id, "volume": volume, "chapter": chapter, "scene_number": scene_number,
             "ledgers": self._ledger_context(state),
             "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "",
+            "previous_scene_content": state["scenes"][-1]["content"] if state["scenes"] else "",
             "is_final_scene": is_final_scene,
             "same_volume_time_floor": {"sequence": floor["sequence"], "time_id": floor["id"]} if floor else None,
             "allowed_start_time_ids": allowed_start_time_ids,
