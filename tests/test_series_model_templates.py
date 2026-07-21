@@ -94,6 +94,11 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertNotIn("引用または要約", prompt)
         self.assertIn("scene.content からそのままコピーした連続文字列", schema)
 
+    def test_brief_critique_prompt_requires_one_complete_issue_object(self) -> None:
+        prompt = Path("templates/prompts/user/brief/critique_brief.j2").read_text(encoding="utf-8")
+        self.assertIn("issueごとに必ず4キーを同じobject内に置く", prompt)
+        self.assertIn("閉じる前に各issue objectの4キー", prompt)
+
     def test_scene_card_prompt_requires_the_context_time_floor(self) -> None:
         prompt = Path("templates/prompts/user/scene_card/generate_scene_card.j2").read_text(encoding="utf-8")
         self.assertIn("same_volume_time_floor", prompt)
