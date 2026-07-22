@@ -15,7 +15,7 @@
 | 場面内部checkpoint | 場面内の再開用保存物。後続場面の正式入力ではない。 |
 | 場面採用 | 場面成果物全体とcurrent_canon・knowledge_items・story_state更新を一体で原子的に確定すること。 |
 | revision round | 正常なレビューがissueを返した後に実行できる修正呼び出し回数。初回レビューは含めない。 |
-| transport retry | 一つのLLM呼び出しを成立させる通信・JSON処理の再試行。revision roundとは別。 |
+| transport retry | connection、HTTP、stream interruption、timeoutに限る一つのLLM呼び出しの通信再試行。JSON parse・Schema・required field・enumはresponse structure retryであり、revision roundとは別。 |
 
 Canonは採用済み固定事実・管理対象項目、current_canon・knowledge_items・story_stateは場面採用で変化する現在値である。`temporal_rules`は長期規則、`story_clock`は場面進行である。
 

@@ -202,6 +202,10 @@
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
+## Volume handoff field contract
+
+`volume-handoff.schema.json` objects and every child object use `additionalProperties:false`. The candidate has the following required fields: `volume_number`, `ending_state_summary`, `unresolved_threads`, `resolved_threads`, `character_state_summaries`, `relationship_state_summaries`, `world_state_summary`, `story_clock`, `evidence_refs`, `next_volume_constraints`, `residual_issues`. `unresolved_threads[]` and `resolved_threads[]` each expose `{thread_id,status,progress,disposition,evidence_ids}`; `disposition` is `resolve|carry_over|retire`, `status` is the registered `thread_status`, and every evidence ID resolves to adopted evidence. `character_state_summaries[]` exposes `{character_id,public_state,knowledge_fact_ids}`; `relationship_state_summaries[]` exposes `{relationship_id,public_relation}`; `story_clock` exposes `{time_label,current_order,last_scene_id}`. `next_volume_constraints[]` are abstract non-secret constraints only. The LLM may populate candidate values from the enumerated adopted projection; code validates all IDs, statuses, evidence, and schema, and only VH-ID persists `artifacts/handoffs/vNN.json`.
+
 ## COMP-PRE — completion前提検証
 
 | contract | value |
@@ -295,10 +299,10 @@
 | mechanical validation | public report sanitized/Markdown complete |
 | adoption condition | COMP-SAVE saved audit exists |
 | candidate path | `none` |
-| adopted path | `.staging/publication` |
-| audit path | `audit/operations/comp-publish.json.gz` |
-| resume source | candidate manifest at `none`; otherwise named adopted input |
-| next stage | OUT-01 |
+| adopted path | `.staging/publication/<publication-id>` |
+| audit path | `audit/operations/out-01.json.gz` |
+| resume source | persisted staged artifact; no candidate manifest |
+| next stage | OUT-02 |
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
@@ -320,8 +324,8 @@
 | mechanical validation | files order/nonempty/no secret leakage |
 | adoption condition | OUT-01 staging exists |
 | candidate path | `none` |
-| adopted path | `.staging/publication/validation.json` |
-| audit path | `audit/operations/out-01.json.gz` |
+| adopted path | `.staging/publication/<publication-id>/publication-validation.json` |
+| audit path | `audit/operations/out-02.json.gz` |
 | resume source | no candidate; named staged input |
 | next stage | COMP-PUBLISH |
 | failure classification | storage error or mechanical stop |
@@ -367,10 +371,10 @@
 | transport retry | No |
 | response structure retry | No |
 | revision round consumption | No |
-| mechanical validation | atomic pointer replace |
-| adoption condition | OUT-02 publication exists |
+| mechanical validation | atomically rename `.staging/publication/<publication-id>` to `publications/<publication-id>`, then atomically replace `output/CURRENT` |
+| adoption condition | COMP-PUBLISH gate result passed |
 | candidate path | `none` |
-| adopted path | `output/CURRENT` |
+| adopted path | `publications/<publication-id>; output/CURRENT` |
 | audit path | `audit/operations/out-03.json.gz` |
 | resume source | candidate manifest at `none`; otherwise named adopted input |
 | next stage | complete |

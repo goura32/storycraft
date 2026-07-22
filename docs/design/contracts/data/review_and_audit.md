@@ -22,7 +22,27 @@ Audit is never a resume authority. Public completion reports exclude author trut
 | `residual_issues` | array of issue record | yes | no | `[]` | LLM then code | immutable | valid issues | completion audit |
 | `overall_assessment` | `complete|complete_with_residual_issues|incomplete` | yes | no | none | LLM then code | immutable | exact enum | completion audit |
 
-A criterion assessment has `criterion_id`, `supports_evidence_ids`, `contradicts_evidence_ids`, `assessment`, and `explanation`; assessment is `satisfied|partially_satisfied|not_satisfied|contradicted`. A thread assessment has `thread_id`, `thread_status`, `progress`, `required`, `assessment`, and `explanation`. A contradiction has `code`, `description`, `evidence_ids`, and `severity`.
+## Completion-audit child records
+
+All child objects have `additionalProperties: false`.
+
+| field | type | required | nullable | default | creator | mutability | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|
+| `criteria_assessments[].criterion_id` | ending criterion ID | yes | no | none | LLM then code | immutable | adopted criterion; unique per audit | completion audit |
+| `criteria_assessments[].supports_evidence_ids` | array<evidence ID> | yes | no | `[]` | LLM then code | immutable | each ID resolves | completion audit |
+| `criteria_assessments[].contradicts_evidence_ids` | array<evidence ID> | yes | no | `[]` | LLM then code | immutable | each ID resolves | completion audit |
+| `criteria_assessments[].assessment` | enum | yes | no | none | LLM then code | immutable | `satisfied|partially_satisfied|not_satisfied|contradicted` | completion audit |
+| `criteria_assessments[].explanation` | string | yes | no | none | LLM then code | immutable | NFC; public-safe; no author truth | completion audit |
+| `thread_assessments[].thread_id` | thread ID | yes | no | none | LLM then code | immutable | adopted thread; unique per audit | completion audit |
+| `thread_assessments[].thread_status` | enum `thread_status` | yes | no | none | LLM then code | immutable | enum registry | completion audit |
+| `thread_assessments[].progress` | integer | yes | no | none | LLM then code | immutable | `0..4` | completion audit |
+| `thread_assessments[].required` | boolean | yes | no | none | code | immutable | canonical thread match | completion audit |
+| `thread_assessments[].assessment` | enum | yes | no | none | LLM then code | immutable | `satisfied|partially_satisfied|not_satisfied|contradicted` | completion audit |
+| `thread_assessments[].explanation` | string | yes | no | none | LLM then code | immutable | NFC; public-safe | completion audit |
+| `contradictions[].code` | string | yes | no | none | LLM then code | immutable | stable nonempty code | completion audit |
+| `contradictions[].description` | string | yes | no | none | LLM then code | immutable | public-safe; no secret text | completion audit |
+| `contradictions[].evidence_ids` | array<evidence ID> | yes | no | none | LLM then code | immutable | all IDs resolve | completion audit |
+| `contradictions[].severity` | enum | yes | no | none | LLM then code | immutable | `info|warning|error` | completion audit |
 
 Completion audit is information for the code gate; its LLM assessment cannot by itself permit publication.
 

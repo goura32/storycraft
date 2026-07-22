@@ -28,6 +28,8 @@ Planner author access exists only to decide what to depict and what not yet to d
 
 Writer view is `additionalProperties:false`, code-created, immutable for the call, and uses this field table.
 
+All nested projection objects also have `additionalProperties:false`. `scene_card` exposes only `scene_id`, `pov_character_id`, `participant_ids`, `location_id`, `time_relation`, `time_label`, `scene_purpose`, `required_beats`, `thread_actions`, `reader_disclosures`, `withheld_constraints`, `length_guidance`, and `chapter_completion_role`. `pov_character` and `visible_characters[]` expose `id`, `name`, `aliases`, `role`, `appearance_anchor`, and `speech_anchor`. `visible_relationship_state` is an array of `{relationship_id,relationship_type,public_relation}`. `visible_world[]` exposes `{id,kind,name,description,sensory_anchors}`. `known_facts[]` exposes `{fact_id,writer_visible_label,status}` and never `canonical_fact` or `author_truth`. `reader_known_facts[]` exposes `{fact_id,status}` only. `previous_handoff` is the secret-free adopted handoff projection. `style_profile` exposes `{editorial_profile_id,allowed_style_rules}` only. `context_snapshot_metadata` exposes `{generation_id,scene_id,effective_config_hash,context_hash}`. Source artifacts are the adopted card, `canon/HEAD` generation, adopted handoff, effective config, and code-created context snapshot; no field is self-sourced.
+
 | field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
 |---|---|---:|---:|---|---|---|---|---|---|
 | `scene_card` | object | yes | no | none | code | immutable | project | adopted card only | context snapshot |
