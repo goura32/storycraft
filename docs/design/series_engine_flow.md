@@ -16,7 +16,7 @@ flowchart TD
   V --> ID[コードがID採番・参照変換]
   ID --> A[initial_design_bundle採用]
   A --> SM[SERIES-01..ID series map採用]
-  SM --> VD[巻設計: series map・現在Canon・State]
+  SM --> VD[巻設計: series map・現在current_canon・knowledge_items・story_state]
   VD --> CD[章設計]
   CD --> SC[場面設計 checkpoint]
   SC --> P[本文 checkpoint]
@@ -42,7 +42,7 @@ flowchart TD
 ## 呼び出し責務
 
 - `series map`はINIT-ID後、VOL-01前に生成・review・採用する不変全巻計画である。
-- `volume_design`の入力は採用済みbundle、現在Canon、現在State、前巻handoff、巻番号、残り巻数、編集プロファイル。
+- `volume_design`の入力は採用済みbundle、現在Canon、current_canon・knowledge_items・story_state、前巻handoff、巻番号、残り巻数、編集プロファイル。
 - `chapter_design`、`scene_card`、`scene`、`continuity_delta`、`volume_handoff`は共通revision loop対象。
 - `continuity_delta`は型付きupdates、origin別knowledge proposal、knowledge/thread/time、`ending_evidence_proposals`、handoffを出力する。
 - 機械的更新はevidence indexを保存してから場面を原子的採用する。

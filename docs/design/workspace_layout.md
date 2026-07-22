@@ -1,66 +1,70 @@
 # Workspace layout
 
-> Workspace path・filename・canonical JSON・publication pointerの唯一の正本。checkpoint/manifest意味は[runtime and recovery](runtime_and_recovery.md)を参照する。
+> Path・filename・正本分離の索引。runtime fieldは[ledger runtime records](contracts/ledger/runtime_records.md)、stage保存先は[pipeline index](pipeline_contracts.md)を正本とする。
 
 ```text
 workspace/
 ├── input/
-│   └── brief.json
-├── plans/
-│   ├── series-map.json
-│   └── volumes/v01/{volume-design.json,chapters.json}
+│   ├── brief.json
+│   └── keywords.json
+├── runtime/
+│   ├── run-state.json
+│   ├── counters.json
+│   ├── effective-config.json
+│   ├── candidates/
+│   │   ├── input/
+│   │   ├── initial-design/
+│   │   ├── series-map/
+│   │   ├── volumes/v01/
+│   │   ├── chapters/v01/c001/
+│   │   ├── scenes/v01/c001/s001/
+│   │   ├── handoffs/v01/
+│   │   └── completion/
+│   ├── checkpoints/scenes/v01/c001/s001/
+│   └── orphans/<timestamp>/
 ├── canon/
 │   ├── initial-design.json
-│   ├── generations/00000000/{current-canon.json,story-state.json,knowledge-items.json,evidence-index.jsonl,commit-manifest.json}
-│   └── HEAD
-├── runtime/
-│   ├── checkpoints/scenes/v01/c001/s001/{checkpoint-manifest.json,scene-card.json,prose.md,continuity-delta.json}
-│   ├── orphans/
-│   ├── run-manifest.json
-│   ├── counters.json
-│   ├── run-state.json
-│   └── effective-config.json
+│   ├── HEAD
+│   └── generations/<generation-id>/
+│       ├── current-canon.json
+│       ├── knowledge-items.json
+│       ├── story-state.json
+│       ├── evidence-index.jsonl
+│       └── generation-manifest.json
+├── plans/
+│   ├── series-map.json
+│   ├── volumes/v01.json
+│   └── chapters/v01/c001.json
 ├── artifacts/
-│   ├── scenes/v01/c001/s001/{scene-card.json,prose.md,continuity-delta.json,scene-manifest.json}
-│   └── volumes/v01/handoff.json
+│   ├── scenes/v01/c001/s001/
+│   └── handoffs/v01.json
 ├── audit/
-│   ├── llm-calls/
-│   ├── reviews/
-│   ├── completion/
-│   └── residual-issues.jsonl
-├── logs/storycraft.log
-├── publications/<publication-id>/{manuscript,reports,metadata}
+├── logs/
+├── publications/
 ├── output/CURRENT
 ├── .staging/
+│   ├── scene-commits/v01-c001-s001/
+│   └── publication/
 └── .storycraft.lock
 ```
 
-Directory widths are fixed: volume directory is `v01`, chapter directory is `c001`, scene directory is `s001`, and `scene_id` is `v01-c001-s001`. Effective canon/state/knowledge/evidence exists only under the generation selected by `canon/HEAD`; no root-level aliases are valid.
+## 固定幅
 
-## Checkpoint/artifact boundary
+```text
+volume:  v01
+chapter: c001
+scene:   s001
+scene ID: v01-c001-s001
+```
 
-`runtime/checkpoints/scenes/v01/c001/s001/` contains **only unadopted** checkpoint files. SC-CHK writes only `scene-card.json`, PROSE-CHK writes only `prose.md`, DELTA-CHK writes only `continuity-delta.json`; each updates `checkpoint-manifest.json`. No checkpoint stage writes `artifacts/`.
+## 正本
 
-`artifacts/scenes/v01/c001/s001/` contains **only COMMIT-04 adopted** card, prose, delta, and scene manifest. COMMIT-04 copies validated checkpoint bytes into a staged artifact directory, finalizes it, then marks it adopted. Readers of formal scene artifacts must not read checkpoint files.
+| object | path | 責務 |
+|---|---|---|
+| initial design | `canon/initial-design.json` | 初期来歴、author truth、長期方針 |
+| current canon | `canon/generations/<id>/current-canon.json` | 採用済み固定Canon record |
+| knowledge items | `canon/generations/<id>/knowledge-items.json` | knowledge itemのみ |
+| story state | `canon/generations/<id>/story-state.json` | mutable stateのみ |
+| runtime state | `runtime/run-state.json` | 実行位置、candidate/checkpoint参照 |
 
-## Audit filename and payload location
-
-| payload | path / filename |
-|---|---|
-| LLM call | `audit/llm-calls/000123__prose-01__v01-c001-s001__generate__attempt-02.json.gz` |
-| review | `audit/reviews/000124__prose-02__v01-c001-s001__review__attempt-01.json.gz` |
-| revision | `audit/llm-calls/000125__prose-rev__v01-c001-s001__revision__attempt-01.json.gz` |
-| completion attempt | `audit/completion/completion-audit-attempt-01.json.gz` |
-| final valid audit | `audit/completion/completion-audit-final.json` |
-| residual issue | `audit/residual-issues.jsonl` |
-| volume manuscript | `publications/<publication-id>/manuscript/volume-01.md` |
-| series manuscript | `publications/<publication-id>/manuscript/series.md` |
-| publication metadata | `publications/<publication-id>/metadata/publication.json` |
-
-A call payload is JSON gzip and has `call_id,operation_id,target_id,call_role,attempt,model,request_timestamp,response_timestamp,duration_ms,prompt_template_version,schema_version,context_hash,request_body,response_body,finish_reason,input_tokens,output_tokens,estimated_cost,error,retry_classification`. It excludes API keys, Authorization headers, OS environment, and secret configuration.
-
-## Canonical bytes and publication
-
-JSON uses NFC-normalized UTF-8, sorted keys, compact separators, no NaN/Infinity. SHA-256 is over those bytes. Prose hash is over NFC UTF-8 prose. Evidence JSONL has one canonical record per line ordered by evidence ID.
-
-Publication is exactly: build `.staging/publication`; validate manuscript/report/metadata/hash rules; rename to `publications/<publication-id>/`; atomically replace `output/CURRENT` with that ID. Crash before pointer replacement keeps prior publication; after replacement exposes only complete validated publication. `publication.json` records publication ID, source HEAD generation, completion audit hash, created timestamp, and output hashes.
+`canon/HEAD`が唯一の実行中generationを指します。candidateはresume正本、auditは監査だけです。scene commitはstaging検証、generation/artifact rename、HEAD最後のatomic replaceで行います。

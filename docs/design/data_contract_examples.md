@@ -1,29 +1,39 @@
-# Data contract examples
+# Data contract examples index
 
-> 完全保存Schemaの接続例。field定義は[ledger contracts](ledger_contracts.md)、manifestは[runtime and recovery](runtime_and_recovery.md)を正本とする。
+## 目的
 
-## Baseline fixture
+完全保存Schemaへ接続するfixture関係と検証方針への案内です。長大なJSONは分割fixtureへだけ置きます。
 
-`fixture_id` is `lighthouse-baseline-v1`; it has no baseline fixture.
+## 対象範囲
 
-```json
-{"fixture_id":"lighthouse-baseline-v1","baseline_fixture_id":null,"current_canon":{"records":[{"id":"char-000001","record_type":"character","scope":"series","record_lifecycle":"active","created_scene_id":null,"references":["loc-000001"],"name":"澪","aliases":[],"role":"protagonist","core_trait":"粘り強い","values":["責任"],"background":"灯台守の家系","immutable_facts":["灯台の鍵を管理する"],"appearance_anchor":"青い外套","speech_anchor":"短い返答"},{"id":"rel-000001","record_type":"relationship","scope":"series","record_lifecycle":"active","created_scene_id":null,"references":["char-000001"],"participant_a_id":"char-000001","participant_b_id":"char-000001","relationship_type":"central","origin":"自分自身との責任の葛藤","structural_role":"primary"},{"id":"loc-000001","record_type":"world_entity","scope":"series","record_lifecycle":"active","created_scene_id":null,"references":[],"name":"岬の灯台","kind":"location","description":"海辺の古い灯台","immutable_rules":["日没後に点灯する"],"sensory_anchors":["潮の匂い" ]},{"id":"thread-000001","record_type":"thread","scope":"series","record_lifecycle":"active","created_scene_id":null,"references":[],"description":"灯台停止の原因を知る","author_truth":"予備鍵が修理庫を開ける","resolution_condition":"灯を再び点ける","thread_status":"open","progress":0},{"id":"ending-000001","record_type":"ending_criterion","scope":"series","record_lifecycle":"active","created_scene_id":null,"references":["thread-000001"],"description":"町が灯を守る意思を持つ","required":true}],"knowledge_items":[{"id":"fact-000001","origin":"initial_design","subject_type":"thread","subject_id":"thread-000001","canonical_fact":"予備鍵は灯台停止の原因に関係する","writer_visible_label":"予備鍵が原因に関係するかもしれない","scope":"series","created_scene_id":null,"record_lifecycle":"active","author_truth":"予備鍵は修理庫を開ける"}]},"story_state":{"character_states":[{"character_id":"char-000001","location_id":"loc-000001","physical_condition":null,"emotional_state":"不安","current_goal":"灯を守る","current_pressure":"日没が近い"}],"relationship_states":[{"relationship_id":"rel-000001","public_relation":"責任を負う本人","a_to_b":{"trust":"medium","perception":"自分を頼れない","emotional_stance":"焦り","current_intention":"鍵を探す"},"b_to_a":{"trust":"medium","perception":"自分を頼れない","emotional_stance":"焦り","current_intention":"鍵を探す"},"shared_state":"決断前"}],"thread_states":[{"thread_id":"thread-000001","thread_status":"open","progress":0}],"knowledge_states":[{"fact_id":"fact-000001","audience_type":"character","audience_id":"char-000001","status":"unknown"},{"fact_id":"fact-000001","audience_type":"reader","audience_id":null,"status":"unknown"}],"story_clock":{"current_order":0,"time_label":"初日夕方","parallel_group_id":null,"last_scene_id":null}},"evidence_index":[]}
+```text
+lighthouse-initial-v1
+  → lighthouse-scene-commit-v1
+  → lighthouse-pre-completion-v1
+  → lighthouse-completion-publication-v1
 ```
 
-## Adopted intermediate scene fixture
+## 正本関係
 
-`fixture_id` is `lighthouse-scene-01`; `baseline_fixture_id` is `lighthouse-baseline-v1`.
+| Fixture | 詳細文書 |
+|---|---|
+| brief / initial design / genesis / planning | [initial and planning](examples/initial_and_planning_fixture.md) |
+| complete scene commit | [scene commit](examples/scene_commit_fixture.md) |
+| pre-completion / final commit / publication | [completion and publication](examples/completion_publication_fixture.md) |
+| field schema | [data contracts index](contracts/data/brief_and_initial.md) と [ledger index](ledger_contracts.md) |
 
-```json
-{"fixture_id":"lighthouse-scene-01","baseline_fixture_id":"lighthouse-baseline-v1","scene_id":"v01-c001-s001","head_before":"00000000","current_canon_before":{"fixture_ref":"lighthouse-baseline-v1.current_canon"},"story_state_before":{"fixture_ref":"lighthouse-baseline-v1.story_state"},"scene_card":{"scene_id":"v01-c001-s001","volume_number":1,"chapter_number":1,"scene_number":1,"pov_character_id":"char-000001","participant_ids":["char-000001"],"location_id":"loc-000001","scene_purpose":"鍵への疑いを描く","withheld_constraints":["secret-thread-not-yet-revealable"]},"prose":"澪は錆びた予備鍵を拾い、これが灯台停止の原因に関係するのではないかと疑った。最終日の夜ではなく、まだ初日夕方だった。","continuity_delta":{"existing_item_updates":[],"new_item_proposals":[],"knowledge_item_proposals":[],"knowledge_updates":[{"fact_id":"fact-000001","audience_type":"character","audience_id":"char-000001","before":"unknown","after":"suspects","evidence":"これが灯台停止の原因に関係するのではないかと疑った"}],"thread_updates":[{"thread_id":"thread-000001","before_status":"open","after_status":"in_progress","before_progress":0,"after_progress":1,"evidence":"これが灯台停止の原因に関係するのではないかと疑った"}],"time_update":{"time_relation":"same_time","time_label":"初日夕方","elapsed_hint":null,"parallel_group_id":null,"evidence":null},"ending_evidence_proposals":[],"handoff_summary":"澪は鍵への疑いを持った"},"current_canon_after":{"fixture_ref":"lighthouse-baseline-v1.current_canon"},"story_state_after":{"character_states":[{"character_id":"char-000001","location_id":"loc-000001","physical_condition":null,"emotional_state":"不安","current_goal":"灯を守る","current_pressure":"日没が近い"}],"relationship_states":[{"relationship_id":"rel-000001","public_relation":"責任を負う本人","a_to_b":{"trust":"medium","perception":"自分を頼れない","emotional_stance":"焦り","current_intention":"鍵を探す"},"b_to_a":{"trust":"medium","perception":"自分を頼れない","emotional_stance":"焦り","current_intention":"鍵を探す"},"shared_state":"決断前"}],"thread_states":[{"thread_id":"thread-000001","thread_status":"in_progress","progress":1}],"knowledge_states":[{"fact_id":"fact-000001","audience_type":"character","audience_id":"char-000001","status":"suspects"},{"fact_id":"fact-000001","audience_type":"reader","audience_id":null,"status":"unknown"}],"story_clock":{"current_order":1,"time_label":"初日夕方","parallel_group_id":null,"last_scene_id":"v01-c001-s001"}},"evidence_index_after":[{"evidence_id":"ev-000001","evidence_type":"knowledge_update","target_id":"fact-000001","scene_id":"v01-c001-s001","quote":"これが灯台停止の原因に関係するのではないかと疑った","relation":"supports","start_offset":12,"end_offset":37,"quote_sha256":"2a07dc228e37dd36031d293e4cdbf0eb3d56f286b23f37e844442f4a10317807"}],"checkpoint_manifest":{"scene_id":"v01-c001-s001","phase":"DELTA_ACCEPTED","scene_card_path":"runtime/checkpoints/scenes/v01/c001/s001/scene-card.json","scene_card_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","prose_path":"runtime/checkpoints/scenes/v01/c001/s001/prose.md","prose_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","continuity_delta_path":"runtime/checkpoints/scenes/v01/c001/s001/continuity-delta.json","continuity_delta_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","revision_rounds_used":0,"transport_retries_used":0,"response_structure_retries_used":0,"created_at":"2026-07-22T00:00:00Z","updated_at":"2026-07-22T00:00:00Z"},"commit_manifest":{"commit_id":"commit-00000001","commit_type":"scene","parent_commit_id":"commit-00000000","scene_id":"v01-c001-s001","before_generation":"00000000","after_generation":"00000001","artifact_hashes":{"scene_card":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","prose":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","delta":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"local_key_to_id_mapping":{},"created_at":"2026-07-22T00:00:01Z","committed_at":"2026-07-22T00:00:02Z"},"scene_manifest":{"scene_id":"v01-c001-s001","commit_id":"commit-00000001","volume_number":1,"chapter_number":1,"scene_number":1,"scene_card_path":"artifacts/scenes/v01/c001/s001/scene-card.json","scene_card_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","prose_path":"artifacts/scenes/v01/c001/s001/prose.md","prose_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","continuity_delta_path":"artifacts/scenes/v01/c001/s001/continuity-delta.json","continuity_delta_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","character_count":57,"evidence_ids":["ev-000001"],"input_plan_refs":["plans/series-map.json"],"adopted_at":"2026-07-22T00:00:02Z"},"head_after":"00000001"}
-```
+## 用語
 
-## Completion fixture
+- **baseline**: 直前fixtureの完全保存state。
+- **canonical hash**: UTF-8、NFC、LF、JSON sort keys、compact separator、trailing LFによるSHA-256。
+- **before/after**: commit前後の別正本object。参照aliasではない。
 
-`fixture_id` is `lighthouse-complete-v1`; `baseline_fixture_id` is `lighthouse-scene-01`.
+## 検証方針
 
-```json
-{"fixture_id":"lighthouse-complete-v1","baseline_fixture_id":"lighthouse-scene-01","scene_id":"v04-c003-s002","head_before":"00000047","current_canon_before":{"fixture_ref":"lighthouse-scene-01.current_canon_after"},"story_state_before":{"thread_states":[{"thread_id":"thread-000001","thread_status":"in_progress","progress":3}],"story_clock":{"current_order":47,"time_label":"最終日前夜","parallel_group_id":null,"last_scene_id":"v04-c003-s001"}},"prose":"最終日の夜、町の人々は灯台の灯を見上げ、明日からもこの灯を守ろうと頷いた。","continuity_delta":{"thread_updates":[{"thread_id":"thread-000001","before_status":"in_progress","after_status":"resolved","before_progress":3,"after_progress":4,"evidence":"明日からもこの灯を守ろうと頷いた"}],"time_update":{"time_relation":"later","time_label":"最終日夜","elapsed_hint":"数日後","parallel_group_id":null,"evidence":"最終日の夜"},"ending_evidence_proposals":[{"criterion_id":"ending-000001","scene_id":"v04-c003-s002","evidence":"町の人々は灯台の灯を見上げ、明日からもこの灯を守ろうと頷いた","relation":"supports"}]},"current_canon_after":{"fixture_ref":"lighthouse-scene-01.current_canon_after"},"story_state_after":{"thread_states":[{"thread_id":"thread-000001","thread_status":"resolved","progress":4}],"story_clock":{"current_order":48,"time_label":"最終日夜","parallel_group_id":null,"last_scene_id":"v04-c003-s002"}},"evidence_index_after":[{"evidence_id":"ev-000002","evidence_type":"ending_criterion","target_id":"ending-000001","scene_id":"v04-c003-s002","quote":"町の人々は灯台の灯を見上げ、明日からもこの灯を守ろうと頷いた","relation":"supports","start_offset":6,"end_offset":36,"quote_sha256":"5919b2aa6f54cd88f3efea1fc16796e9de57ed886f4126798549ea0111e0ae2c"}],"head_after":"00000048"}
-```
+JSON parse、fixture/baseline参照、ID参照、participant差異、before/after、evidence quote/Unicode offset/hash、manifest hash、HEAD chain、public audit sanitizationを検証します。
 
-The fixture validator parses every JSON block, resolves each `fixture_id` and `baseline_fixture_id`, expands `fixture_ref`, validates before/after deltas, requires quote substring equality, validates Unicode code point offsets and SHA-256, and evaluates the stated knowledge/ending semantic claim.
+## 読み順
+
+1. [initial and planning](examples/initial_and_planning_fixture.md)
+2. [scene commit](examples/scene_commit_fixture.md)
+3. [completion and publication](examples/completion_publication_fixture.md)

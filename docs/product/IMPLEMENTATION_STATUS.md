@@ -18,4 +18,4 @@
 - `story_state`/`runtime_state`分離、`knowledge_items`、完全pipeline/ledger/context/runtime/configuration/acceptance contract、新workspace構成とgeneration/HEAD原子的commit
 - series map統合、完全field contract、thread progress 0..4、nested relationship state、knowledge projection、token-aware context budget、genesis generation、orphan recovery、publication pointer、budget accounting、runtime file schemas、evidence ID、semantic sample validation、scene state machine、resume recovery、ID allocator idempotency、timeout cancellation、audit gzip、output Markdown contract、acceptance tests
 
-現行実装が上記を満たすとは主張しない。さらに、全stage個別契約、checkpoint専用path、knowledge origin、knowledge state array、culture/history ID、planner/writer秘密投影、token fallback 2.0、audit payload/retention、完全manifest、完全fixtureは仕様済み・未実装である。旧state migrationや互換shimは対象にしない。
+現行実装が上記を満たすとは主張しない。さらに、分割後pipeline契約、完全data contracts、runtime candidates、全stage resume、run-state Schema、candidate manifest、完全fixture、publication sanitization、内容ベースacceptance testを含む次期契約は仕様済み・未実装である。旧state migrationや互換shimは対象にしない。
