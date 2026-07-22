@@ -1,35 +1,28 @@
 # Workspace layout
 
-> workspace・ファイル名・原子的保存の正本。工程は[pipeline contracts](pipeline_contracts.md)、情報正本は[ledger contracts](ledger_contracts.md)を参照する。
-
-## 構成
+> workspace・ファイル名・正規化・公開の正本。commitは[runtime and recovery](runtime_and_recovery.md)、工程は[pipeline contracts](pipeline_contracts.md)を参照する。
 
 ```text
 workspace/
+├── input/
+│   ├── brief.json
+│   └── keywords.json
 ├── run-manifest.json
 ├── runtime/
 │   ├── run-state.json
 │   ├── counters.json
+│   ├── effective-config.json
 │   └── checkpoints/scenes/
 ├── canon/
 │   ├── initial-design.json
-│   ├── current-canon.json
-│   ├── story-state.json
-│   ├── knowledge-items.json
-│   └── evidence-index.jsonl
+│   ├── generations/
+│   └── HEAD
 ├── plans/
 │   ├── series-map.json
-│   └── volumes/v01/
-│       ├── volume-design.json
-│       ├── chapters.json
-│       └── scenes/
+│   └── volumes/
 ├── artifacts/
-│   ├── scenes/v01/c001/s001/
-│   │   ├── scene-card.json
-│   │   ├── prose.md
-│   │   ├── continuity-delta.json
-│   │   └── scene-manifest.json
-│   └── volumes/v01/volume-handoff.json
+│   ├── scenes/
+│   └── volumes/
 ├── audit/
 │   ├── llm-calls/
 │   ├── reviews/
@@ -37,60 +30,46 @@ workspace/
 │   └── completion/
 ├── logs/storycraft.log
 ├── output/
-│   ├── manuscript/volume-01.md
-│   ├── manuscript/series.md
-│   ├── reports/completion-audit.json
-│   ├── reports/quality-review-summary.json
-│   └── metadata/publication.json
+│   ├── manuscript/
+│   ├── reports/
+│   └── metadata/
 ├── .staging/
+│   ├── scene-commits/
+│   └── publication/
 └── .storycraft.lock
 ```
 
-## 責務
+## path契約
 
-| path | 内容 | 正本/可変性 | 禁止事項 |
-|---|---|---|---|
-| `run-manifest.json` | run_id,state/prompt/schema bundle version,editorial/publishing profile,model,config fingerprint,created_at | run開始時に固定 | 秘密値、絶対path |
-| `runtime/run-state.json` | 現在工程、次の対象、停止理由、completed、inflight scene、最後の正常checkpoint、再開位置 | runtime_state正本 | Canon/current値 |
-| `runtime/counters.json` | next_call_id、transport/structure/revision/audit counter | runtime_state正本、単調増加 | ファイル数からの採番 |
-| `runtime/checkpoints/` | 未採用内部候補 | 一時。採用後は削除又はarchive | 採用済み正本として参照 |
-| `canon/initial-design.json` | 採用済みinitial design bundle | 不変スナップショット | 現在state |
-| `canon/current-canon.json` | fixed、scope、lifecycle、参照、局所Canon | canon正本 | 感情・進捗・reader知識 |
-| `canon/story-state.json` | 現在値、knowledge state、clock | state正本 | fixed/author truth |
-| `canon/knowledge-items.json` | knowledge target | canon正本 | writer viewへのauthor truth漏出 |
-| `canon/evidence-index.jsonl` | append-only引用索引 | index正本 | 本文外引用 |
-| `plans/` | 採用済み・未来の設計 | 過去計画は不変、未来は明示replanのみ可 | 本文artifact混在 |
-| `artifacts/` | 採用済みcard/prose/delta/handoff | artifact正本 | raw LLM response |
-| `audit/llm-calls/` | 全LLM入出力とmetadata | audit | outputへの混入 |
-| `audit/reviews/` | reviewとrevision対応 | audit | 正本の置換 |
-| `audit/residual-issues.jsonl` | 上限後に残るissue | append-only audit | 旧`quality-acceptances.json`を新規作成 |
-| `audit/completion/` | completion audit attempt | audit | 正常でない`final`作成 |
-| `output/` | 利用者へ配布する完成物 | 公開物 | prompt/raw/checkpoint |
-| `.staging/` | 公開前の一時出力 | 使い捨て | 成功前のoutput更新 |
-
-未執筆未来計画は明示的replan工程だけが変更できる。採用済み過去計画と採用artifactは不変である。
-
-## 命名規則
-
-ASCII小文字・kebab-case・固定幅番号・安定IDを使い、日本語題名を正本ファイル名に入れない。
-
-| 対象 | 規則 / 例 |
+| path | 内容・正本 |
 |---|---|
-| volume/chapter/scene | `v01` / `c001` / `s001`、scene ID=`v01-c001-s001` |
-| 公開原稿 | `volume-01.md`、`series.md` |
-| LLM call | `000123__prose-01__v01-c003-s002__generate__attempt-02.json` |
-| review | `000124__prose-02__v01-c003-s002__review.json` |
-| revision | `000125__prose-rev__v01-c003-s002__round-01.json` |
-| completion | `completion-audit-attempt-01.json`、`completion-audit-final.json` |
+| `canon/generations/00000042/` | `current-canon.json,story-state.json,knowledge-items.json,evidence-index.jsonl,commit-manifest.json`。HEADだけが正本generationを指定。 |
+| `plans/series-map.json` | 採用series map。不変。 |
+| `plans/volumes/v01/volume-design.json` / `chapters.json` | 採用済み設計。不変。 |
+| `artifacts/scenes/v01/c001/s001/` | `scene-card.json,prose.md,continuity-delta.json,scene-manifest.json`。 |
+| `audit/llm-calls/v01/c001/` | 巻・章対象call。非対象callは`audit/llm-calls/global/`。JSON gzipで保存。 |
+| `audit/completion/` | 内部正本。公開用は`output/reports/completion-audit.json`へ秘密を除いて複製。 |
 
-call log名は`call_id__operation_id__target_id__call_role__attempt`。`call_id`は`runtime/counters.json`の単調増加値であり、ファイル数や時刻から算出しない。`completion-audit-final.json`は構造正常な最後の結果だけに作成する。
+scene manifestは`scene_id,commit_id,volume_number,chapter_number,scene_number,prose_sha256,character_count,adopted_at,input_plan_refs,evidence_ids`を必須とする。
 
-## manifestとhash
+## JSON・prose正規化
 
-state/manifestに記録するpathはworkspace rootからの相対pathだけである。SHA-256は最低限、prose artifact、initial-design、current-canon、story-state、completion audit final、公開原稿に保存する。
+JSONはUTF-8、BOMなし、Unicode NFC、key sort、compact separator、末尾LF。proseはUTF-8、BOMなし、Unicode NFC、LF改行、末尾LF。hashは親manifestへ保存し、対象ファイルへ自己hashを書かない。
 
-`scene-manifest.json`は`scene_id,volume_number,chapter_number,scene_number,prose_sha256,character_count,adopted_at,input_plan_refs,evidence_count`を必須とする。
+## audit log
 
-## 原子的保存
+call logは`call_id,operation_id,target_id,call_role,attempt,model,request_timestamp,response_timestamp,duration_ms,prompt_template_version,schema_version,message_hashes,request_body,response_body,finish_reason,input_tokens,output_tokens,estimated_cost,error,retry_classification`を持つ。API key、Authorization header、OS環境変数、secret configを保存しない。
 
-単一ファイルは一時ファイルへ書込み→flush→fsync→同一filesystemのreplace→親directory fsyncで保存する。場面採用はstaging directoryへcard/prose/delta/manifestを完成させ、全hash・delta merge・state/indexを検証してから採用pointerを最後に更新する。失敗時はpointerを更新せず、`.staging/`の当該runディレクトリを削除するか失敗理由付きで隔離する。`output/`への公開も同じ方式でstagingから原子的に置換する。
+## output Markdown
+
+volume file:
+
+```markdown
+# 巻タイトル
+
+## 第1章　章タイトル
+
+本文
+```
+
+series fileは`# シリーズタイトル`の後に`# 第1巻　巻タイトル`を巻順で並べる。scene境界は出力しない。公開前検証はUTF-8、全巻・章見出し、本文非空、巻章順、重複本文なし、内部JSON/prompt/author truth/未採用本文なしを要求する。

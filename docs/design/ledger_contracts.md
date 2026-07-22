@@ -2,6 +2,10 @@
 
 > 台帳・状態・更新の正本。[pipeline contracts](pipeline_contracts.md)が工程I/O、[workspace layout](workspace_layout.md)が保存先を定める。`initial_design_bundle`、`current_canon`、`story_state`、`runtime_state`は別の正本である。
 
+## ID・Schema共通規則
+
+保存用objectは`additionalProperties: false`を原則とし、記載のないfieldを拒否する。IDはコードだけがtype別counterで採番する。`char-000001`、`rel-000001`、`loc-000001`、`org-000001`、`item-000001`、`sys-000001`、`rule-000001`、`thread-000001`、`ending-000001`、`fact-000001`を使う。counterは6桁、欠番許容、再利用禁止である。
+
 ## 四層の正本
 
 | 層 | 正本とする情報 | 保存先 | 禁止する重複 |
@@ -51,8 +55,8 @@
 
 | 台帳 | field | 型 | 必須 | 作成者 | 可変性 | evidence |
 |---|---|---|---:|---|---|---|
-| world_entities | `kind,name,fixed.description,immutable_rules,sensory_anchors` | enum/string/object | はい | LLM候補→コード | fixedは初期revisionのみ | 不要 |
-| temporal_rules | `kind,description,scope,fixed_rule,related_ids` | enum/string/array | はい | LLM候補→コード | rule本体不変 | 不要 |
+| world_entities | `kind,name,fixed.description,immutable_rules,sensory_anchors` | kindは定義enum、nameはstring、fixedはtype別field群 | はい | LLM候補→コード | fixedは初期revisionのみ | 不要 |
+| temporal_rules | `kind,description,scope,fixed_rule,related_ids` | kindは定義enum、descriptionはstring、related_idsはID配列 | はい | LLM候補→コード | rule本体不変 | 不要 |
 
 world entityの可変値（所有者、場所、状態）はstory_stateの`entity_states`に置く。organizationの状態enumは`active|suspended|dissolved`でありrecord_lifecycleと混同しない。
 
@@ -62,7 +66,7 @@ world entityの可変値（所有者、場所、状態）はstory_stateの`entit
 |---|---|---|---:|---|---|---|---|
 | threads | `thread_type,required,description,author_truth,resolution_condition,presentation_rule` | enum/bool/string | はい | LLM候補→コード | 初期revisionまたは明示replan | 不要 | initial/canon |
 | ending_criteria | `description,required,evidence_scope,source_ending_text` | string/bool | はい | LLM候補→コード | 不変 | 不要 | initial/canon |
-| knowledge_items | `subject_type,subject_id,description,author_truth,scope,created_scene_id` | enum/string | はい | LLM候補→コード | 本文evidence付き局所追加可 | 追加時必須 | canon |
+| knowledge_items | `subject_type,subject_id,description,author_truth,scope,created_scene_id` | subject_type/scopeは定義enum、他はstring | はい | LLM候補→コード | 本文evidence付き局所追加可 | 追加時必須 | canon |
 
 `knowledge_state.fact_id`は既知のknowledge item IDだけを参照する。`author_truth`はwriter viewへ渡さない。threadに`reader_knowledge_status`は置かない。ending criterion本体にstatusは置かず、supports/contradicts件数と監査assessmentは派生情報である。
 
@@ -73,7 +77,7 @@ world entityの可変値（所有者、場所、状態）はstory_stateの`entit
 | `character_states[id].location_id` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
 | `.physical_condition,.emotional_state,.current_goal,.current_pressure` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
 | `relationship_states[id].directions.a_to_b/b_to_a` | object | はい | 初期bundle→コード | set | 必須 | story_state |
-| `.trust,.perception,.emotional_stance,.current_intention` | enum/string | 任意 | LLM候補→コード | set | 必須 | story_state |
+| `.trust,.perception,.emotional_stance,.current_intention` | trustは定義enum、他はstring | 任意 | LLM候補→コード | set | 必須 | story_state |
 | `entity_states[id].owner_id,location_id,condition,organization_state` | string/enum | 任意 | LLM候補→コード | set | 必須 | story_state |
 | `thread_states[id].thread_status` | enum | はい | 初期bundle→コード | transition | 必須 | story_state |
 | `.progress,.active_pressure` | integer/string | はい/任意 | LLM候補→コード | set | 必須 | story_state |
@@ -98,6 +102,25 @@ thread statusは`open|in_progress|resolved|retired`、進捗は0〜4で非減少
 
 updateは`operation,target_type,target_id,field,before,after,scene_id,evidence`。許可operationは`set|append|remove|transition`のみ。`before`は採用前stateと一致、`after`は採用後stateと一致、evidenceは凍結本文の完全一致でなければ棄却する。knowledge item proposalは`local_key,subject_type,subject_id,description,author_truth,scope,scene_id,evidence`を必須とし、LLMは永続IDを作らない。
 
+## update matrix
+
+自由なJSON Patchは禁止する。許可operationは`set|append|remove|transition`だけである。
+
+| target_type | field | operation | before必須 | evidence必須 | validation |
+|---|---|---|---:|---:|---|
+| character_state | location_id | set | Yes | Yes | known location ID |
+| character_state | physical_condition | set | Yes | Yes | non-empty string |
+| character_state | emotional_state | set | Yes | Yes | non-empty string |
+| character_state | current_goal | set | Yes | Yes | non-empty string |
+| relationship_state | public_relation | set | Yes | Yes | non-empty string |
+| relationship_state | a_to_b_trust | transition | Yes | Yes | `none|low|medium|high|absolute` |
+| relationship_state | b_to_a_trust | transition | Yes | Yes | `none|low|medium|high|absolute` |
+| thread_state | thread_status | transition | Yes | Yes | allowed graph |
+| thread_state | progress | set | Yes | Yes | 0〜100、減少禁止 |
+| canon_record | record_lifecycle | transition | Yes | Yes | `active→inactive→retired`、retired固定 |
+| canon_record | references | append/remove | Yes | Yes | known ID |
+| knowledge_state | status | transition | Yes | Yes | audience別enum |
+
 ## evidence index
 
-`evidence_type,target_id,scene_id,quote,relation`を必須、`start_offset,end_offset,quote_sha256`を推奨とする。relationは`supports|contradicts`。同一`target_id,scene_id,quote,relation`はappendしない。required criterionは検証済み`supports`が1件以上必要であり、contradictsだけでは達成しない。両方あれば両方をcompletion auditへ渡す。
+`evidence_id,evidence_type,target_id,scene_id,quote,relation,start_offset,end_offset,quote_sha256`を必須とする。relationは`supports|contradicts`。同一`target_id,scene_id,quote_sha256,relation`は重複排除する。LLMはquoteだけを返しoffsetを返さない。quote出現0件はresponse structure error、1件はコードがoffsetを付与、複数件はより長いquoteを再要求する。
