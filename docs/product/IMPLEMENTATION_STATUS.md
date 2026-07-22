@@ -1,37 +1,19 @@
 # 現行実装の位置付け
 
-> この文書は、現行コードと[製品仕様](SPECIFICATION.md)の差分を示す。製品仕様ではない。
-
-## 仕様との関係
-
-- [製品仕様](SPECIFICATION.md)が次期実装の正本である。
-- 現行実装が製品仕様と異なる場合、製品仕様を実装に合わせて弱めない。
-- 実装改修では、次期仕様の契約を満たすことを優先する。旧state形式へのmigrationや互換shimは対象にしない。
+> [製品仕様](SPECIFICATION.md)が次期実装の正本。この文書は現行コードとの差分であり、仕様を現行へ後退させない。
 
 ## 現行実装で確認できる基盤
 
-- 公開操作は `run`、`resume`、`step`。新規作業場所は手入力briefまたは自由keywordsのどちらか一方から開始する。
-- keywords時はLLM生成briefを手入力briefと同じ構造契約で採用する。
-- stateは単一シリーズ用で、公開操作は排他lockで保護される。保存と完成出力には原子的置換を用いる。
-- 人物、関係、世界、timeline、threadsを順に作り、コードがIDを採番する。
-- 既存thread IDを `volume_map` へ配分し、章一覧、場面カード、本文、継続性更新、巻要約、`closure`、出力へ進む。
-- 現行の品質ループは生成・批評・修正・最終批評を記録し、上限後に構造正常な候補を既知issue付きで採用する。
+`run`/`resume`/`step`、brief/keywords入力、排他lock、原子的state・出力、コードによるID採番、生成・批評・修正・最終批評、既知issueの記録がある。現行は`characters`、`relationships`、`world`、`timeline`、`threads`、`volume_map`、`closure`中心のstate v5である。
 
 ## 仕様済み・未実装
 
-次は改訂済み仕様の対象であり、現行実装には未対応、または現行契約と異なる。
+- `local_key`を使うINIT-01〜05、レビュー後の一括永続ID採番、参照変換、`initial_design_bundle`の唯一の正本化
+- 初期設計・巻・章・場面・本文・差分・handoffの全体レビュー／一括修正と`max_revision_rounds`契約
+- `temporal_rules`と`story_clock`分離、後続巻への現在Canon入力
+- 場面カードの`new_item_policy`、局所Canonのscope/lifecycle、supporting threadのcarry-over
+- 型付きupdate operation、汎用Canon merge、knowledge update、場面Outer Transaction
+- `ending_evidence_proposals`、`ending_evidence_index`、完結監査でのindex利用
+- revisionと別の`completion_audit_attempts`、現行`closure`から独立した完結監査
 
-- **新しいシリーズ初期設計のLLM呼び出し構成**: `initial_concept`、人物・関係、世界・時間規則、全体変化・伏線・結末条件、Canon組立、全体レビューというINIT-01〜INIT-06構成。
-- **初期設計・設計成果物の全体レビューと一括修正**: 台帳別またはfield別ではなく、対象成果物全体と全issueを一回で修正し、毎回全体を再レビューする契約。
-- **時間の分離**: 現行`timeline`を、不変・長期の`temporal_rules`と場面進行を表す`story_clock`へ分離すること。
-- **巻・章・場面の新しい設計契約**: `volume_map`中心のthread配分から、巻の人物・中心関係の変化、章ごとのthread action、場面の開示制約と更新権限を含む設計契約への移行。
-- **新規Canon項目提案**: 凍結本文の完全一致根拠を持つ局所人物・場所・組織・重要物などの提案。
-- **knowledge update**: 人物知識と読者知識を分けた差分抽出と、検証済み更新の適用。
-- **プログラムによる汎用Canon merge**: 既存項目更新、新規項目採番、knowledge、thread、`story_clock`を検証して一括適用する仕組み。
-- **場面のOuter Transactionと内部checkpoint**: 本文、handoff、差分、Canon・現在State更新、新規項目、`story_clock`を一体で採用する次期契約。
-- **巻handoff**: 全本文を再投入せず、場面handoff、Canon差分、現在State、thread状態、`story_clock`から次巻への事実を作る工程。
-- **完結監査**: 現行`closure`を結末情報の生成・修正工程から、機械的完成条件とLLM意味監査を分離した監査工程へ変更すること。
-
-## 注意
-
-現行実装が上記の次期仕様を満たすと主張しない。実LLMによる作品内容や販売原稿としての品質も、別途の実装・実行監査が終わるまで主張しない。
+現行実装が上記を満たすとは主張しない。旧state migrationや互換shimは対象にしない。

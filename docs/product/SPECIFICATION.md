@@ -1,179 +1,116 @@
 # Storycraft 製品仕様
 
-> この文書は、次期正式リリースで Storycraft が提供する振る舞いの正本である。実装言語、ライブラリ、現在のファイル内部構造は定めない。変えてはいけない製品上の約束は[要件](REQUIREMENTS.md)を参照する。
+> 次期正式リリースの振る舞いの正本。現行実装との差分は[実装状況](IMPLEMENTATION_STATUS.md)を参照する。
 
 ## 1. 用語
 
 | 用語 | 意味 |
 |---|---|
-| シリーズ初期設計 | 本文前に作品全体の初期状態を決める製品フェーズ |
-| Canon | 採用済みの固定事実と管理対象項目 |
-| 現在State | 場面採用によって変化する現在値 |
-| 正本候補 | 構造検証済みだが、まだ採用されていない成果物 |
-| 採用済み正本 | 後続工程の正式入力になる成果物 |
-| レビュー | LLMによる意味・品質上のissue抽出 |
-| 修正 | 対象成果物全体と全issueを入力にした一括改訂 |
-| 機械的検証 | コードで決定的に合否を判定する検証 |
-| 差分抽出 | 凍結本文から成立済み変化をJSON化するLLM処理 |
-| Canon更新 | 検証済み差分をコードが正本へ適用する処理 |
-| 場面採用 | 本文、handoff、差分、Canon更新を一体で確定すること |
+| 内部確定成果物 | 初期設計フェーズ内で次のINIT呼び出しへ渡せる成果物。外部フェーズの正本ではない。 |
+| `initial_design_bundle`候補 | INIT-01〜05を統合した、レビュー・修正・検証対象。永続ID採番前。 |
+| `initial_design_bundle` | 検証、ID採番、参照変換、原子的採用を終えた唯一の初期設計正本。 |
+| `local_key` | 初期設計bundle内だけで参照する一意キー。LLMが永続IDの代わりに用いる。 |
+| 正本候補 | 構造検証済み、未採用の成果物。 |
+| 採用済み正本 | 後続工程の正式入力となる成果物。 |
+| 場面内部checkpoint | 場面内の再開用保存物。後続場面の正式入力ではない。 |
+| 場面採用 | 場面成果物全体とCanon・State更新を一体で原子的に確定すること。 |
+| revision round | 正常なレビューがissueを返した後に実行できる修正呼び出し回数。初回レビューは含めない。 |
+| transport retry | 一つのLLM呼び出しを成立させる通信・JSON処理の再試行。revision roundとは別。 |
 
-製品フェーズ、LLM呼び出し、採用・保存単位は別の概念である。フェーズは利用者・システムから見た大きな処理単位、LLM呼び出しはその内部の限定目的の処理、採用・保存単位は後続の正本と再開境界を表す。
+Canonは採用済み固定事実・管理対象項目、現在Stateは場面採用で変化する現在値である。`temporal_rules`は長期規則、`story_clock`は場面進行である。
 
-## 2. 範囲と入力
+## 2. 入力と範囲
 
-Storycraftは、手入力briefまたは自由なkeywordsから生成したbriefを起点に、日本語の完結小説シリーズを自動生成し、各巻と全巻のMarkdown原稿を出力する。
-
-- 利用者は開始時にbriefまたはkeywordsのどちらか一方を一度だけ渡す。通常実行中に巻・章・場面ごとの確認は求めない。
-- keywordsは任意個数の自由な参考情報である。生成briefは創作内容の好みやkeywordとの逐語的一致ではなく、必須項目・型・範囲という構造契約で確認する。
-- `volumes`を4〜10の整数で指定した場合は固定する。省略時は4〜10巻から選び、5巻を推奨する。
-- KDPなどへの自動入稿・自動公開、Web UI、RAG、複数モデルの自動選択、人間の途中承認UI、旧state形式のmigrationは範囲外である。
+利用者は開始時にbriefまたはkeywordsを一度だけ渡す。通常実行中の巻・章・場面確認は要求しない。4〜10巻（推奨5巻）の日本語シリーズを生成し、巻別・全巻Markdownを出力する。KDP自動公開、Web UI、RAG、複数モデル自動選択、人間承認UI、旧state migrationは範囲外である。
 
 ## 3. 製品フェーズ
 
-| # | フェーズ | 採用済みの主成果物 |
-|---:|---|---|
-| 1 | 入力確定 | brief |
-| 2 | シリーズ初期設計 | 初期設計bundle、初期Canon、現在State |
-| 3 | 巻設計 | 対象巻の巻設計 |
-| 4 | 章設計 | 対象巻の順序付き章設計 |
-| 5 | 場面設計 | 対象場面カード |
-| 6 | 本文生成 | 凍結本文 |
-| 7 | 継続性差分抽出 | 検証対象の差分候補 |
-| 8 | Canon・現在Stateの機械的更新 | 更新済みCanon・現在Stateを含む場面採用 |
-| 9 | 巻境界処理 | 巻handoff |
-| 10 | 完結監査 | 完結監査記録 |
-| 11 | 出力 | 巻別・全巻Markdown、監査記録 |
+| # | フェーズ | フェーズ成果物 | 正式な採用済み正本 |
+|---:|---|---|---|
+| 1 | 入力確定 | brief | brief |
+| 2 | シリーズ初期設計 | INIT成果物、bundle候補 | `initial_design_bundle` |
+| 3 | 巻設計 | 巻設計候補 | 対象巻設計 |
+| 4 | 章設計 | 章設計候補 | 対象巻の章設計 |
+| 5 | 場面設計 | 場面カードcheckpoint | なし |
+| 6 | 本文生成 | 凍結本文checkpoint | なし |
+| 7 | 差分抽出 | 継続性差分checkpoint | なし |
+| 8 | 場面採用 | 場面成果物 | 更新済みCanon・Stateを含む場面 |
+| 9 | 巻境界 | 巻handoff | 巻handoff |
+| 10 | 完結監査 | audit attempt | 最後の構造正常な監査記録 |
+| 11 | 出力 | Markdown・監査記録 | 公開出力 |
 
-全巻の章・場面・本文を初回に一括作成しない。巻、章、場面の順に、直前までの採用済み正本を入力にして進める。
+全巻を一括作成しない。後続巻の巻設計入力は、採用済み`initial_design_bundle`、**現在時点の採用済みCanon**、現在State、前巻handoff、対象巻番号、残り巻数、編集プロファイルである。
 
 ## 4. シリーズ初期設計
 
-シリーズ初期設計は本文前に、作品コンセプト、人物・関係、世界・時間規則、全体変化・伏線・結末条件、初期Canon・現在Stateを作る一つの製品フェーズである。人物、関係、世界、伏線を独立した製品フェーズにはしない。
+INIT-01〜04は内部確定成果物、INIT-05はbundle候補の組立である。
 
-| 呼び出し | 目的 | 主な出力 | 制約 |
-|---|---|---|---|
-| INIT-01 `initial_concept` | 作品の方向性を固定 | 作品の核、ジャンル、読者体験、テーマ、主対立、終了方向 | 人物台帳詳細、章・場面・本文、永続IDを作らない |
-| INIT-02 `initial_characters_relationships` | 中心人物と関係を設計 | 固定プロフィール、開始時状態、関係、非対称な認識、長期変化 | 永続ID、詳細章・場面、未確定の世界詳細を作らない |
-| INIT-03 `initial_world_temporal_rules` | 舞台と長期規則を設計 | 世界、場所、制度、重要物、文化、技術・魔法、`temporal_rules` | 全場面の時点、永続ID、人物固定情報の変更を行わない |
-| INIT-04 `initial_series_arcs` | 全体変化と回収条件を設計 | 人物・関係の長期変化、主要な問い、伏線、重要イベント、major thread、`ending_criteria` | 巻ごとの詳細、本文、永続IDを作らない |
-| INIT-05 `initial_canon_assembly` | 前段を構造化・統合 | characters、relationships、world、`temporal_rules`、threads、`ending_criteria`の候補と開始State・知識状態 | 前段にない主要創作内容を大量追加せず、LLMはIDを決めない |
-| INIT-06 `initial_design_review` | 初期設計全体を横断レビュー | 全体issue一覧 | 正本候補を直接修正しない |
+| 呼び出し | 出力 |
+|---|---|
+| INIT-01 `initial_concept` | 作品コンセプト |
+| INIT-02 `initial_characters_relationships` | 人物・関係。`local_key`で相互参照 |
+| INIT-03 `initial_world_temporal_rules` | 世界・`temporal_rules` |
+| INIT-04 `initial_series_arcs` | 長期変化、major thread、ending criteria |
+| INIT-05 `initial_canon_assembly` | `initial_design_bundle`候補、開始State、知識状態 |
+| INIT-06 `initial_design_review` | bundle候補全体のissue |
 
-`brief.ending`の自由文は保持する。同時にINIT-04で、完結監査用の複数の`ending_criteria`へ分解する。`timeline`という混合台帳は採用しない。不変・長期の規則は`temporal_rules`、場面の具体的な順序と進行は後段の`story_clock`で管理する。
+確定順序は、INIT-01〜05 → INIT-06 → bundle候補全体の一括修正 → 全体再レビュー → 上限まで反復 → 機械的検証 → コードの永続ID一括採番 → `local_key`参照を永続IDへ変換 → `initial_design_bundle`の原子的採用、である。
 
-INIT-06のレビューは、briefとの接続、人物・関係・世界規則の矛盾、伏線と回収条件、`ending_criteria`、知識状態、長編としての変化を毎回**初期設計全体**で確認する。issueがあれば、初期設計全体、全issue、変更可能範囲、維持すべき内容を一回の修正呼び出しへ渡す。修正後も差分ではなく全体を再レビューする。
+LLMは永続IDを生成しない。レビュー・修正中の追加・削除・統合も`local_key`で扱う。採番後には初期設計の意味修正を行わない。採番後に構造エラーが見つかれば採用せず停止し、採番済みIDは別recordへ再利用しない。INIT個別応答は来歴として保存できるが、巻・章・場面は採用済み`initial_design_bundle`だけを参照する。
 
-## 5. 巻・章・場面の設計
+## 5. 設計と新規Canon項目
 
-### 5.1 巻設計
+巻設計は人物・関係の変化、thread、対立、巻末問いを定める。章設計は順序付き章、目的、開始・終了目標、thread action、場面数を定める。場面カードはPOV、開示制約、更新許可に加え、次の`new_item_policy`を持つ。
 
-巻設計は、採用済み初期Canon・現在State、全体変化計画、前巻handoff、対象巻番号、残り巻数を入力に、次を定める。
+```json
+{"allowed_types":["character","location","organization","item","supporting_thread"],"max_items":2,"purpose":"場面に必要な局所項目だけを許可する"}
+```
 
-- 巻の目的と読者へ約束する体験
-- 主人公と中心関係の巻開始状態・巻終了目標
-- 導入・進展・回収するthread
-- 巻内の主要対立、巻末に残す問い、巻の終わり方
+`allowed_types`外、`max_items`超過、major thread、ending criterion、固定世界規則は提案不可である。許可しない場面は`max_items: 0`とする。上限は機械的な暴走防止である。
 
-### 5.2 章設計
+新規局所Canon項目のlifecycleは、`scope`を`scene`/`chapter`/`volume`/`series`、`status`を`active`/`inactive`/`resolved`/`retired`で表す。新規supporting threadは既定で`scope: volume`、`required: false`であり、巻末に`resolved`、`carry_over`、`retired`へ移す。`carry_over`は次巻設計入力に明示する。supporting threadは既定で完結の機械的必須条件ではない。
 
-章設計は、対象巻の巻設計、現在のCanon・現在State、前巻handoffを、順序を持つ章へ分解する。各章は、章番号、目的、開始状態、終了目標、主人公または関係の変化、thread action、想定場面数、章末の機能または引きを持つ。thread actionは物語上の意味に基づきLLMが対象章へ割り当てる。先頭・中央・末尾へコードが機械的に配分しない。
+## 6. 共通revision loop
 
-### 5.3 場面設計
+対象はシリーズ初期設計、巻設計、章設計、場面設計、本文、継続性差分、巻handoffだけである。
 
-場面カードは、対象巻・章の設計、現在のCanon・現在State、前場面handoff、`story_clock`、writerへ開示可能な情報を入力に、POV、登場人物、場所、時間の進み方、目的、必須イベント、感情・関係の変化目標、thread action、読者へ新しく見せる情報、開示禁止の抽象制約、更新可能な既存IDとfield、文字数の目安を定める。
+1. 生成し、構造正常な候補を保持する。
+2. 対象全体をレビューする。
+3. issueがあれば、全成果物と全issueを一回で一括修正する。
+4. 構造正常な修正版を候補にし、全体を再レビューする。
+5. `max_revision_rounds`後、最新の構造正常候補を採用し、残存issueを保存する。
 
-writerへ作者だけの秘密や将来の解決を渡さない。たとえば「身分の真相を明示しない」は渡せるが、真相そのものは渡さない。
+レビューseverityは停止条件ではない。レビューJSON構造不正は同じレビュー呼び出しのretry、修正結果の構造不正は同じrevision round内の有限再生成として扱い、roundを追加消費しない。transport retry・構造再生成を使い切れば停止する。以前の正常候補は保持する。
 
-## 6. 共通の品質改善ループ
+## 7. 本文、差分、場面採用
 
-シリーズ初期設計、巻設計、章設計、場面設計、本文生成、継続性差分抽出、巻handoff、完結意味監査には、次の共通パターンを適用する。
-
-1. 生成し、機械的検証を通った候補を正本候補として保持する。
-2. 対象成果物**全体**をLLMレビューする。
-3. issueがあれば、対象成果物全体と全issueを一回のLLM呼び出しで一括修正する。
-4. 修正版を機械的検証し、通れば新しい正本候補にする。
-5. 修正版の対象全体を再レビューする。
-6. 設定された修正回数まで3〜5を反復する。
-7. 回数上限後は、最新の構造正常な候補を採用し、残存issueと受容理由を監査記録へ保存する。
-
-レビューの`critical`、`major`、`minor`、passed/failed、継続可能性は監査情報であり、工程遷移の硬い条件ではない。レビュー呼び出し・レビューJSONの構造異常は、品質issueではなく機械的な失敗として扱う。
-
-文字数はSoft Targetである。LLMへ目安を渡し実文字数を監査記録へ残すが、文字数だけを理由に棄却、停止、再生成、修正をしない。空本文は機械的に無効である。
-
-## 7. 本文、差分抽出、Canon更新
-
-### 7.1 本文生成
-
-本文生成は、採用済み場面カード、writer用に投影されたCanon・現在State、POV人物の知識、読者へ開示可能な情報、前場面handoffを入力に、小説本文だけを返す。本文と同時にCanon更新JSONを返させない。
-
-### 7.2 継続性差分抽出
-
-凍結本文、場面カード、場面開始時のCanon・現在State、許可された更新範囲を入力に、成立済みの変化だけを抽出する。差分は少なくとも次を分ける。
+本文は本文だけを返す。差分抽出は凍結本文から、次を返す。
 
 ```json
 {
-  "existing_item_updates": [],
+  "existing_item_updates": [{"operation":"set","target_type":"relationship","target_id":"rel-0001","field":"current_distance","before":"警戒","after":"限定的な信頼","scene_id":"v01-c03-s02","evidence":"本文の完全一致引用"}],
   "new_item_proposals": [],
-  "knowledge_updates": [],
-  "thread_updates": [],
-  "story_clock_update": {},
-  "handoff_summary": ""
+  "knowledge_updates": [], "thread_updates": [], "story_clock_update": {},
+  "ending_evidence_proposals": [{"criterion_id":"ending-0001","scene_id":"v05-c20-s02","evidence":"本文の完全一致引用","relation":"supports"}],
+  "handoff_summary":""
 }
 ```
 
-人物知識と読者知識は分ける。`handoff_summary`は次場面へ渡す短い事実ベースの引継ぎである。差分抽出はCanonを直接更新しない。
+更新operationは`set`/`append`/`remove`/`transition`だけである。target typeごとに更新可能field・fieldごとの許可operation・`before`必須性・evidence必須性を定義し、固定情報、自由path、任意JSON Patchは許可しない。
 
-### 7.3 新規Canon項目
+`ending_evidence_proposals`は既存criterionのみを参照し、現在場面ID、本文完全一致evidence、`supports`/`contradicts`だけを許可する。criterion本体や新criterionは変更しない。コードはcriterion/scene ID、全文一致、重複を検証し、`ending_evidence_index`へ保存する。major threadの根拠も同じindex設計を利用できる。
 
-本文から新しい脇役、場所、組織、重要物、局所的な世界事実、巻内supporting threadを提案できる。提案には、凍結本文に完全一致する明示根拠、許可種別、既存項目との非重複が必要であり、推測や補完は許可しない。LLMはIDを決めず、コードが検証後に採番する。
+場面カード、凍結本文、差分は内部checkpointである。コード検証・新規ID採番・Canon/State/knowledge/thread/clock/evidence index更新・handoffがそろった場面成果物だけを一回の原子的保存で採用する。
 
-本文差分から、シリーズの新しいmajor thread、新しいending criterion、中心テーマ、既存の作者真実、既存の固定世界規則は自動追加・変更しない。必要な場合は明示的な計画改訂またはCanon amendmentとして別に扱う。
+## 8. 完結監査と出力
 
-### 7.4 機械的更新と場面採用
+完結監査はrevision loop外の独立工程である。
 
-コードは、差分Schema、参照ID、更新field、開始Stateとの`before`値、本文evidenceの完全一致、新規項目の重複・種別、`story_clock`の非逆行を決定的に検証する。検証を通らない差分は有限回だけ再抽出し、それでも通らなければ停止する。
+1. コードが計画、空本文、required major thread、ending evidence index、ID・artifactを検証する。
+2. LLMが意味監査する。
+3. 監査JSONを機械的検証する。
+4. 必要時は同じ入力で`completion_audit_attempts`を有限回実行する。
+5. 最後の構造正常な監査結果を保存する。
+6. issueが残っても機械的完成条件を満たせば出力する。
 
-次を一つの原子的な場面採用単位とする。
-
-- 凍結本文
-- 場面handoff
-- 検証済み差分
-- 更新済みCanon・現在State
-- 新規Canon項目
-- `story_clock`
-
-一部だけを採用してはならない。場面カード採用済み、本文凍結済み、差分抽出済みは内部checkpointとして保存できるが、後続場面の正本となるのは場面採用後だけである。
-
-## 8. 巻境界・完結監査・出力
-
-### 8.1 巻境界処理
-
-巻終了後、対象巻の全本文を再度LLMへ渡さない。各場面handoff、章終了State、巻開始時と巻終了時のCanon差分、人物・関係の現在State、thread操作と最終State、`story_clock`から、次巻に必要な事実handoffを作る。未回収thread IDなどコードで算出できる値はLLMに計算させない。
-
-### 8.2 完結監査
-
-`closure`は結末情報を生成・修正する工程ではなく完結監査である。コードは、予定巻・章・場面、空でない本文、required major threadの到達状態、required ending criterionのevidence候補、参照IDとartifactの正常性を確認する。LLMは各ending criterionを本文根拠が意味的に裏付けるか、重要な未解決がないか、briefの意図から大きく外れていないかを監査する。
-
-LLM監査がissueを返しても、監査JSONを修正して成功扱いにはしない。設定回数後、機械的完成条件を満たせば監査結果と残存issueを保存して出力へ進む。
-
-### 8.3 出力
-
-出力は巻別Markdown、全巻Markdown、残存issueと受容理由の監査記録を含む。公開前に機械的完成条件を確認し、一時出力を検証してから原子的に置き換える。失敗時は既存の完成出力を変更しない。
-
-## 9. 採用・保存と再開
-
-正式な採用・再開単位は、brief、シリーズ初期設計bundle、巻設計、章設計、場面、巻handoff、完結監査、公開出力である。各採用済み正本、試行、レビュー、修正、残存issue、停止理由を保存する。再開は保存済みの採用済み正本から未完了単位を続け、完了済みの成果物を作り直さない。
-
-## 10. 機械的停止条件
-
-停止条件はコードで決定的に確認できる問題だけである。
-
-- JSONを解析できない、必須Schemaまたは構造契約を満たさない
-- 有限回の再生成後も構造契約を満たさない
-- 未知ID、未許可field、不正な`before`値、本文に完全一致しないevidence、重複新規項目、`story_clock`逆行
-- 必要な成果物・state・artifactの欠落または破損
-- timeoutまたは通信retryの枯渇
-- ファイル保存または原子的置換の失敗
-
-文芸上の品質、内容の好み、意味上の矛盾の可能性、LLMレビューのseverityだけでは停止しない。
+監査issueで監査JSONを修正しない。監査工程自身は本文・Canonを変更しない。出力は一時領域で検証後、原子的に公開する。
