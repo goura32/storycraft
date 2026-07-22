@@ -1,45 +1,48 @@
 # Context contracts
 
-> Context Builderの唯一の正本。field台帳は[ledger contracts](ledger_contracts.md)、operation入力は[pipeline contracts](pipeline_contracts.md)、token設定は[configuration contracts](configuration_contracts.md)を参照する。
+> Context Builder・秘密投影・overflowの唯一の正本。fieldは[ledger contracts](ledger_contracts.md)、limitは[configuration contracts](configuration_contracts.md)を参照する。
 
-## 共通規則
+## Determinism and tokens
 
-Builderは純粋関数である。同一input snapshot・effective config・operationから同一NFC JSONと`context_hash`を返す。keyはUnicode codepoint昇順、recordはtype→volume→chapter→scene→persistent ID順で並べる。JSON途中切断、Builder内LLM要約、未採用候補の混入は禁止する。
+Builder is a pure projection: identical adopted snapshot, effective config, and operation produce identical NFC JSON and `context_hash`. Keys sort by Unicode code point; records sort type → volume → chapter → scene → persistent ID. No builder calls an LLM, includes unadopted candidate, or cuts a JSON token stream.
 
-hard token limitは`min(max_context_tokens_by_operation, model_context_window_tokens - reserved_output_tokens_by_operation - protocol_overhead_tokens)`である。provider tokenizerがなければUnicode code point数から`ceil(code_points / 1.5)`を推定tokenとし、provider usageがあれば実測を優先する。必須入力が収まらなければ機械停止する。
+A precise provider/tokenizer count is mandatory when available. Otherwise `estimated_tokens = ceil(code_points * fallback_tokens_per_code_point)`, default multiplier 2.0. The hard limit is defined in configuration. If mandatory data does not fit after the stated deterministic exclusions, the operation stops.
 
-## Builder table
+## Builder permissions
 
-| builder | operation | source of truth | required projected fields | forbidden | deterministic overflow exclusion order |
+| builder | operation | adopted source | required projection | forbidden projection | deterministic exclusion order |
 |---|---|---|---|---|---|
-| initial design | INIT-01..04 | adopted brief | brief all fields | runtime/audit | 1. none; brief exceeds hard limit = stop |
-| series map | SERIES-01 | initial design | concept, records, arcs, threads, ending criteria | runtime/raw responses | 1. retired supporting records 2. sensory anchors 3. non-primary fixed detail |
-| volume design | VOL-01 | initial design, series map, HEAD, prior handoff | target map record, current state, prior handoff, unresolved major threads | future volume plan detail, raw prose | 1. retired supporting 2. distant volume supporting 3. sensory anchors 4. non-central dynamic detail |
-| chapter design | CH-01 | adopted volume design, HEAD | target volume, current state, assigned thread targets | future chapter/scene artifacts | 1. retired supporting 2. non-target scope 3. sensory anchors 4. non-central detail |
-| scene card | SC-01 | adopted chapter, HEAD | target assignment, directly referenced records, state, time floor | author truth unavailable to design? none in author context; raw prose | 1. retired supporting 2. unassigned supporting 3. sensory anchors 4. nonparticipant dynamic detail |
-| writer | PROSE-01 | adopted card, HEAD, knowledge state, prior scene handoff | writer view below | author truth, resolution condition, other private knowledge, future detail, unadopted data | 1. sensory anchors 2. nonparticipant visible record 3. nonmajor current detail 4. distant handoff |
-| continuity | DELTA-01 | frozen prose, pre-scene HEAD, policy, ID index | full prose, baseline state, allowed targets | author truth, permanent ID allocation | 1. no optional removal; mandatory content overflow = stop |
-| volume handoff | VH-01 | scene handoffs, chapter-end state, start/end generation delta, major states, clock, volume evidence | listed input only | full volume prose, unadopted artifacts | 1. retired supporting records 2. resolved supporting thread detail 3. sensory anchors 4. noncentral detail |
-| completion audit | COMP-AUDIT | adopted manuscript artifacts, volume handoffs, current canon, story state, evidence index, initial design, series map | criteria, major threads, supports/contradicts evidence, handoffs | publication terminology, raw calls, unadopted content | 1. scene-level supporting detail 2. sensory anchors 3. retired supporting records 4. duplicate summaries |
+| initial design | INIT-01..04 | adopted brief | all brief fields | runtime/audit | brief overflow stops |
+| series map | SERIES-01 | initial design | concept, records, arcs, threads, criteria | raw calls | retired supporting → sensory anchors → nonprimary fixed detail |
+| volume design | VOL-01 | initial design, map, HEAD, prior handoff | target map row, current state, handoff, unresolved major threads | future volume details, raw prose | retired supporting → distant supporting → sensory anchors → noncentral state |
+| chapter design | CH-01 | adopted volume, HEAD | target volume, current state, assigned thread targets | future chapters/scenes | retired supporting → non-target scope → sensory anchors → noncentral detail |
+| scene card planner | SC-01 | adopted chapter, HEAD, series map | target assignment, records/state/time floor, **author truth**, **resolution condition**, ending author information, future plan only through target scene | raw prose, unadopted candidates | retired supporting → unassigned supporting → sensory anchors → nonparticipant state |
+| writer | PROSE-01 | adopted card, HEAD, prior handoff | writer view below | author truth, resolution condition, private other-character knowledge, future scene/volume detail, secret ending content, unadopted candidate | sensory anchors → nonparticipant visible record → nonmajor state → distant handoff |
+| continuity | DELTA-01 | frozen prose, pre-scene HEAD, policy | prose, baseline, allowed targets | author truth, permanent ID allocation | no optional removal; mandatory overflow stops |
+| volume handoff | VH-01 | adopted scene handoffs, states, generation delta, major state, clock, evidence | enumerated source only | full volume prose, unadopted artifact | retired supporting → resolved supporting thread detail → sensory anchors → noncentral detail |
+| completion audit | COMP-AUDIT | adopted manuscripts, handoffs, canon, state, evidence, initial design, map | criteria, major threads, supports/contradicts, handoffs | raw calls, unadopted content | scene supporting detail → sensory anchors → retired supporting → duplicate summaries |
 
-## Writer knowledge projection
+Planner author access exists only to decide what to depict and what not yet to disclose. It must put actual withheld secret text nowhere in the scene card; card uses abstract constraints.
 
-Writer output is an `additionalProperties:false` object. All listed fields are required, non-null, default none, created by code projection, immutable within the call, and source of truth is the Context snapshot.
+## Writer view
 
-| field | type | allowed operation | validation |
-|---|---|---|---|
-| `scene_card` | object | project | adopted card only |
-| `pov_character` | object | project | card POV only |
-| `visible_characters` | array<object> | project | participant/visible IDs only |
-| `visible_relationship_state` | object | project | nested ledger state only |
-| `visible_world` | array<object> | project | card-visible records only |
-| `known_facts` | array<object> | project | POV status projection matrix |
-| `previous_handoff` | object/null | project | immediately prior adopted handoff |
-| `style_profile` | object | project | adopted profile |
-| `forbidden_disclosures` | array<string> | project | generated from withheld constraints |
+Writer view is `additionalProperties:false`, code-created, immutable for the call, and uses this field table.
 
-For every knowledge item about the POV: `unknown` is omitted; `suspects` emits `{writer_visible_label,status:"suspects"}`; `misunderstands` emits `{writer_visible_label,status:"misunderstands"}` explicitly as misunderstanding; `partially_knows` emits disclosed label and status; `knows` emits label and status. `author_truth` is never emitted. Other character knowledge is never emitted unless the scene card makes its expression directly observable.
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `scene_card` | object | yes | no | none | code | immutable | project | adopted card only | context snapshot |
+| `pov_character` | object | yes | no | none | code | immutable | project | card POV only | context snapshot |
+| `visible_characters` | array of object | yes | no | `[]` | code | immutable | project | participants/visible IDs | context snapshot |
+| `visible_relationship_state` | object | yes | no | `{}` | code | immutable | project | nested ledger state only | context snapshot |
+| `visible_world` | array of object | yes | no | `[]` | code | immutable | project | card-visible records | context snapshot |
+| `known_facts` | array of object | yes | no | `[]` | code | immutable | project | POV knowledge projection | context snapshot |
+| `reader_known_facts` | array of object | yes | no | `[]` | code | immutable | project | reader audience rows only | context snapshot |
+| `previous_handoff` | object | yes | yes | null | code | immutable | project | immediately prior adopted handoff | context snapshot |
+| `style_profile` | object | yes | no | none | code | immutable | project | adopted profile | context snapshot |
+| `forbidden_disclosures` | array<string> | yes | no | `[]` | code | immutable | project | abstract labels only | context snapshot |
+
+For the POV: unknown is omitted; suspects emits visible label and status; misunderstands emits visible label and status; partially_knows emits disclosed label and status; knows emits visible label and status. `author_truth` is never projected. Other-character knowledge is absent unless directly observable in the scene card. `reader_known_facts` uses reader audience facts to prevent repeated disclosure. `forbidden_disclosures` only contains abstract labels such as `secret-thread-not-yet-revealable`, `other-character-private-knowledge`, and `future-resolution-detail`, never secret text.
 
 ## Context audit
 
-Each call audit stores `context_hash,input_snapshot_hash,operation,hard_token_limit,estimated_tokens,provider_input_tokens,excluded_record_ids,overflowed`. `provider_input_tokens` is nullable and is filled only from provider usage. Exclusion order may not be retried or reordered.
+Each call audit stores `context_hash,input_snapshot_hash,operation,hard_token_limit,estimated_tokens,provider_input_tokens,excluded_record_ids,overflowed`. Provider count is nullable and set only from provider usage. Exclusion order cannot be retried or reordered.

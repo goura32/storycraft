@@ -1,6 +1,6 @@
 # Runtime and recovery
 
-> Runtime、scene state machine、generation、resume、lockの唯一の正本。pathは[workspace layout](workspace_layout.md)を参照する。
+> Checkpoint・commit・resume・manifest・orphan recoveryの唯一の正本。pathは[workspace layout](workspace_layout.md)、retryは[configuration contracts](configuration_contracts.md)を参照する。
 
 ## Scene state machine
 
@@ -15,33 +15,80 @@ stateDiagram-v2
  SCENE_COMMITTED --> [*]
 ```
 
-| phase | mandatory artifact | resume action |
+| phase | mandatory checkpoint | resume stage |
 |---|---|---|
 | `SCENE_NOT_STARTED` | none | SC-01 |
-| `CARD_ACCEPTED` | card hash | PROSE-01 with same card |
-| `PROSE_FROZEN` | card/prose hash | DELTA-01 with same prose |
-| `DELTA_ACCEPTED` | card/prose/delta hash | COMMIT-01 |
-| `COMMIT_PREPARED` | draft commit manifest | validate/replay same commit ID |
-| `SCENE_COMMITTED` | final manifest and HEAD chain | next scene |
+| `CARD_ACCEPTED` | card and manifest | PROSE-01 |
+| `PROSE_FROZEN` | card/prose and manifest | DELTA-01 |
+| `DELTA_ACCEPTED` | card/prose/delta and manifest | COMMIT-01 |
+| `COMMIT_PREPARED` | staged commit manifest | COMMIT-01 validation/replay with same commit ID |
+| `SCENE_COMMITTED` | final manifest and HEAD chain | next SC-01 |
 
-Checkpoint has `scene_id,phase,artifact_paths,artifact_hashes,revision_rounds_used,retry_counters,created_at` and rejects missing/hash-mismatched artifacts. Resume never regenerates adopted card, frozen prose, or accepted delta.
+## Checkpoint manifest
 
-## Genesis and commit
+`runtime/checkpoints/scenes/v01/c001/s001/checkpoint-manifest.json` is `additionalProperties:false`.
 
-INIT-ID creates `canon/generations/00000000/{current-canon.json,story-state.json,knowledge-items.json,evidence-index.jsonl,commit-manifest.json}` then atomically writes `canon/HEAD = 00000000`. Genesis manifest is `commit_id:"commit-00000000", parent_commit_id:null, scene_id:null, commit_type:"initial_design"`. Adopted series map does not create or alter a generation.
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `scene_id` | scene ID | yes | no | none | code | immutable | none | equals directory | runtime checkpoint |
+| `phase` | enum | yes | no | none | code | transition | transition | `CARD_ACCEPTED|PROSE_FROZEN|DELTA_ACCEPTED|COMMIT_PREPARED` | runtime checkpoint |
+| `scene_card_path` | relative path | yes | yes | null | code | set | set | exists iff phase after card | runtime checkpoint |
+| `scene_card_sha256` | hex string | yes | yes | null | code | set | set | equals path bytes iff non-null | runtime checkpoint |
+| `prose_path` | relative path | yes | yes | null | code | set | set | exists iff phase after prose | runtime checkpoint |
+| `prose_sha256` | hex string | yes | yes | null | code | set | set | equals prose bytes iff non-null | runtime checkpoint |
+| `continuity_delta_path` | relative path | yes | yes | null | code | set | set | exists iff phase after delta | runtime checkpoint |
+| `continuity_delta_sha256` | hex string | yes | yes | null | code | set | set | equals path bytes iff non-null | runtime checkpoint |
+| `revision_rounds_used` | integer | yes | no | 0 | code | increment | increment | >=0 | runtime checkpoint |
+| `transport_retries_used` | integer | yes | no | 0 | code | increment | increment | >=0 | runtime checkpoint |
+| `response_structure_retries_used` | integer | yes | no | 0 | code | increment | increment | >=0 | runtime checkpoint |
+| `created_at` | RFC3339 timestamp | yes | no | none | code | immutable | none | valid timestamp | runtime checkpoint |
+| `updated_at` | RFC3339 timestamp | yes | no | none | code | set | set | >= created_at | runtime checkpoint |
 
-For a scene: allocate persisted `commit_id`; build generation and scene artifact in `.staging/scene-commits/<commit-id>/`; validate Schema/ID/hash/evidence/before-after/clock/policy; rename generation; rename artifact; finalize manifest; atomically replace HEAD last; update runtime phase. Manifest fields are `commit_id,parent_commit_id,scene_id,before_generation,after_generation,artifact_hashes,local_key_to_id_mapping,committed_at`. Same commit reuses persisted mapping keyed by `scene_id+local_key+type`.
+Absent artifact paths and their hashes are `null`; a path/hash pair is never partially null. Resume rejects mismatch and never regenerates an adopted card, frozen prose, or accepted delta.
 
-## Orphan recovery
+## Scene and commit manifest
 
-A generation not in the HEAD parent chain is orphan. A scene artifact whose mandatory `scene-manifest.json.commit_id` is not in that chain is orphan. Resume moves each orphan into `runtime/orphans/<timestamp>/` before deletion is allowed; it never deletes adopted artifacts or a generation reachable from HEAD.
+`artifacts/scenes/v01/c001/s001/scene-manifest.json` is written only by COMMIT-04.
 
-## Run and counter files
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `scene_id` | scene ID | yes | no | none | code | immutable | none | directory equality | artifact |
+| `commit_id` | commit ID | yes | no | none | code | immutable | none | known commit | artifact |
+| `volume_number` | integer | yes | no | none | code | immutable | none | directory v01 | artifact |
+| `chapter_number` | integer | yes | no | none | code | immutable | none | directory c001 | artifact |
+| `scene_number` | integer | yes | no | none | code | immutable | none | directory s001 | artifact |
+| `scene_card_path` | relative path | yes | no | none | code | immutable | none | adopted file | artifact |
+| `scene_card_sha256` | hex string | yes | no | none | code | immutable | none | exact bytes | artifact |
+| `prose_path` | relative path | yes | no | none | code | immutable | none | adopted file | artifact |
+| `prose_sha256` | hex string | yes | no | none | code | immutable | none | exact bytes | artifact |
+| `continuity_delta_path` | relative path | yes | no | none | code | immutable | none | adopted file | artifact |
+| `continuity_delta_sha256` | hex string | yes | no | none | code | immutable | none | exact bytes | artifact |
+| `character_count` | integer | yes | no | none | code | immutable | none | prose codepoint count >=1 | artifact |
+| `evidence_ids` | array<string> | yes | no | `[]` | code | immutable | none | evidence index IDs, unique | artifact |
+| `input_plan_refs` | array<string> | yes | no | `[]` | code | immutable | none | adopted plan hashes/paths | artifact |
+| `adopted_at` | RFC3339 timestamp | yes | no | none | code | immutable | none | valid timestamp | artifact |
 
-`run-manifest.json` has `run_id,state_version,code_version,prompt_bundle_version,schema_bundle_version,config_fingerprint,pricing_table_version,model,editorial_profile_id,publishing_profile_id,created_at`.
+Each generation's `commit-manifest.json` is `additionalProperties:false`.
 
-`counters.json` has `next_call_id,next_commit_id,next_publication_id,next_character_id,next_relationship_id,next_location_id,next_organization_id,next_item_id,next_system_id,next_rule_id,next_thread_id,next_ending_id,next_fact_id,next_evidence_id,transport_retries_used,response_structure_retries_used,revision_rounds_used,completion_audit_attempts_used,input_tokens_used,output_tokens_used,estimated_cost_used,active_elapsed_seconds`. All counters are non-negative integers except cost (non-negative number).
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `commit_id` | commit ID | yes | no | none | code | immutable | none | unique counter | generation |
+| `commit_type` | enum | yes | no | none | code | immutable | none | `initial_design|scene` | generation |
+| `parent_commit_id` | commit ID | yes | yes | null | code | immutable | none | genesis null; else parent | generation |
+| `scene_id` | scene ID | yes | yes | null | code | immutable | none | genesis null; else adopted scene | generation |
+| `before_generation` | generation ID | yes | yes | null | code | immutable | none | genesis null; else HEAD before | generation |
+| `after_generation` | generation ID | yes | no | none | code | immutable | none | directory ID | generation |
+| `artifact_hashes` | object | yes | no | `{}` | code | immutable | none | named canonical hashes | generation |
+| `local_key_to_id_mapping` | object | yes | no | `{}` | code | immutable | none | stable mapping | generation |
+| `created_at` | RFC3339 timestamp | yes | no | none | code | immutable | none | valid timestamp | generation |
+| `committed_at` | RFC3339 timestamp | yes | no | none | code | immutable | none | >= created_at | generation |
 
-## Lock
+Genesis is exactly `commit-00000000`, `initial_design`, null parent/scene/before generation, and `after_generation:"00000000"`. INIT-ID first creates generation bytes and manifest, then atomically writes HEAD. Scene commit stages generation and artifact, validates schema/ID/hash/evidence/before-after/clock/policy, renames generation, renames artifact, then replaces HEAD last. Same replay reuses persisted mapping keyed by scene ID, local key, and record type.
 
-v1 is single-process POSIX. `.storycraft.lock` uses `fcntl` advisory lock and stores `pid,hostname,run_id,started_at`. Stale release is allowed only when same-host PID does not exist. Windows and network filesystems are refused.
+## Orphan recovery and runtime files
+
+On resume, a generation not in HEAD parent chain is orphan; a scene artifact whose manifest commit ID is not in that chain is orphan. The process moves it to `runtime/orphans/<timestamp>/`, reconfirms that canonical paths do not reference it, then cleanup policy may remove it. It never deletes an adopted artifact or HEAD-reachable generation.
+
+`counters.json` includes nonnegative `next_call_id,next_commit_id,next_publication_id,next_character_id,next_relationship_id,next_location_id,next_organization_id,next_item_id,next_system_id,next_culture_id,next_history_id,next_rule_id,next_thread_id,next_ending_id,next_fact_id,next_evidence_id`; ID counters allow gaps, never reuse, and are code-only. It also has retry/budget counters.
+
+`run-manifest.json` has `run_id,state_version,code_version,prompt_bundle_version,schema_bundle_version,config_fingerprint,pricing_table_version,model,editorial_profile_id,publishing_profile_id,created_at`. `.storycraft.lock` is a POSIX `fcntl` advisory lock containing `pid,hostname,run_id,started_at`; stale release is only same-host nonexisting PID. Windows and network filesystem are unsupported in v1.
