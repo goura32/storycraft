@@ -30,6 +30,7 @@
 | `max_response_structure_retries` | integer | yes | no | 2 | run-fixed | 0..10 |
 | `max_revision_rounds` | integer | yes | no | 1 | run-fixed | 0..10 |
 | `max_completion_audit_attempts` | integer | yes | no | 2 | run-fixed | 1..10 |
+| `max_new_items_per_scene` | integer | yes | no | 2 | run-fixed | 0..20 |
 
 `transport retry`はconnection failure、HTTP failure、stream interruption、timeoutだけである。timeoutはstream closeとworker termination後にtransport failureへ分類する。`response structure retry`はJSON parse failure、Schema failure、required field missing、enum violationだけである。JSON不正はtransport retryに含めない。review構造retryとrevision結果構造retryの双方は`max_response_structure_retries`を使う。
 

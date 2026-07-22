@@ -1,34 +1,22 @@
 # Implementation acceptance
 
-> Future implementation acceptance uses deterministic fakes. Each check asserts artifact contents, field values, paths, counters, and state transitions; it does not merely assert headings or labels.
+> Future implementation acceptance uses deterministic fakes. Each check asserts paths, stored values, hashes, counters, and transitions rather than merely a successful exit.
 
-## Revision and pipeline
+## Required scenarios
 
-- For INIT, SERIES, VOL, CH, SC, PROSE, DELTA, and VH, a structurally valid candidate with residual issues is adopted after `revision_rounds_used` reaches `max_revision_rounds`.
-- Residual issues are appended, without overwrite, to `audit/residual-issues.jsonl`; the row includes stage, target, candidate hash, round, issues, and acceptance reason.
-- INIT-05 has processor type `LLM generate`, calls the LLM, uses transport and response-structure retries, consumes no revision round, and rejects invalid local references, duplicates, missing required records, and forbidden references.
-- `passed`, review severity, and clean-review wording do not independently control adoption.
-- Every code-only stage has no LLM call and no retry counters.
-
-## Data contracts
-
-- Brief title, genre, target reader, avoid array, volumes 4..10, key people count, and canonical raw source hash are checked.
-- INIT-01 through INIT-04 field lists, temporal rule mapping, and every local key mapping are checked.
-- Series map, volume design, chapter design, scene card child records, `new_item_policy` record, and every continuity-delta child record are checked.
-- `new_item_policy.max_items` is no greater than configured `max_new_items_per_scene`; its forbidden form has empty allowed types and zero maximum.
-- Record, relationship, knowledge, reader knowledge, time relation, and chapter completion enums are checked.
-
-## Candidate, runtime, and completion
-
-- Every candidate directory has `candidate.json` or prose `candidate.md`, `review.json`, and `candidate-manifest.json`; candidate manifest is the resume source.
-- run-manifest, run-state, counters, candidate, checkpoint, scene, commit, generation, and publication manifest field sets are validated.
-- Completion attempts use `runtime/candidates/completion/attempt-NN.json`; malformed, decode-failed, empty, and whitespace-only responses exhaust response-structure retry separately from completion attempt count.
-- A structurally valid completion audit advances to COMP-SAVE. Exhausted attempts without any valid audit cause a mechanical stop.
-- Output order is COMP-PRE, COMP-AUDIT, COMP-SAVE, OUT-01 staging, OUT-02 validation, COMP-PUBLISH gate, OUT-03 adoption/CURRENT. `.staging/` is never adopted.
-
-## Fixture and publication
-
-- Genesis fixture checks raw source hash, brief, initial design, current canon, knowledge items, story state, evidence index, generation manifest, HEAD, series/volume/chapter plans, temporal rule, and all local key mappings.
-- Scene and completion fixtures check direct baseline chains, before/after identity, quote offset/hash, artifact hashes, unique audit filenames, and distinct relationship participants.
-- Completion fixture checks `v04/c003/s002` paths, story position 4/3/2, final time consistency, knowledge `before` consistency, final scene chapter resolution, and pre-completion generation 00000047 order 47.
-- Public audit and publication exclude author truth, resolution conditions, raw prompt/response, secret prose, and workspace paths.
+- Every candidate, review, and revision stage resumes only from `candidate-manifest.json`.
+- Candidate content and manifests use distinct paths; completion attempts use incrementing `attempt-NN.json` files.
+- Completion structure retry is bounded inside an attempt; exhausted structure retries create a new completion attempt; exhausted attempts without a valid result mechanically stop.
+- OUT-01 progresses to OUT-02, OUT-02 progresses to COMP-PUBLISH, and neither self-loops.
+- COMP-PUBLISH writes only `gate-result.json`, adopts no publication directory, and OUT-03 atomically renames staging then replaces `output/CURRENT`.
+- COMMIT-04, VH-ID, and OUT-03 are `adopted`; COMMIT-02/03 and OUT-01 are `staged_internal`; OUT-02 is `staged_internal_validation`; COMP-SAVE and COMP-PUBLISH are `audit`.
+- Every revision-limit adoption appends the exact residual-issue record to `audit/residual-issues.jsonl`.
+- INIT candidate tables, Writer View child records, Volume Handoff child records, and Completion Audit child records reject unknown fields.
+- Continuity delta fields are accepted only when conforming to `evidence_and_updates.md`; a generic payload field is rejected.
+- Enum registry values are enforced, including lifecycle and thread status separation.
+- `max_new_items_per_scene` is required, defaults to 2, and rejects values outside 0..20.
+- Every runtime manifest and every counter field is present and typed.
+- Audit filenames contain call ID, operation ID, target ID, role, attempt, and revision round when applicable; two calls cannot collide.
+- Initial, scene, and completion fixtures parse, resolve IDs, preserve before-state equality, satisfy quote/offset/hash validation, and use matching artifact hashes.
+- Completion baseline is generation 47/order 47 and names the preceding scene, while final state is v04/c003/s002 at `最終日の夜`.
+- Product retry, lifecycle, and current-data terminology matches the enum and runtime contracts.

@@ -121,7 +121,7 @@
 | adoption condition | not adopted; candidate remains resumable |
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose.md` |
 | adopted path | `none` |
-| audit path | `audit/llm-calls/prose-01.json.gz` |
+| audit path | `audit/llm-calls/000123__prose-01__v01-c001-s001__generate__attempt-01.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose.md`; otherwise named adopted input |
 | next stage | PROSE-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |

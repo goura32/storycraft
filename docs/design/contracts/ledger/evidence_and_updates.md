@@ -1,37 +1,46 @@
 # Ledger contracts: evidence and updates
 
-All update operations are code-validated. Free JSON Patch is forbidden. Evidence quote must be a literal substring of adopted NFC prose; offsets are Unicode code point positions and `quote_sha256` hashes UTF-8 quote bytes.
+This is the sole normative contract for continuity delta. `scene_artifacts.md` links here and does not redefine it. All saved records reject unknown fields. Evidence is a literal adopted-NFC-prose substring; offsets are Unicode code points and `quote_sha256` is SHA-256 of UTF-8 quote bytes.
 
 ## Evidence index
 
 | field | type | required | nullable | default | creator | mutability | validation | source of truth |
 |---|---|---:|---:|---|---|---|---|---|
-| evidence_id | evidence ID | yes | no | none | code | immutable | unique prefix | evidence_index |
-| evidence_type | enum `update|knowledge|ending` | yes | no | none | code | immutable | exact enum | evidence_index |
-| target_id | record ID | yes | no | none | code | immutable | known target | evidence_index |
-| scene_id | scene ID | yes | no | none | code | immutable | adopted scene | evidence_index |
-| quote | string | yes | no | none | code | immutable | literal prose substring | evidence_index |
-| relation | enum `supports|contradicts` | yes | no | supports | code | immutable | exact enum | evidence_index |
-| start_offset | integer | yes | no | none | code | immutable | Unicode code point offset | evidence_index |
-| end_offset | integer | yes | no | none | code | immutable | quote boundary | evidence_index |
-| quote_sha256 | SHA-256 string | yes | no | none | code | immutable | UTF-8 quote hash | evidence_index |
+| `evidence_id` | evidence ID | yes | no | none | code | immutable | unique | evidence index |
+| `evidence_type` | `update|knowledge|ending` | yes | no | none | code | immutable | exact value | evidence index |
+| `target_id` | record ID | yes | no | none | code | immutable | adopted target | evidence index |
+| `scene_id` | scene ID | yes | no | none | code | immutable | adopted scene | evidence index |
+| `quote` | string | yes | no | none | code | immutable | literal prose substring | evidence index |
+| `relation` | `supports|contradicts` | yes | no | `supports` | code | immutable | exact value | evidence index |
+| `start_offset` | integer | yes | no | none | code | immutable | code-point offset | evidence index |
+| `end_offset` | integer | yes | no | none | code | immutable | quote boundary | evidence index |
+| `quote_sha256` | SHA-256 | yes | no | none | code | immutable | quote UTF-8 bytes | evidence index |
 
-## Continuity update
+## Continuity delta
 
-| field | type | required | nullable | default | creator | mutability | allowed operation | evidence requirement | validation | source of truth |
-|---|---|---:|---:|---|---|---|---|---|---|---|
-| operation | enum `set|append|remove|transition` | yes | no | none | LLM→code | candidate | allowed target field | evidence required | target matrix | delta |
-| target_id | record ID | yes | no | none | code | candidate | known adopted record | evidence required | target matrix | delta |
-| field | string | yes | no | none | LLM→code | candidate | allowed direct field | evidence required | target matrix | delta |
-| before | typed value | yes | yes | null | code | candidate | equals current snapshot | evidence required | target matrix | delta |
-| after | typed value | yes | yes | null | LLM→code | candidate | field Schema | evidence required | target matrix | delta |
-| evidence | string | yes | no | none | LLM→code | candidate | literal prose quote | required | delta |
+Every row below is candidate data from LLM and validated by code. `scene_id` is copied by code from the stage input. `before` is copied by code from the pre-scene adopted snapshot. Every mutation needs literal prose evidence.
 
-## New item proposal
+| record | exact fields | allowed operation | evidence requirement |
+|---|---|---|---|
+| existing item update | `operation`, `target_type`, `target_id`, `field`, `before`, `after`, `scene_id`, `evidence` | `set|append|remove|transition` | literal adopted prose quote |
+| new item proposal common | `local_key`, `record_type`, `scope`, `scene_id`, `evidence` | append | literal adopted prose quote |
+| knowledge item proposal | `local_key`, `subject_type`, `subject_id`, `canonical_fact`, `writer_visible_label`, `scope`, `scene_id`, `evidence` | append | literal adopted prose quote |
+| knowledge update | `fact_id`, `audience_type`, `audience_id`, `before`, `after`, `scene_id`, `evidence` | transition | literal adopted prose quote |
+| thread update | `thread_id`, `operation`, `before_status`, `after_status`, `before_progress`, `after_progress`, `scene_id`, `evidence` | `introduce|advance|resolve|retire` | literal adopted prose quote |
+| ending evidence proposal | `criterion_id`, `scene_id`, `evidence`, `relation` | append | literal adopted prose quote |
+| time update | `time_relation`, `time_label`, `elapsed_hint`, `parallel_group_id`, `evidence` | transition | literal adopted prose quote when changed |
+
+`new_item_proposals` is a discriminated union on `record_type`: `character`, `relationship`, `location`, `organization`, `item`, `system`, `culture`, `history`, or `supporting_thread`. Each branch contains its named record fields; a generic `payload` field is forbidden.
+
+## Residual issue record
+
+When a structurally valid candidate is adopted at the revision limit with remaining issues, code appends one canonical JSON line to `audit/residual-issues.jsonl`.
 
 | field | type | required | nullable | default | creator | mutability | validation | source of truth |
 |---|---|---:|---:|---|---|---|---|---|
-| record_type | record type enum | yes | no | none | LLM→code | candidate | allowed scene policy | candidate only | delta |
-| local_key | string | yes | no | none | LLM | candidate | unique in commit | candidate only | delta |
-| scope | scope enum | yes | no | none | LLM→code | candidate | policy allows scope | candidate only | delta |
-| payload | typed record fields | yes | no | none | LLM→code | candidate | record Schema | candidate only | delta |
+| `operation_id` | operation ID | yes | no | none | code | immutable | listed review stage | residual issue record |
+| `target_id` | target ID | yes | no | none | code | immutable | candidate target | residual issue record |
+| `candidate_sha256` | SHA-256 | yes | no | none | code | immutable | retained candidate bytes | residual issue record |
+| `revision_rounds_used` | integer | yes | no | none | code | immutable | configured bound reached | residual issue record |
+| `issues` | array of review issue record | yes | no | none | code | immutable | nonempty | residual issue record |
+| `adopted_at` | RFC3339 timestamp | yes | no | none | code | immutable | UTC | residual issue record |

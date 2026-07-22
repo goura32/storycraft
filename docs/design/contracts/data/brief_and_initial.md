@@ -43,16 +43,14 @@ All persisted records reject unknown fields. A raw source is serialized as canon
 
 ## INIT-02 through INIT-04
 
-The following records are each persisted as named candidates before INIT-05; `local_key` is unique across the bundle and only INIT-ID maps it to a persistent ID.
+Each row below is a field-level contract. Every listed field is required, non-null, has no default, is LLM-created and code-validated, candidate-mutable until adoption, and is sourced from its stated INIT candidate; code validates exact enum/reference constraints and rejects all unlisted fields.
 
-| record | required fields | validation | source of truth |
+| record | field | validation | source of truth |
 |---|---|---|---|
-| character candidate | `local_key`, `name`, `aliases`, `role`, `core_trait`, `values`, `background`, `immutable_facts`, `appearance_anchor`, `speech_anchor`, `starting_location_local_key`, `starting_physical_condition`, `starting_emotional_state`, `starting_goal`, `starting_pressure` | local key unique; role enum; location local key resolves | INIT-02 candidate |
-| relationship candidate | `local_key`, `participant_a_local_key`, `participant_b_local_key`, `relationship_type`, `origin`, `structural_role`, `starting_public_relation`, `a_to_b.trust`, `a_to_b.perception`, `a_to_b.emotional_stance`, `a_to_b.current_intention`, `b_to_a.trust`, `b_to_a.perception`, `b_to_a.emotional_stance`, `b_to_a.current_intention`, `shared_state` | endpoints resolve and differ; relationship and trust enums | INIT-02 candidate |
-| world entity candidate | `local_key`, `kind`, `name`, `description`, `immutable_rules`, `sensory_anchors`, `scope` | kind and scope enums; unique local key | INIT-03 candidate |
-| temporal rule candidate | `local_key`, `kind`, `description`, `fixed_rule`, `related_local_keys`, `scope` | every related key resolves | INIT-03 candidate |
-| protagonist arc | `start`, `turning_points`, `end` | all strings nonempty | INIT-04 candidate |
-| relationship arc | `relationship_local_key`, `start_state`, `turning_points`, `end_state`, `change_function` | relationship key resolves | INIT-04 candidate |
+| character | `local_key`, `name`, `aliases`, `role`, `core_trait`, `values`, `background`, `immutable_facts`, `appearance_anchor`, `speech_anchor`, `starting_location_local_key`, `starting_physical_condition`, `starting_emotional_state`, `starting_goal`, `starting_pressure` | local key unique; role enum; location local key resolves | INIT-02 candidate |
+| relationship | `local_key`, `participant_a_local_key`, `participant_b_local_key`, `relationship_type`, `origin`, `structural_role`, `starting_public_relation`, `a_to_b.trust`, `a_to_b.perception`, `a_to_b.emotional_stance`, `a_to_b.current_intention`, `b_to_a.trust`, `b_to_a.perception`, `b_to_a.emotional_stance`, `b_to_a.current_intention`, `shared_state` | endpoints resolve and differ; relationship and trust enums | INIT-02 candidate |
+| world entity | `local_key`, `kind`, `name`, `description`, `immutable_rules`, `sensory_anchors`, `scope` | kind and scope enums; unique local key | INIT-03 candidate |
+| temporal rule | `local_key`, `kind`, `description`, `fixed_rule`, `related_local_keys`, `scope` | every related key resolves | INIT-03 candidate |
 | major thread | `local_key`, `description`, `author_truth`, `resolution_condition`, `presentation_rule`, `required` | local key unique; required boolean | INIT-04 candidate |
 | ending criterion | `local_key`, `description`, `required`, `source_ending_text` | source ending text equals brief ending | INIT-04 candidate |
 

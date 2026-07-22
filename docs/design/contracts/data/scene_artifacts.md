@@ -43,7 +43,9 @@ All persisted records reject unknown fields. Code sets scene coordinates and `sc
 
 A prohibited-new-item scene uses `allowed_types: []`, `max_items: 0`, and a nonempty purpose stating that no new item is allowed.
 
-## Continuity delta
+## Continuity delta (non-normative link)
+
+The sole field contract is [evidence and updates](../ledger/evidence_and_updates.md#continuity-delta). The following historical summary has no normative force.
 
 | field | type | required | nullable | default | creator | mutability | allowed operation | evidence requirement | validation | source of truth |
 |---|---|---:|---:|---|---|---|---|---|---|---|

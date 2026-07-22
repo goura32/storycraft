@@ -87,7 +87,7 @@
 | input source paths | ` .staging/scene-commits/v01-c001-s001/{generation,artifact}` |
 | output artifact name | adopted generation and scene artifact |
 | output Schema name | `commit-manifest.schema.json` |
-| artifact class | staged_internal |
+| artifact class | adopted |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -187,12 +187,12 @@
 | input source paths | `runtime/candidates/handoffs/v01/{candidate,review}.json` |
 | output artifact name | adopted handoff |
 | output Schema name | `volume-handoff.schema.json` |
-| artifact class | staged_internal |
+| artifact class | adopted |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
 | revision round consumption | No |
-| mechanical validation | Schema/volume/current HEAD |
+| mechanical validation | Schema/volume/current HEAD; append residual issues when needed |
 | adoption condition | VH-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `artifacts/handoffs/v01.json` |
@@ -244,11 +244,11 @@
 | revision round consumption | No |
 | mechanical validation | audit Schema only; no revision |
 | adoption condition | not adopted; candidate remains resumable |
-| candidate path | `runtime/candidates/completion/audit.json` |
+| candidate path | `runtime/candidates/completion/attempt-NN.json` |
 | adopted path | `none` |
-| audit path | `audit/llm-calls/comp-audit.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/completion/audit.json`; otherwise named adopted input |
-| next stage | COMP-SAVE |
+| audit path | `audit/llm-calls/000123__comp-audit__completion__generate__attempt-NN.json.gz` |
+| resume source | `runtime/candidates/completion/candidate-manifest.json` |
+| next stage | COMP-SAVE when structurally valid; COMP-AUDIT next attempt or mechanical stop otherwise |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
 
@@ -259,10 +259,10 @@
 | processor type | code |
 | execution precondition | COMP-AUDIT valid or attempt exhaustion with last valid |
 | input artifact names | structurally valid audit candidate |
-| input source paths | `runtime/candidates/completion/audit.json` |
+| input source paths | `runtime/candidates/completion/attempt-NN.json` selected by manifest |
 | output artifact name | saved completion audit |
 | output Schema name | `completion-audit.schema.json` |
-| artifact class | staged_internal |
+| artifact class | audit |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -312,7 +312,7 @@
 | input source paths | ` .staging/publication` |
 | output artifact name | publication validation result |
 | output Schema name | `publication-validation.schema.json` |
-| artifact class | staged_internal |
+| artifact class | staged_internal_validation |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -322,8 +322,8 @@
 | candidate path | `none` |
 | adopted path | `.staging/publication/validation.json` |
 | audit path | `audit/operations/out-01.json.gz` |
-| resume source | candidate manifest at `none`; otherwise named adopted input |
-| next stage | OUT-02 |
+| resume source | no candidate; named staged input |
+| next stage | COMP-PUBLISH |
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
@@ -332,22 +332,22 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | OUT-01 validation passed |
-| input artifact names | validated staged publication |
-| input source paths | ` .staging/publication/{validation.json,publication-manifest.json}` |
-| output artifact name | adopted publication |
-| output Schema name | `publication-manifest.schema.json` |
-| artifact class | staged_internal |
+| execution precondition | COMP-PRE passed, structurally valid completion audit exists, and OUT-02 validation passed |
+| input artifact names | completion precheck, audit, and validation |
+| input source paths | `runtime/checkpoints/completion/precheck.json; audit/completion/audit.json.gz; .staging/publication/<id>/publication-validation.json` |
+| output artifact name | gate-result |
+| output Schema name | `gate-result.schema.json` |
+| artifact class | audit |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
 | revision round consumption | No |
-| mechanical validation | atomic rename/manifest hash |
-| adoption condition | OUT-01 validation passed |
+| mechanical validation | all three preconditions only; no publication adoption |
+| adoption condition | gate succeeds |
 | candidate path | `none` |
-| adopted path | `publications/<publication-id>` |
-| audit path | `audit/operations/out-02.json.gz` |
-| resume source | candidate manifest at `none`; otherwise named adopted input |
+| adopted path | `none` |
+| audit path | `audit/operations/comp-publish.json.gz` |
+| resume source | no candidate; named audit/staged inputs |
 | next stage | OUT-03 |
 | failure classification | storage error or mechanical stop |
 | review output | なし |
@@ -357,12 +357,12 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | OUT-02 publication exists |
-| input artifact names | adopted publication |
-| input source paths | `publications/<publication-id>` |
-| output artifact name | updated output pointer |
-| output Schema name | `publication-pointer.schema.json` |
-| artifact class | staged_internal |
+| execution precondition | COMP-PUBLISH gate result passed |
+| input artifact names | validated staged publication and gate result |
+| input source paths | `.staging/publication/<publication-id>; audit/operations/comp-publish.json.gz` |
+| output artifact name | adopted publication and updated output pointer |
+| output Schema name | `publication-manifest.schema.json` |
+| artifact class | adopted |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
