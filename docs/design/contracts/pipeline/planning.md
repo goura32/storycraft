@@ -82,8 +82,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | VOL-02 review has zero issues |
-| input artifact names | review-clean volume design |
+| execution precondition | VOL-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid volume design |
 | input source paths | `runtime/candidates/volumes/v01/{candidate,review}.json` |
 | output artifact name | adopted volume design |
 | output Schema name | `volume-design.schema.json` |
@@ -93,7 +93,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | target volume/no existing plan overwrite |
-| adoption condition | VOL-02 review has zero issues |
+| adoption condition | VOL-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `plans/volumes/v01.json` |
 | audit path | `audit/operations/vol-id.json.gz` |
@@ -182,8 +182,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | CH-02 review has zero issues |
-| input artifact names | review-clean chapter design |
+| execution precondition | CH-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid chapter design |
 | input source paths | `runtime/candidates/chapters/v01/c001/{candidate,review}.json` |
 | output artifact name | adopted chapter design |
 | output Schema name | `chapter-design.schema.json` |
@@ -193,7 +193,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | chapter belongs adopted volume |
-| adoption condition | CH-02 review has zero issues |
+| adoption condition | CH-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `plans/chapters/v01/c001.json` |
 | audit path | `audit/operations/ch-id.json.gz` |

@@ -181,8 +181,8 @@
 
 | contract | value |
 |---|---|
-| processor type | code |
-| execution precondition | all four initial candidates structurally valid |
+| processor type | LLM generate |
+| execution precondition | INIT-01 through INIT-04 candidates are structurally valid |
 | input artifact names | INIT-01..04 candidates |
 | input source paths | `runtime/candidates/initial-design/{concept,people,world,arcs}.json` |
 | output artifact name | initial_design_bundle candidate |
@@ -192,7 +192,7 @@
 | transport retry | Yes |
 | response structure retry | Yes |
 | revision round consumption | No |
-| mechanical validation | bundle required sections/local key references |
+| mechanical validation | Schema, local_key references, duplicate detection, required records, and forbidden references |
 | adoption condition | not adopted; candidate remains resumable |
 | candidate path | `runtime/candidates/initial-design/bundle.json` |
 | adopted path | `none` |
@@ -257,8 +257,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | INIT-06 review has zero issues |
-| input artifact names | review-clean initial bundle |
+| execution precondition | structurally valid bundle exists and review issues are empty or revision_rounds_used reached max_revision_rounds |
+| input artifact names | latest structurally valid initial bundle and review result |
 | input source paths | `runtime/candidates/initial-design/{bundle,review}.json` |
 | output artifact name | initial_design and genesis generation |
 | output Schema name | `initial-design.schema.json` |
@@ -268,7 +268,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | local key mapping, fixed manifest, initial projection |
-| adoption condition | INIT-06 review has zero issues |
+| adoption condition | structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds); residual issues append to `audit/residual-issues.jsonl` |
 | candidate path | `none` |
 | adopted path | `canon/initial-design.json; canon/generations/00000000/; canon/HEAD` |
 | audit path | `audit/operations/init-id.json.gz` |
@@ -357,8 +357,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | SERIES-02 review has zero issues |
-| input artifact names | review-clean series map |
+| execution precondition | structurally valid series map exists and review issues are empty or revision_rounds_used reached max_revision_rounds |
+| input artifact names | latest structurally valid series map and review result |
 | input source paths | `runtime/candidates/series-map/{candidate,review}.json` |
 | output artifact name | adopted series map |
 | output Schema name | `series-map.schema.json` |
@@ -368,7 +368,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | code assigns 1..brief.volumes/no duplicates |
-| adoption condition | SERIES-02 review has zero issues |
+| adoption condition | structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds); residual issues append to `audit/residual-issues.jsonl` |
 | candidate path | `none` |
 | adopted path | `plans/series-map.json` |
 | audit path | `audit/operations/series-id.json.gz` |

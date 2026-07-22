@@ -1,6 +1,6 @@
 # Pipeline contracts: commit and output
 
-> この文書はpipeline stageの正本。共通用語は[pipeline index](../../pipeline_contracts.md)を参照する。
+`COMP-PUBLISH` is a code gate after `OUT-02`; it writes only a gate audit and permits `OUT-03`, not a staged or adopted artifact.
 
 ## COMMIT-01 — scene commit検証
 
@@ -37,7 +37,7 @@
 | input source paths | `runtime/checkpoints/scenes/v01/c001/s001/commit-plan.json; canon/HEAD generation` |
 | output artifact name | staged generation |
 | output Schema name | `generation.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -62,7 +62,7 @@
 | input source paths | `runtime/checkpoints/scenes/v01/c001/s001` |
 | output artifact name | staged scene artifact |
 | output Schema name | `scene-manifest.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -87,7 +87,7 @@
 | input source paths | ` .staging/scene-commits/v01-c001-s001/{generation,artifact}` |
 | output artifact name | adopted generation and scene artifact |
 | output Schema name | `commit-manifest.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -182,18 +182,18 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | VH-02 review has zero issues |
-| input artifact names | review-clean handoff |
+| execution precondition | VH-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid handoff |
 | input source paths | `runtime/candidates/handoffs/v01/{candidate,review}.json` |
 | output artifact name | adopted handoff |
 | output Schema name | `volume-handoff.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | Schema/volume/current HEAD |
-| adoption condition | VH-02 review has zero issues |
+| adoption condition | VH-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `artifacts/handoffs/v01.json` |
 | audit path | `audit/operations/vh-id.json.gz` |
@@ -262,7 +262,7 @@
 | input source paths | `runtime/candidates/completion/audit.json` |
 | output artifact name | saved completion audit |
 | output Schema name | `completion-audit.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -273,11 +273,11 @@
 | adopted path | `audit/completion/audit.json.gz` |
 | audit path | `audit/operations/comp-save.json.gz` |
 | resume source | candidate manifest at `none`; otherwise named adopted input |
-| next stage | COMP-PUBLISH |
+| next stage | OUT-01 |
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
-## COMP-PUBLISH — publication staging
+## OUT-01 — publication staging
 
 | contract | value |
 |---|---|
@@ -287,7 +287,7 @@
 | input source paths | `audit/completion/audit.json.gz; artifacts/scenes` |
 | output artifact name | staged publication |
 | output Schema name | `publication-manifest.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -302,23 +302,23 @@
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
-## OUT-01 — publication検証
+## OUT-02 — publication validation
 
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | COMP-PUBLISH staging exists |
+| execution precondition | OUT-01 staging exists |
 | input artifact names | staged publication |
 | input source paths | ` .staging/publication` |
 | output artifact name | publication validation result |
 | output Schema name | `publication-validation.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | files order/nonempty/no secret leakage |
-| adoption condition | COMP-PUBLISH staging exists |
+| adoption condition | OUT-01 staging exists |
 | candidate path | `none` |
 | adopted path | `.staging/publication/validation.json` |
 | audit path | `audit/operations/out-01.json.gz` |
@@ -327,7 +327,7 @@
 | failure classification | storage error or mechanical stop |
 | review output | なし |
 
-## OUT-02 — publication採用
+## COMP-PUBLISH — public precondition gate
 
 | contract | value |
 |---|---|
@@ -337,7 +337,7 @@
 | input source paths | ` .staging/publication/{validation.json,publication-manifest.json}` |
 | output artifact name | adopted publication |
 | output Schema name | `publication-manifest.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |
@@ -362,7 +362,7 @@
 | input source paths | `publications/<publication-id>` |
 | output artifact name | updated output pointer |
 | output Schema name | `publication-pointer.schema.json` |
-| artifact class | adopted/audit |
+| artifact class | staged_internal |
 | LLM call | No |
 | transport retry | No |
 | response structure retry | No |

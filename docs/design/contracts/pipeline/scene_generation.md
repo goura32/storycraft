@@ -24,7 +24,7 @@
 | audit path | `audit/llm-calls/sc-01.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card.json`; otherwise named adopted input |
 | next stage | SC-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## SC-02 — scene card review
@@ -49,7 +49,7 @@
 | audit path | `audit/reviews/sc-02.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card-review.json`; otherwise named adopted input |
 | next stage | SC-REV or SC-CHK |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
 
 ## SC-REV — scene card revise
@@ -74,7 +74,7 @@
 | audit path | `audit/llm-calls/sc-rev.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card.json`; otherwise named adopted input |
 | next stage | SC-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## SC-CHK — scene card checkpoint
@@ -82,8 +82,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | SC-02 review has zero issues |
-| input artifact names | review-clean scene card |
+| execution precondition | SC-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid scene card |
 | input source paths | `runtime/candidates/scenes/v01/c001/s001/{scene-card,scene-card-review}.json` |
 | output artifact name | scene card checkpoint |
 | output Schema name | `scene-card.schema.json` |
@@ -93,7 +93,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | candidate hash/schema/review zero issues |
-| adoption condition | SC-02 review has zero issues |
+| adoption condition | SC-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `runtime/checkpoints/scenes/v01/c001/s001/scene-card.json` |
 | audit path | `audit/operations/sc-chk.json.gz` |
@@ -117,14 +117,14 @@
 | transport retry | Yes |
 | response structure retry | Yes |
 | revision round consumption | No |
-| mechanical validation | non-empty prose/UTF-8 NFC only |
+| mechanical validation | decode failure, empty response, or whitespace-only response is a response structure error |
 | adoption condition | not adopted; candidate remains resumable |
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose.md` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/prose-01.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose.md`; otherwise named adopted input |
 | next stage | PROSE-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## PROSE-02 — prose review
@@ -149,7 +149,7 @@
 | audit path | `audit/reviews/prose-02.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose-review.json`; otherwise named adopted input |
 | next stage | PROSE-REV or PROSE-CHK |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
 
 ## PROSE-REV — prose revise
@@ -167,14 +167,14 @@
 | transport retry | Yes |
 | response structure retry | Yes |
 | revision round consumption | Yes |
-| mechanical validation | non-empty prose/UTF-8 NFC only |
+| mechanical validation | decode failure, empty response, or whitespace-only response is a response structure error |
 | adoption condition | not adopted; candidate remains resumable |
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose.md` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/prose-rev.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose.md`; otherwise named adopted input |
 | next stage | PROSE-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## PROSE-CHK — prose checkpoint
@@ -182,8 +182,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | PROSE-02 review has zero issues |
-| input artifact names | review-clean prose |
+| execution precondition | PROSE-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid prose |
 | input source paths | `runtime/candidates/scenes/v01/c001/s001/{prose.md,prose-review.json}` |
 | output artifact name | prose checkpoint |
 | output Schema name | `prose.schema.txt` |
@@ -193,7 +193,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | NFC bytes/hash/review zero issues |
-| adoption condition | PROSE-02 review has zero issues |
+| adoption condition | PROSE-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `runtime/checkpoints/scenes/v01/c001/s001/prose.md` |
 | audit path | `audit/operations/prose-chk.json.gz` |
@@ -224,7 +224,7 @@
 | audit path | `audit/llm-calls/delta-01.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json`; otherwise named adopted input |
 | next stage | DELTA-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## DELTA-02 — continuity delta review
@@ -249,7 +249,7 @@
 | audit path | `audit/reviews/delta-02.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/delta-review.json`; otherwise named adopted input |
 | next stage | DELTA-REV or DELTA-CHK |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
 
 ## DELTA-REV — continuity delta revise
@@ -274,7 +274,7 @@
 | audit path | `audit/llm-calls/delta-rev.json.gz` |
 | resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json`; otherwise named adopted input |
 | next stage | DELTA-02 |
-| failure classification | transport error, response structure error, or mechanical stop |
+| failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
 
 ## DELTA-CHK — continuity delta checkpoint
@@ -282,8 +282,8 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | DELTA-02 review has zero issues |
-| input artifact names | review-clean delta |
+| execution precondition | DELTA-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
+| input artifact names | latest structurally valid delta |
 | input source paths | `runtime/candidates/scenes/v01/c001/s001/{continuity-delta.json,delta-review.json}` |
 | output artifact name | delta checkpoint |
 | output Schema name | `continuity-delta.schema.json` |
@@ -293,7 +293,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | Schema/evidence quote-offset-hash/review zero issues |
-| adoption condition | DELTA-02 review has zero issues |
+| adoption condition | DELTA-02 structurally valid candidate exists and (issues are empty or revision_rounds_used >= max_revision_rounds) |
 | candidate path | `none` |
 | adopted path | `runtime/checkpoints/scenes/v01/c001/s001/continuity-delta.json` |
 | audit path | `audit/operations/delta-chk.json.gz` |
