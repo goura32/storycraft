@@ -1,74 +1,79 @@
 # Pipeline contracts
 
-> 工程入出力の正本。製品動作は[製品仕様](../product/SPECIFICATION.md)、台帳・更新は[ledger contracts](ledger_contracts.md)、順番は[生成フロー](series_engine_flow.md)を正本とする。JSON Schemaは今回作成しない。
+> 工程入出力の正本。状態・台帳は[ledger contracts](ledger_contracts.md)、保存先は[workspace layout](workspace_layout.md)、順番は[生成フロー](series_engine_flow.md)を正本とする。Schemaファイルは今回作成しない。
 
-## 共通規則
+## 共通実行契約
 
-LLMは候補、レビューissue、本文からの抽出候補を返す。コードはID、参照、構造、evidence完全一致、採用、保存、状態遷移を決定する。想定件数・文字数は暴走防止の目安であり文芸上の絶対制限ではない。
+各工程は下表のフィールド契約を持つ。件数・文字数はLLM出力の現実的な上限で、文芸品質の絶対評価ではない。
 
-| 再試行 | 対象 | 設定値 | 実行カウンタ |
-|---|---|---|---|
-| transport retry | 接続・HTTP・timeout・stream中断 | `max_transport_retries` | `transport_retries_used` |
-| response structure retry | JSON parse、Schema、必須項目 | `max_response_structure_retries` | `response_structure_retries_used` |
-| revision round | 正常レビューにissueがある候補全体修正 | `max_revision_rounds` | `revision_rounds_used` |
-| completion audit attempt | 同一完成候補への独立意味監査 | `max_completion_audit_attempts` | `completion_audit_attempts_used` |
+| 区分 | 必須記載 |
+|---|---|
+| 実行条件 | 前工程が採用済み、又は明示されたretry条件 |
+| 入力 | `name: type / 必須性 / 正本 / 件数・文字数` |
+| 出力 | `name: type / 必須性 / LLM生成又はコード付与 / 出力状態` |
+| 可視性 | 参照可能情報、writer等の参照禁止情報 |
+| 更新 | 更新可能データ、更新禁止データ |
+| 検証 | ID、型、参照、evidence、hash、件数、順序 |
+| retry | transport / response structure / revision roundの適用可否 |
+| 採用・保存 | 採用条件、保存先、失敗時、次工程 |
 
-## 工程一覧
+transport retryは通信失敗だけ、response structure retryはparse/Schema/必須項目だけ、revision roundは**構造正常なレビューがissueを返した場合**だけを数える。正常レビュー後のrevisionは候補全体と全issueを一回で修正する。回数枯渇時、最後の構造正常候補を残存issueとともに採用する。構造不正・参照不正・evidence不一致は採用しない。
 
-各LLM生成・修正は「入力→生成→response structure retry→構造検証→レビュー→issueがあれば全件一括修正→再レビュー」。レビューissueだけでは停止しない。`固定事実/作者真実/ending criteria/長期arc`はinitial bundle、局所参照はcurrent canon、現在値はcurrent stateをContext Builderが投影し、LLMへ矛盾解消を委ねない。
+## 工程カタログ
 
-| ID | 種類・目的 | 入力正本 → 出力/状態 | LLM / コード | 検証・採用・次工程 |
-|---|---|---|---|---|
-| INPUT-01 | LLM生成。brief読込・keywordsから生成 | 入力 → `brief`/正本候補 | LLM:題材等、コード:入力ID | 必須文字列。採用後INIT-01 |
-| INIT-01 | LLM生成。作品コンセプト | brief → 内部成果物 | LLM:concept、コード:なし | 構造/review。INIT-02 |
-| INIT-02 | LLM生成。人物・関係 | concept → 内部成果物 | LLM:`local_key`、コード:永続IDなし | local_key一意。INIT-03 |
-| INIT-03 | LLM生成。世界・時間規則 | 01/02 → 内部成果物 | LLM:規則、コード:なし | 参照local_key。INIT-04 |
-| INIT-04 | LLM生成。arc/伏線/ending | 01-03 → 内部成果物 | LLM:作者真実・criteria、コード:なし | future/knowledge境界。INIT-05 |
-| INIT-05 | コード統合。bundle候補 | 01-04 → 正本候補 | LLM値を複写、コード:統合 | 永続IDなし。INIT-06 |
-| INIT-06 | LLMレビュー。bundle全体 | bundle候補 → review記録 | LLM:issue、コード:round判定 | 正常issueならINIT-REV、clean/上限ならINIT-ID |
-| INIT-REV | LLM修正。bundle全体一括修正 | bundle候補+issues → 正本候補 | LLM:引用field修正、コード:構造 | 全issue対象。INIT-06 |
-| INIT-ID | コード処理。採番・参照変換・採用 | bundle候補 → 採用済み正本 | コード:永続ID/変換 | 採番後の意味修正禁止。VOL-01 |
-| VOL-01/02/REV | 生成/レビュー/修正。巻設計 | initial bundle/current canon/current state/handoff → 巻正本候補 | LLM:promise/actions、コード:番号 | 既知ID/巻範囲。CH-01 |
-| CH-01/02/REV | 生成/レビュー/修正。章設計 | 巻設計 → 章正本候補 | LLM:章・場面数、コード:連番 | 章数/場面数。SC-01 |
-| SC-01/02/REV | 生成/レビュー/修正。場面カード | 章、投影Context → checkpoint | LLM:card/new_item_policy、コード:scene ID | `max_items`は0以上、設定上限以内。PROSE-01 |
-| PROSE-01/02/REV | 生成/レビュー/修正。本文 | card/writer_view → 凍結本文checkpoint | LLM:本文、コード:hash | writer_viewへ作者真実禁止。DELTA-01 |
-| DELTA-01/02/REV | 抽出/レビュー/修正。継続性差分 | 凍結本文+card → 差分checkpoint | LLM:候補、コード:evidence | 完全一致/typed field。DELTA-MERGE |
-| DELTA-MERGE | コード処理。mergeと場面採用 | 3 checkpoint → 採用済み場面 | コードのみ | transaction失敗は部分採用なし。次場面/VH-01 |
-| VH-01/02/REV | 生成/レビュー/修正。巻handoff | 採用済み巻 → handoff | LLM:要約、コード:境界適用 | 本文成立事実のみ。次巻/VOL-01 |
-| COMP-01 | コード処理。完成前提 | 全採用成果物 → 検証記録 | コードのみ | 下記必須条件。COMP-02 |
-| COMP-02 | LLM意味監査 | completion input → 監査候補 | LLM:issue、コード:attempt | 正常ならCOMP-03。不正かつ残あり再attempt、不正枯渇は停止 |
-| COMP-03 | コード保存 | 正常監査候補 → 監査記録 | コードのみ | 最後の正常を保存。OUT-01 |
-| OUT-01/02/03 | staging/検証/公開 | 採用済み正本 → Markdown | コードのみ | 欠落/hash/空本文検証後に原子的公開 |
+| ID | 工程名・種類・目的 | 実行条件 / 入力（型・正本） | 出力（型・作成者・状態） | 参照/禁止・更新 | 検証 / retry / 採用 / 保存 / 次工程 |
+|---|---|---|---|---|---|
+| INPUT-01 | brief生成/入力 | run開始。keywords:`array<string>`又はbrief:`object` | brief:`object`、LLM又は入力複写、正本候補 | keywordsのみ。Canon更新不可 | 必須値、response retry。`plans/series-map.json`。INIT-01 |
+| INIT-01 | コンセプト生成 | brief:`object` | concept:`object`、LLM、内部成果物 | briefのみ。更新不可 | 構造だけ検証、reviewなし。checkpoint。INIT-02 |
+| INIT-02 | 人物・関係生成 | brief/concept | characters/relationships:`array<object>`、LLM、内部成果物 | local_key参照可、永続ID禁止 | local_key一意、構造だけ。INIT-03 |
+| INIT-03 | 世界・時間規則生成 | 01/02 | entities/rules:`array<object>`、LLM、内部成果物 | 既知local_keyのみ | 構造だけ。INIT-04 |
+| INIT-04 | 長期arc・thread・criteria生成 | 01-03 | arcs/threads/criteria:`array<object>`、LLM、内部成果物 | 作者真実は許可、writer viewへ渡さない | local_key参照、構造だけ。INIT-05 |
+| INIT-05 | bundle統合/コード | 01-04内部成果物 | bundle candidate:`object`、コード、正本候補 | 全候補参照。意味更新禁止 | local_key完全性。`runtime/checkpoints/`。INIT-06 |
+| INIT-06 | bundleレビュー/LLM | bundle candidate | review:`object`、LLM、監査記録 | bundle全体。個別成果物再レビュー禁止 | review型。issueあり→INIT-REV、clean/上限→INIT-ID。`audit/reviews/` |
+| INIT-REV | bundle一括修正/LLM | candidate+全issues | bundle candidate:`object`、LLM、正本候補 | issue引用fieldのみ。新事実禁止 | 構造、revision round。INIT-06 |
+| INIT-ID | 採番・参照変換・採用/コード | 構造正常bundle | initial bundle/canon/state:`object`、コード、採用済み正本 | local_keyのみ変換。採番後の意味修正禁止 | 永続ID、参照、hash。`canon/`。VOL-01 |
+| VOL-01 | 巻設計生成/LLM | bundle,current canon,story state,handoff,target volume | volume design:`object`、LLM、正本候補 | 現在Canon/State可。作者真実は必要最小限 | volume番号、thread ID。VOL-02 |
+| VOL-02 | 巻設計レビュー/LLM | volume candidate+同入力 | review:`object`、LLM、監査記録 | future未執筆計画可 | 型。issue→VOL-REV、clean/上限→採用。`audit/reviews/` |
+| VOL-REV | 巻設計一括修正/LLM | volume candidate+全issues | volume candidate、LLM、正本候補 | 引用fieldのみ | 構造/revision。VOL-02 |
+| CH-01 | 章設計生成/LLM | 採用巻設計,current canon/state | chapters:`array<object>`、LLM、正本候補 | 既知thread/volume参照 | 連番、場面数。CH-02 |
+| CH-02 | 章設計レビュー/LLM | chapters+巻設計 | review、LLM、監査記録 | - | 型。issue→CH-REV、clean/上限→採用 |
+| CH-REV | 章設計一括修正/LLM | candidate+全issues | chapters、LLM、正本候補 | 引用fieldのみ | 構造/revision。CH-02 |
+| SC-01 | 場面カード生成/LLM | 採用章、current canon/state、writer projection | scene card:`object`、LLM、checkpoint | writerにauthor_truth/他者内面禁止 | `new_item_policy.max_items:int>=0`、既知ID。SC-02 |
+| SC-02 | 場面カードレビュー/LLM | card+同入力 | review、LLM、監査記録 | - | 型。issue→SC-REV、clean/上限→PROSE-01 |
+| SC-REV | 場面カード一括修正/LLM | card+全issues | card、LLM、checkpoint | 引用fieldのみ | 構造/revision。SC-02 |
+| PROSE-01 | 本文生成/LLM | 採用card+writer view | prose:`string`、LLM、凍結checkpoint | author_truth/未来確定情報禁止 | 非空、文字数500〜5000目安、hash。PROSE-02 |
+| PROSE-02 | 本文レビュー/LLM | prose+card | review、LLM、監査記録 | - | 型。issue→PROSE-REV、clean/上限→DELTA-01 |
+| PROSE-REV | 本文全体修正/LLM | prose+全issues | prose、LLM、凍結checkpoint | 指摘範囲だけ、card契約維持 | 構造/revision。PROSE-02 |
+| DELTA-01 | 継続性差分抽出/LLM | 凍結prose+card+投影state | continuity delta:`object`、LLM、checkpoint | frozen proseのみ根拠 | 全配列必須、evidence完全一致。DELTA-02 |
+| DELTA-02 | 差分レビュー/LLM | delta+同入力 | review、LLM、監査記録 | fixed/author truth更新禁止 | 型。issue→DELTA-REV、clean/上限→MERGE |
+| DELTA-REV | 差分全体修正/LLM | delta+全issues | delta、LLM、checkpoint | 引用fieldのみ | before/evidence/型。DELTA-02 |
+| DELTA-MERGE | 更新・場面採用/コード | card/prose/delta checkpoint | canon/state/index/artifact、採用済み正本 | 更新許可fieldのみ | transaction、before/after、ID、clock+1、hash。`artifacts/`。次場面/VH-01 |
+| VH-01 | 巻handoff生成/LLM | 採用済み巻、current canon/state | handoff:`object`、LLM、正本候補 | 採用本文由来のみ | 50〜300字。VH-02 |
+| VH-02 | handoffレビュー/LLM | handoff+巻 | review、LLM、監査記録 | - | issue→VH-REV、clean/上限→採用 |
+| VH-REV | handoff一括修正/LLM | handoff+全issues | handoff、LLM、正本候補 | 引用fieldのみ | 構造/revision。VH-02 |
+| COMP-PRE | 監査前Gate/コード | 全採用成果物、canon/state/index | preflight:`object`、コード、監査記録 | 変更禁止 | 全巻/章/場面、非空prose、artifact/hash、required thread、required criterion supports、ID、canon/state/index。失敗→停止、成功→COMP-AUDIT |
+| COMP-AUDIT | 意味監査/LLM | COMP-PRE成功、全体要約/evidence | audit:`object`、LLM、監査候補 | 本文/Canon更新禁止 | 正常JSON→保存候補。構造不正＋attempt残→再監査、枯渇→停止。意味issueは続行可 |
+| COMP-PUBLISH | 公開前Gate/コード | COMP-PRE成功、正常audit>=1、staging | publish gate:`object`、コード、監査記録 | outputのみ更新可 | staging検証。失敗→停止、成功→OUT-01 |
+| OUT-01 | staging出力/コード | 採用artifact | manuscript/report:`files`、コード、staging | raw/checkpoint禁止 | 欠落/空/hash。OUT-02 |
+| OUT-02 | staging検証/コード | staging files | verification:`object`、コード | - | link/hash/manifest。OUT-03 |
+| OUT-03 | 原子的公開/コード | publish gate+staging | output files、コード、公開原稿 | outputへ内部情報禁止 | replace+dir fsync。完了 |
 
-## 共通項目
+## 入出力フィールド定義
 
-| 項目 | 型 | 必須 | 作成者 | 可変性 | 目安・検証 | 正本 |
-|---|---|---:|---|---|---|---|
-| `volume_number` | integer | はい | コード | 不変 | 1始まり、profile範囲 | 巻設計 |
-| `volume_promise` | string | はい | LLM | revision可 | 40〜200字、空禁止 | 巻設計 |
-| `thread_actions` | array | はい | LLM | revision可 | 0〜20、既知ID/enum | 巻・場面 |
-| `local_key` | string | 初期候補 | LLM | revision可 | 候補内一意 | bundle候補 |
-| `id` | string | 採用後 | コード | 不変 | type-prefix、一意 | 台帳 |
-| `evidence` | string | 差分 | LLM | revision可 | 凍結本文完全一致 | evidence index |
+| object.field | 型 | 必須 | 作成者 | 状態 | 正本 / 目安 |
+|---|---|---:|---|---|---|
+| `volume_design.volume_number` | integer | はい | コード | candidate/adopted | 1始まり |
+| `.volume_promise` | string | はい | LLM | candidate | 40〜200字 |
+| `.thread_actions` | array<object> | はい | LLM | candidate | 0〜20、既知thread ID |
+| `chapter_design.chapter_number,scene_count` | integer | はい | コード/LLM | candidate | 1始まり/1〜20 |
+| `scene_card.scene_id` | string | はい | コード | checkpoint | `v01-c001-s001` |
+| `.new_item_policy.allowed_types,max_items` | array/ integer | はい | LLM | checkpoint | max_items 0〜profile上限 |
+| `prose.content` | string | はい | LLM | checkpoint | 500〜5000字目安 |
+| `review.issues` | array<object> | はい | LLM | audit | 0〜100 |
+| `completion_audit.issues` | array<object> | はい | LLM | audit | 意味issueは非停止 |
 
-## continuity_delta
+## continuity deltaとcompletion gate
 
-```json
-{"existing_item_updates":[],"new_item_proposals":[],"knowledge_updates":[],"thread_updates":[],"ending_evidence_proposals":[],"story_clock_update":{},"handoff_summary":""}
-```
+`continuity_delta`は`existing_item_updates,new_item_proposals,knowledge_item_proposals,knowledge_updates,thread_updates,ending_evidence_proposals,story_clock_update,handoff_summary`を全て必須キーとして持つ。詳細fieldは[ledger contracts](ledger_contracts.md)を正本とする。
 
-`existing_item_updates`は`operation,target_type,target_id,field,before,after,scene_id,evidence`。operationは`set|append|remove|transition`のみで、type/field別許可表、現在値との`before`一致、fixed領域禁止、本文完全一致をコードが検証する。`new_item_proposals`は`local_type,local_key,scope,fixed,current,scene_id,evidence`。LLMはIDを作らず、policyのallowed typeと`max_items`以内だけをコードが採番する。`knowledge_updates`は`fact_id,audience_type,audience_id,before,after,scene_id,evidence`（readerのaudience_idは`reader`固定）。`thread_updates`は`thread_id,operation,before_status,after_status,before_progress,after_progress,scene_id,evidence`、operationは`introduce|advance|resolve|retire`。`ending_evidence_proposals`は`criterion_id,scene_id,evidence,relation`でrelationは`supports|contradicts`。`story_clock_update`は`before_order,after_order,time_label,scene_id,evidence`（場面カードで明確ならevidence省略可）。handoffは本文成立事実のみ、50〜300字目安。
-
-## completion前提
-
-全巻、全章、必要採用場面、非空本文、artifact欠落・重複・hash不一致なし、required major thread完了、required ending criterionごとの検証済み`supports` evidence 1件以上、全ID参照、state/artifact/evidence index正常、**正常completion audit 1件以上**。`contradicts`だけは満たさず、両relationは監査へ渡す。文芸issueは前提に含めない。
-
-## Schema作成一覧
-
-| Schema | 対象工程 | 種別 | LLM項目 / コード項目 | 正本 |
-|---|---|---|---|---|
-| brief, initial_concept, initial_characters_relationships, initial_world_temporal_rules, initial_series_arcs | INPUT/INIT | 出力 | 候補 / IDなし | bundle候補 |
-| initial_design_bundle, review_result | INIT-05/06 | 保存/出力 | bundle・issues / ID・round | bundle |
-| volume_design, chapter_design, scene_card | VOL/CH/SC | 出力 | 設計 / 番号・ID | 設計正本 |
-| continuity_delta, volume_handoff | DELTA/VH | 出力 | 候補 / merge・採用 | state/index |
-| completion_audit | COMP | 出力/保存 | issue / attempt・保存 | audit record |
+COMP-PREは監査結果を要求しない。COMP-AUDITは正常JSONを1件以上作れなければ停止する。COMP-PUBLISHはCOMP-PRE成功、正常audit 1件以上、staging検証成功を要求する。required ending criterionは検証済み`supports` evidence 1件以上を要求し、`contradicts`だけでは満たさない。両relationは監査入力に含め、意味issueは保存するが停止条件ではない。

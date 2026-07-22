@@ -1,56 +1,103 @@
 # Ledger contracts
 
-> 台帳・状態・更新の正本。[pipeline contracts](pipeline_contracts.md)が工程I/O、[製品仕様](../product/SPECIFICATION.md)が製品動作を定める。
+> 台帳・状態・更新の正本。[pipeline contracts](pipeline_contracts.md)が工程I/O、[workspace layout](workspace_layout.md)が保存先を定める。`initial_design_bundle`、`current_canon`、`story_state`、`runtime_state`は別の正本である。
 
-## 正本優先関係
+## 四層の正本
 
-| 情報 | 正本 |
-|---|---|
-| 固定事実、作者真実、ending criteria、長期arc、初期主要record | `initial_design_bundle` |
-| 局所Canonと現在有効参照 | `current_canon` |
-| 時間・人物等の現在値 | 各台帳recordの`current`、集約は`current_state` |
-
-`current_state`はrecord currentを複写しない。`story_clock`、実行位置、active scene context、有効ID索引だけを持つ。
-
-## 共通record
-
-```json
-{"id":"char-0001","type":"character","scope":"series","status":"active","fixed":{},"current":{},"created_scene_id":null}
-```
-
-`id`はコード生成・永続・再利用禁止、`type`は定義済みenumで不変、scopeは`scene|chapter|volume|series`、共通statusは`active|inactive|resolved|retired`。fixedは本文差分更新不可、currentは許可fieldのみ更新可。初期recordの`created_scene_id`はnull、局所recordは作成場面ID。全台帳へ同一形を強制せず、clock/indexは例外。
-
-## 台帳
-
-| 台帳 | 最小項目・不変 | 更新可能current / 規則 |
-|---|---|---|
-| characters | id,name,aliases,role,scope,status; fixed=`core_trait,values,background,immutable_facts,appearance_anchor,speech_anchor` | `location_id,physical_condition,emotional_state,current_goal,current_pressure,active_relationship_summary`。name/fixed不変、locationは既知ID。anchorは一貫性のためfixed。 |
-| relationships | id,異なる既知`participant_ids`,relationship_type; fixed=`origin,structural_role` | `a_to_b`,`b_to_a`ごとにtrust/perception/emotional_stance/current_intention、shared_state。trustは`none|low|guarded|moderate|high`。自由一文字列のみで全体管理しない。 |
-| world_entities | id,kind=`location|organization|item|system|culture|history`,name; fixed=`description,immutable_rules,sensory_anchors` | location=`availability,controller_id,condition`; item=`owner_id,location_id,condition`; organization=`controller_id,status`。kind外field禁止。 |
-| temporal_rules | id,kind=`deadline|travel_duration|recovery_rule|cycle|progression_rule|age_rule`,description,scope,fixed_rule,related_ids | ルール本体不変。残時間はclock/state。 |
-| story_clock | `current_order`必須、current_label,current_datetime,calendar_system,last_scene_id | 採用時だけ`after_order>=before_order`。同時刻は同orderとscene順序。checkpointは更新不可。 |
-| threads | id,thread_type=`major|supporting`,scope,required,description,author_truth,resolution_condition,presentation_rule | thread固有status=`open|in_progress|resolved|retired`、progress=`0|1|2|3|4`、reader_knowledge_status,active_pressure,volume_disposition。majorは初期設計/計画改訂のみ、supportingはevidence付き追加可。progress減少・resolved再open禁止。 |
-| ending_criteria | id,description,required,evidence_scope,source_ending_text,status | 初期設計採用後にID採番、本文差分で追加/変更/削除不可。supports evidence 1件以上がrequired達成。 |
-| knowledge_state | fact_id,audience_type,audience_id,status,source_scene_id,evidence | 人物=`unknown|suspects|misunderstands|partially_knows|knows`、reader=`withheld|hinted|partially_revealed|revealed`。author_truthは保持しない。 |
-| local_canon | 共通record、type=`character|location|organization|item|supporting_thread|local_fact` | major thread/ending/theme/author truth/fixed world ruleは不可。 |
-
-## lifecycleと巻境界
-
-local/thread recordのstatusは`active|inactive|resolved|retired`（thread固有statusは上表）。`volume_disposition`は別enumの`resolve|carry_over|retire`。resolve→resolved、retire→retired、carry_over→active・scope=series・次巻handoffへ追加。**carry_overはstatusではない**。
-
-## Evidence index
-
-thread、ending criterion、knowledge、state updateを索引化する。必須は`evidence_type,target_id,scene_id,quote,relation`、任意だが推奨は`start_offset,end_offset,quote_sha256`。同一`target_id,scene_id,quote,relation`は重複排除。quoteは本文完全一致。relationは`supports|contradicts`で、required criterionはsupportsだけで達成する。
-
-## 更新規則
-
-自由JSON Patchは禁止。`set|append|remove|transition`だけを許し、target type/fieldごとの許可operation表をSchemaで固定する。existing updateは`before`が現在正本と一致しevidenceが凍結本文一致でなければ棄却。new itemは`new_item_policy.allowed_types`と`max_items`以内で、max_itemsは場面カードの0以上整数、profile上限以下、既定2。コードが重複検出・永続ID採番する。
-
-## Schema作成一覧
-
-| Schema | 種別 | LLM / コード | 正本 |
+| 層 | 正本とする情報 | 保存先 | 禁止する重複 |
 |---|---|---|---|
-| initial_design_bundle | 保存 | 候補 / ID・参照変換 | bundle |
-| continuity_delta | 出力 | updates/proposals / 検証・merge | 各台帳 |
-| scene_card | 出力 | policy / scene ID | checkpoint |
-| completion_audit | 保存 | issue / attempt | audit |
+| initial_design_bundle | 固定事実、作者真実、ending criteria、長期arc、初期主要record | `canon/initial-design.json` | 現在感情・進捗 |
+| current_canon | recordの固定部分、scope、record_lifecycle、参照関係、採用済み局所Canon | `canon/current-canon.json` | current値、reader知識 |
+| story_state | 人物・関係・threadの現在値、knowledge、clock、所有・同行 | `canon/story-state.json` | fixed/作者真実 |
+| runtime_state | 工程、対象、checkpoint、counter、停止理由、再開位置、call_id | `runtime/run-state.json`と`runtime/counters.json` | 物語Canon/State |
+
+人物の感情・関係の現在状態・thread進捗は**story_stateだけ**が正本である。`current_canon`のrecordに`current`を持たせない。
+
+## 共通フィールド
+
+| field | 型 | 必須 | 作成者 | 可変性 / operation | evidence | 目安 | 正本 |
+|---|---|---:|---|---|---|---|---|
+| `id` | string | はい | コード | 不変 | 不要 | prefix+連番 | 各台帳 |
+| `type` | enum | はい | LLM候補→コード検証 | 不変 | 不要 | 定義enum | current_canon |
+| `scope` | enum | はい | LLM候補→コード | `transition`のみ | 局所変更は必須 | scene/chapter/volume/series | current_canon |
+| `record_lifecycle` | enum | はい | コード | `transition`のみ | 局所変更は必須 | active/inactive/retired | current_canon |
+| `created_scene_id` | string/null | はい | コード | 不変 | 局所recordは必須 | scene ID | current_canon |
+| `fixed` | object | はい | LLM候補→採用 | 初期revisionのみ | 不要 | type別 | initial/current canon |
+| `references` | array<string> | 任意 | LLM候補→コード検証 | `append/remove` | 変更時必須 | 0〜50 | current_canon |
+
+`resolved`はrecord_lifecycleではない。threadの完了は`story_state.thread_states[].thread_status`で表す。巻境界の処理は`volume_disposition: resolve|carry_over|retire`であり、carry_overは状態値ではない。
+
+## current_canonのrecord契約
+
+### characters
+
+| field | 型 | 必須 | 作成者 | 可変性 | evidence | 目安 | 正本 |
+|---|---|---:|---|---|---|---|---|
+| `id,name,aliases,role` | string/array | はい | LLM候補→コード | 不変 | 不要 | aliases 0〜10 | canon |
+| `fixed.core_trait,values,background,immutable_facts,appearance_anchor,speech_anchor` | string/array | はい | LLM候補 | 初期revisionのみ | 不要 | 各1〜500字 | initial/canon |
+| `scope,record_lifecycle,references` | 共通 | はい | コード | 共通規則 | 変更時必須 | - | canon |
+
+### relationships
+
+| field | 型 | 必須 | 作成者 | 可変性 | evidence | 正本 |
+|---|---|---:|---|---|---|---|
+| `id,relationship_type` | string/enum | はい | LLM候補→コード | 不変 | 不要 | canon |
+| `participant_a_id,participant_b_id` | string | はい | LLM候補→コード | 不変 | 不要 | canon |
+| `fixed.origin,structural_role` | string | はい | LLM候補 | 初期revisionのみ | 不要 | initial/canon |
+
+方向値はstory_stateの`relationship_states[id].directions`に保存し、`a_to_b`は必ず`participant_a_id`から`participant_b_id`への状態、`b_to_a`は逆方向を指す。
+
+### world entities / temporal rules
+
+| 台帳 | field | 型 | 必須 | 作成者 | 可変性 | evidence |
+|---|---|---|---:|---|---|---|
+| world_entities | `kind,name,fixed.description,immutable_rules,sensory_anchors` | enum/string/object | はい | LLM候補→コード | fixedは初期revisionのみ | 不要 |
+| temporal_rules | `kind,description,scope,fixed_rule,related_ids` | enum/string/array | はい | LLM候補→コード | rule本体不変 | 不要 |
+
+world entityの可変値（所有者、場所、状態）はstory_stateの`entity_states`に置く。organizationの状態enumは`active|suspended|dissolved`でありrecord_lifecycleと混同しない。
+
+### threads / ending criteria / knowledge items
+
+| 台帳 | field | 型 | 必須 | 作成者 | 可変性 | evidence | 正本 |
+|---|---|---|---:|---|---|---|---|
+| threads | `thread_type,required,description,author_truth,resolution_condition,presentation_rule` | enum/bool/string | はい | LLM候補→コード | 初期revisionまたは明示replan | 不要 | initial/canon |
+| ending_criteria | `description,required,evidence_scope,source_ending_text` | string/bool | はい | LLM候補→コード | 不変 | 不要 | initial/canon |
+| knowledge_items | `subject_type,subject_id,description,author_truth,scope,created_scene_id` | enum/string | はい | LLM候補→コード | 本文evidence付き局所追加可 | 追加時必須 | canon |
+
+`knowledge_state.fact_id`は既知のknowledge item IDだけを参照する。`author_truth`はwriter viewへ渡さない。threadに`reader_knowledge_status`は置かない。ending criterion本体にstatusは置かず、supports/contradicts件数と監査assessmentは派生情報である。
+
+## story_stateフィールド契約
+
+| collection.field | 型 | 必須 | 作成者 | 可変性 / operation | evidence | 正本 |
+|---|---|---:|---|---|---|---|
+| `character_states[id].location_id` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
+| `.physical_condition,.emotional_state,.current_goal,.current_pressure` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
+| `relationship_states[id].directions.a_to_b/b_to_a` | object | はい | 初期bundle→コード | set | 必須 | story_state |
+| `.trust,.perception,.emotional_stance,.current_intention` | enum/string | 任意 | LLM候補→コード | set | 必須 | story_state |
+| `entity_states[id].owner_id,location_id,condition,organization_state` | string/enum | 任意 | LLM候補→コード | set | 必須 | story_state |
+| `thread_states[id].thread_status` | enum | はい | 初期bundle→コード | transition | 必須 | story_state |
+| `.progress,.active_pressure` | integer/string | はい/任意 | LLM候補→コード | set | 必須 | story_state |
+| `knowledge_state[fact_id,audience].knowledge_status` | enum | はい | LLM候補→コード | transition | 必須 | story_state |
+| `story_clock.current_order` | integer | はい | コード | set | 必須 | story_state |
+| `.time_label,.parallel_group_id,last_scene_id` | string/null | 任意 | LLM候補/コード | set | clock update時必須 | story_state |
+
+thread statusは`open|in_progress|resolved|retired`、進捗は0〜4で非減少。clockは毎場面採用で必ず`after_order = before_order + 1`。同時刻は`time_label`または`parallel_group_id`で表し、orderは一意に増える。
+
+## continuity delta
+
+| field | 型 | 必須 | 作成者 | 可変性 | evidence | 上限 | 正本 |
+|---|---|---:|---|---|---|---:|---|
+| `existing_item_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜50 | story_state |
+| `new_item_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | policy以下 | current_canon |
+| `knowledge_item_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | policy以下 | knowledge_items |
+| `knowledge_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜50 | story_state |
+| `thread_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜20 | story_state |
+| `ending_evidence_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜20 | evidence index |
+| `story_clock_update` | object | はい | LLM候補→コード | revision可 | 必須 | 1 | story_state |
+| `handoff_summary` | string | はい | LLM候補 | revision可 | 本文成立事実 | 50〜300字 | artifact |
+
+updateは`operation,target_type,target_id,field,before,after,scene_id,evidence`。許可operationは`set|append|remove|transition`のみ。`before`は採用前stateと一致、`after`は採用後stateと一致、evidenceは凍結本文の完全一致でなければ棄却する。knowledge item proposalは`local_key,subject_type,subject_id,description,author_truth,scope,scene_id,evidence`を必須とし、LLMは永続IDを作らない。
+
+## evidence index
+
+`evidence_type,target_id,scene_id,quote,relation`を必須、`start_offset,end_offset,quote_sha256`を推奨とする。relationは`supports|contradicts`。同一`target_id,scene_id,quote,relation`はappendしない。required criterionは検証済み`supports`が1件以上必要であり、contradictsだけでは達成しない。両方あれば両方をcompletion auditへ渡す。

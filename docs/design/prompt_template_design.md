@@ -4,6 +4,8 @@
 
 ## 基本方針
 
+工程項目は[pipeline contracts](pipeline_contracts.md)、台帳投影は[ledger contracts](ledger_contracts.md)、workspace保存は[workspace layout](workspace_layout.md)を正本とする。
+
 stage名と製品フェーズは同義ではない。LLMは候補とissueを返し、コードが構造・ID・evidence・採用を決める。修正templateは対象全体、全issue、変更範囲を一回で受け、成果物全体を返す。LLMは永続IDを決めない。
 
 ## stage責務

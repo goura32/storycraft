@@ -28,13 +28,14 @@ flowchart TD
   MC -->|No| VH[巻handoff]
   VH --> MV{未処理巻?}
   MV -->|Yes| VD
-  MV -->|No| CP[完結前提条件の機械検証]
-  CP --> CA[completion audit attempt]
+  MV -->|No| CP[COMP-PRE: 監査前Gate]
+  CP --> CA[COMP-AUDIT: completion audit attempt]
   CA --> CJ{監査JSON正常?}
   CJ -->|正常| SAVE[最後の正常監査を保存]
   CJ -->|不正・attempt残あり| CA
   CJ -->|不正・attempt枯渇| STOP[機械的エラーとして停止]
-  SAVE --> OUT[機械的完成条件を満たせば出力]
+  SAVE --> PG[COMP-PUBLISH: staging検証]
+  PG --> OUT[原子的に公開]
 ```
 
 ## 呼び出し責務

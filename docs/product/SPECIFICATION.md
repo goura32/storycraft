@@ -102,15 +102,12 @@ LLMは永続IDを生成しない。レビュー・修正中の追加・削除・
 
 場面カード、凍結本文、差分は内部checkpointである。コード検証・新規ID採番・Canon/State/knowledge/thread/clock/evidence index更新・handoffがそろった場面成果物だけを一回の原子的保存で採用する。
 
-## 8. 完結監査と出力
+## 8. 完結Gate・workspace・出力
 
-完結監査はrevision loop外の独立工程である。
+完結は三段階で判定する。詳細項目は[pipeline contracts](../design/pipeline_contracts.md)、workspace・公開物は[workspace layout](../design/workspace_layout.md)を正本とする。
 
-1. コードが計画、空本文、required major thread、ending evidence index、ID・artifactを検証する。
-2. LLMが意味監査する。
-3. 監査JSONを機械的検証する。
-4. 監査JSON不正かつattemptが残る場合だけ、同じ入力で`max_completion_audit_attempts`まで再監査する。
-5. 正常な監査JSONが1件以上あれば最後の正常結果を保存する。1件もなければattempt枯渇時に機械的エラーとして停止する。
-6. issueが残っても機械的完成条件を満たせば出力する。
+1. **COMP-PRE（監査前Gate）**: コードが予定巻・章・必要場面、非空本文、artifact欠落/重複/hash、required major thread、各required criterionの検証済み`supports` evidence 1件以上、全ID、current canon/story state/artifact/evidence indexを検証する。監査結果は要求しない。
+2. **COMP-AUDIT（意味監査）**: COMP-PRE成功後だけLLMが監査する。監査JSONが構造正常なら最後の正常結果として保存する。意味issueは保存し、機械的完成条件を満たせば続行できる。構造不正でattempt残ありなら同一入力で再監査し、正常結果が一件もなく枯渇すれば停止する。
+3. **COMP-PUBLISH（公開前Gate）**: COMP-PRE成功、構造正常audit 1件以上、staging出力検証成功を要求する。
 
-監査issueで監査JSONを修正しない。監査工程自身は本文・Canonを変更しない。出力は一時領域で検証後、原子的に公開する。
+監査issueで監査JSONを修正しない。監査工程自身は本文・Canonを変更しない。`contradicts`だけではcriterionを満たさない。supportsとcontradictsの両方は監査へ渡す。出力は一時領域で検証後、原子的に公開する。
