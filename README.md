@@ -1,1316 +1,640 @@
 # Storycraft
 
-**一度のBriefまたはKeywordsから、日本語の長編シリーズを計画・執筆・継続性管理・完結監査し、検証済みPublicationとしてローカルに採用するCLI。**
+Storycraftは、BriefまたはKeywordsから、日本語の長編シリーズを段階的に設計・執筆・確認し、読者向け原稿へまとめるローカル実行型の制作支援ツールです。
 
-> **Repository status:** package metadataはversion-1開発用の`1.0.0.dev0`です。
-> 評価元の`0.1.0` source snapshotには動作するlegacy prototypeがありますが、50 Stage、Generation／`canon/HEAD`、Candidate／Checkpoint、Completion、Publication Gate／`output/CURRENT`を含むproduction codeはまだ受入済みではありません。
-> 現在の正確な到達状況は[実装状況](docs/product/IMPLEMENTATION_STATUS.md)を参照してください。
+Version 1は、単一利用者・単一writer・ローカルfilesystemを前提とします。
 
 ---
 
-## 1. Storycraftが目指すもの
+## 1. できること
 
-長編シリーズ生成では、Scene本文を一つずつ作るだけでは不十分です。
-
-Storycraft version-1は、次を一つの検証可能なworkspaceで扱います。
+Storycraftは、次の制作工程を一つのworkflowとして扱います。
 
 ```text
 BriefまたはKeywords
-→ Initial design
-→ Series／Volume／Chapter plan
-→ Scene Card
-→ 日本語本文
-→ Continuity／Evidence
-→ Scene Commit
-→ Volume Handoff
-→ Completion audit
-→ Publication Validation／Gate
-→ Publication adoption
+↓
+Initial Design
+↓
+Series Plan
+↓
+Volume Plan
+↓
+Chapter Plan
+↓
+Scene Plan
+↓
+Scene Card
+↓
+Scene本文
+↓
+継続性更新
+↓
+Volume Handoff
+↓
+Completion
+↓
+Publication
 ```
 
-利用者が得るもの:
+主な特徴:
+
+- 4〜10巻の日本語長編シリーズ
+- BriefまたはKeywordsから開始
+- Series／Volume／Chapter／Scene単位の計画
+- Sceneごとの本文生成
+- ReviewとRevision
+- 本文根拠に基づく継続性更新
+- Crash後の再開
+- 完結判定
+- 読者向けPublicationの決定的な組立
+- ローカルworkspaceでの保存
+- Providerごとのmodel設定
+- Call数、token、費用、時間のBudget制御
+
+---
+
+## 2. 対象
+
+Storycraft Version 1は、次の利用を想定しています。
 
 ```text
-4〜10巻のシリーズ構成
-巻内で局所的に解決する物語
-章・Scene単位の計画
-POVと秘密開示を守る本文
-本文根拠付きの状態更新
-巻をまたぐHandoff
-Required Thread／Endingの完結監査
-全巻・巻別Markdown
-検証済みmetadataとCompletion report
-Crash後に再開可能なworkspace
+個人で長編シリーズを作りたい
+巻をまたぐ人物・関係・謎を追跡したい
+Sceneごとに生成結果を確認したい
+途中停止後に安全に再開したい
+内部資料と読者向け原稿を分離したい
 ```
 
 ---
 
-## 2. 現在の状態
+## 3. Version 1の範囲
 
-| 対象 | 状態 |
-|---|---|
-| version-1製品・設計契約 | 実装前baselineとして確定 |
-| package metadata | `1.0.0.dev0`（version-1 development pre-release） |
-| 評価元`0.1.0` CLI | legacy prototypeとして動作 |
-| 現行fake-model回帰試験 | 合格実績あり |
-| version-1 50 Stage engine | 未受入 |
-| version-1 Ledger／Generation／HEAD | 未実装 |
-| Candidate／Checkpoint／Transaction | 未実装 |
-| Completion／Publication Gate／CURRENT | 未実装 |
-| version-1 Acceptance ID | 合格証拠0件 |
-| Release candidate | **いいえ** |
-| Production ready | **いいえ** |
-
-詳細:
-
-- [製品仕様](docs/product/SPECIFICATION.md)
-- [要件](docs/product/REQUIREMENTS.md)
-- [実装状況](docs/product/IMPLEMENTATION_STATUS.md)
-- [実装受入基準](docs/design/implementation_acceptance.md)
-
----
-
-## 3. 文書の読み方
-
-### 製品
-
-| 文書 | 役割 |
-|---|---|
-| [要件](docs/product/REQUIREMENTS.md) | 136件のstable Requirement ID |
-| [製品仕様](docs/product/SPECIFICATION.md) | 利用者へ保証する振る舞い |
-| [実装状況](docs/product/IMPLEMENTATION_STATUS.md) | 現行コードとversion-1契約の差分 |
-
-### 統合設計
-
-| 文書 | 役割 |
-|---|---|
-| [Engine design](docs/design/series_engine_design.md) | package、engine、storage、provider、recovery構造 |
-| [Engine flow](docs/design/series_engine_flow.md) | 50 StageとCrash境界のMermaid図 |
-| [Pipeline contracts](docs/design/pipeline_contracts.md) | 全Stage、processor、transition、resume source |
-| [Ledger contracts](docs/design/ledger_contracts.md) | Canon、State、Evidence、Runtimeの統合 |
-| [Workspace layout](docs/design/workspace_layout.md) | pathとartifact authority |
-| [Runtime and recovery](docs/design/runtime_and_recovery.md) | startup、resume、quarantine、manual intervention |
-| [Configuration contracts](docs/design/configuration_contracts.md) | provider、retry、budget、profile |
-| [Context contracts](docs/design/context_contracts.md) | Context view、秘密除外、token budget |
-| [Prompt design](docs/design/prompt_template_design.md) | 30 LLM Stage、14 Schema、package assets |
-| [Implementation acceptance](docs/design/implementation_acceptance.md) | stable `ACC-*` test scenarios |
-
-### Field-level contracts
+### 対応
 
 ```text
-docs/design/contracts/data/
-docs/design/contracts/ledger/
-docs/design/contracts/pipeline/
+日本語
+4〜10巻
+単一workspace
+単一writer
+ローカルfilesystem
+外部LLM Provider
+Brief入力
+Keywords入力
+run
+resume
+step
+Markdown Publication
 ```
 
-### Canonical examples
-
-- [Initial and planning fixture](docs/design/examples/initial_and_planning_fixture.md)
-- [Scene commit fixture](docs/design/examples/scene_commit_fixture.md)
-- [Completion and publication fixture](docs/design/examples/completion_publication_fixture.md)
-- [Data-contract example catalog](docs/design/data_contract_examples.md)
-
-FixturesはSchemaの代替ではなく、複数契約が同時に成立する証拠です。
-
----
-
-# Legacy `0.1.0` source snapshot
-
-## 4. Legacy prototypeでできること
-
-評価元の`0.1.0`コードは、一つの`state.json`を使うlegacy workflowとして次を実行します。
+### 対象外
 
 ```text
-BriefまたはKeywords
-→ Characters
-→ Relationships
-→ World
-→ Timeline
-→ Threads
-→ Volume map
-→ Volume chapters
-→ Scene Card
-→ JSON-wrapped Scene prose
-→ Continuity state updates
-→ Volume summary
-→ Closure
-→ Markdown output
-```
-
-公開surface:
-
-```text
-storycraft run
-storycraft resume
-storycraft step
-```
-
-これはversion-1のCanonical 50 Stage workflowとは異なります。
-
----
-
-## 5. 必要環境
-
-Target package metadata:
-
-```text
-Python >= 3.11
-Jinja2 >= 3.1,<4
-jsonschema >= 4.23,<5
-OpenAI Python client >= 1.50,<3
-PyYAML >= 6,<7
-Hatchling build backend >= 1.25,<2
-OpenAI-compatible endpoint
-```
-
-Package metadataの正本は[`pyproject.toml`](pyproject.toml)です。
-
-`1.0.0.dev0`はpre-release markerです。全Required Acceptance Gate通過前にstable `1.0.0`へ変更してはなりません。
-
-Target wheelは`src/storycraft/templates/prompts/`だけをprompt／Schema package-data rootとして含めます。旧repository-root `templates/prompts/`へのfallbackはありません。
-
----
-
-## 6. 開発install
-
-`venv`と`pip`の例:
-
-```bash
-python3.11 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-storycraft --help
-```
-
-`uv`を使う例:
-
-```bash
-uv venv --python 3.11 .venv
-uv pip install -e .
-.venv/bin/storycraft --help
-```
-
-Source treeを直接使う場合:
-
-```bash
-PYTHONPATH=src python -m storycraft.cli --help
+複数writerの同時編集
+分散実行
+remote workspace
+共同編集
+自動Web検索
+別会話memoryの自動取得
+Gitを正本にする運用
+Publication時の本文再生成
 ```
 
 ---
 
-## 7. 現行provider設定
+## 4. 入力
 
-現行prototypeはOpenAI-compatible endpointを想定します。
+新規作品は、次のどちらか一方から開始します。
 
-環境変数:
+### Brief
 
-```bash
-export STORYCRAFT_LLM_BASE_URL='http://localhost:11434/v1'
-export STORYCRAFT_LLM_MODEL='your-model-name'
-```
+作品の主要条件をまとめた入力です。
 
-任意:
-
-```bash
-export STORYCRAFT_LLM_FIRST_TIMEOUT='3600'
-export STORYCRAFT_LLM_IDLE_TIMEOUT='600'
-```
-
-現行prototypeのcredential、timeout cancellation、usage accountingはversion-1契約を満たしていません。外部providerを本番運用する前に[実装状況](docs/product/IMPLEMENTATION_STATUS.md)を確認してください。
-
----
-
-## 8. 現行config YAML
-
-```yaml
-llm:
-  base_url: http://localhost:11434/v1
-  model: your-model-name
-  thinking: true
-  stream: true
-  first_event_timeout_seconds: 3600
-  idle_timeout_seconds: 600
-  stream_progress_log_interval_seconds: 60
-
-retry:
-  max_attempts: 4
-
-quality:
-  max_critique_passes: 1
-  improvement_directions:
-    - 地の文を削り、くどさを排除する
-    - 対話を自然にする
-  content_length_target_chars: 2200
-  content_length_tolerance_chars: 400
-
-output:
-  dir: ./storycraft-out
-
-diversity:
-  archive_dir: ~/.storycraft/archive
-  recent_window: 5
-```
-
-実行:
-
-```bash
-storycraft run \
-  --out ./my-series \
-  --config ./storycraft.yaml \
-  --brief ./brief.json
-```
-
-このYAMLは現行prototype用です。version-1のEffective config、operation map、budget、publishing／audit profileとは異なります。
-
----
-
-## 9. 現行Brief形式
-
-評価元のlegacy `0.1.0` validatorが受理する例:
+例:
 
 ```json
 {
-  "title": "霧の島の灯",
-  "genre": "海洋幻想譚",
-  "protagonist": {
-    "name": "澪",
-    "present_position": "島の灯台守の娘",
-    "core_trait": "好奇心が強く粘り強い",
-    "current_pressure": "父の不在で灯台を守っている",
-    "initial_wish": "父の消息を知りたい"
-  },
-  "key_people": [
-    {
-      "name": "父",
-      "present_position": "島の灯台守",
-      "initial_relation_to_protagonist": "澪の父"
-    },
-    {
-      "name": "凪",
-      "present_position": "島へ来た航海士",
-      "initial_relation_to_protagonist": "協力者候補"
-    }
+  "title": "潮騒の記憶",
+  "genre": [
+    "ミステリ",
+    "ヒューマンドラマ"
   ],
-  "want": "父の失踪と灯台の秘密を解く",
-  "avoid": "救いのない結末",
-  "ending": "澪が父の真実を受け入れ、自ら島に残ることを選ぶ",
-  "volumes": 4,
-  "chapters_per_volume": [3, 3, 3, 3]
+  "premise": "記憶の一部を失った主人公が、海辺の町で姉と灯台火災の真相を追う。",
+  "required_elements": [
+    "海辺の町",
+    "失われた記憶",
+    "姉妹",
+    "灯台"
+  ],
+  "avoid": [
+    "露悪的な残虐描写"
+  ],
+  "ending_preference": "救いのある結末",
+  "volume_count": 4,
+  "language": "ja"
 }
 ```
 
-注意:
-
-- Rootの[`example_brief.json`](example_brief.json)は、version-1 Brief modeへ渡す**Brief content candidate**のcanonical exampleです。
-- `brief_version`、profile ID、source hash、timestampは含みません。INPUT-01がadopted `input/brief.json`へ追加します。
-- 評価元のlegacy `0.1.0` validatorは`avoid`をstringとして扱い、`chapters_per_volume`も使用するため、このversion-1 exampleをそのまま受理しません。legacy prototypeには上記legacy exampleを使用してください。
-- Normative Brief定義は[Brief and initial contract](docs/design/contracts/data/brief_and_initial.md)です。
+厳密なfieldとSchemaはproduction assetで定義します。
 
 ---
 
-## 10. Briefから開始
+### Keywords
+
+短い条件からBriefを生成する入力です。
+
+例:
+
+```json
+{
+  "keywords": [
+    "海辺の町",
+    "失われた記憶",
+    "姉妹",
+    "静かな恐怖",
+    "灯台"
+  ],
+  "avoid": [
+    "露悪的な残虐描写"
+  ],
+  "ending_preference": "救いのある結末",
+  "volume_hint": 4,
+  "language": "ja"
+}
+```
+
+Keywordsから生成したBriefは、必須Keyword、avoid、Ending希望、巻数希望を保持します。
+
+---
+
+## 5. 基本command
+
+Storycraftの公開CLIは、次の三つを中心とします。
+
+```text
+run
+resume
+step
+```
+
+### `run`
+
+新しいworkspaceで作品制作を開始します。
+
+既存workspaceを確認なしで上書きしません。
+
+---
+
+### `resume`
+
+途中停止したworkspaceを再開します。
+
+元のBriefまたはKeywordsを再入力する必要はありません。
+
+---
+
+### `step`
+
+現在の意味的Stageを一つだけ完了して終了します。
+
+Reviewと必要なRevisionは、同じStage内で処理します。
+
+---
+
+## 6. CLIの確認
+
+実際に利用可能なoptionは、installed packageのhelpで確認します。
 
 ```bash
-storycraft run \
-  --out ./my-series \
-  --brief ./brief.json
+storycraft --help
+storycraft run --help
+storycraft resume --help
+storycraft step --help
 ```
 
-JSONまたはYAML objectを指定できます。
+Package名、entry point、install commandは、repositoryのpackage metadataと実装状況を確認して更新してください。
 
-既に保存済みのworkspaceへ`run`すると上書きせず失敗します。
+現在の確認状況は次を参照します。
+
+[`docs/product/IMPLEMENTATION_STATUS.md`](docs/product/IMPLEMENTATION_STATUS.md)
 
 ---
 
-## 11. Keywordsから開始
+## 7. 制作flow
 
-```bash
-storycraft run \
-  --out ./my-series \
-  --keywords '霧の島' \
-  --keywords '灯台守の娘' \
-  --keywords '海洋幻想譚' \
-  --keywords '4巻'
-```
+### Initial Design
 
-現行prototypeはKeywordsからlegacy Briefを生成します。
-
-version-1では、Keyword sourceとBriefを別のimmutable adopted artifactとして扱う予定です。
-
----
-
-## 12. Resume
-
-```bash
-storycraft resume \
-  --out ./my-series
-```
-
-現行prototypeは`state.json`を読み、未完了fieldから処理を続けます。
-
-これはversion-1のpointer、Candidate、Checkpoint、transactionを検証するrecoveryではありません。
-
----
-
-## 13. Step
-
-新規workspaceの最初のStep:
-
-```bash
-storycraft step \
-  --out ./my-series \
-  --brief ./brief.json
-```
-
-既存workspace:
-
-```bash
-storycraft step \
-  --out ./my-series
-```
-
-現行prototypeでは、一つのlegacy semantic工程を進めます。
-
-Scene工程はScene Card、本文、continuity、State mutationを一つの`_run_one`内で処理するため、version-1の「一つのCanonical Stage」とは一致しません。
-
----
-
-## 14. 現行workspace
-
-代表的な現行layout:
+作品全体の作者用設計を作ります。
 
 ```text
-my-series/
-  state.json
-  storycraft.log
-
-  raw/
-    <sequential request/response logs>
-
-  output/
-    series.md
-    volume-01.md
-    volume-02.md
-    ...
-    quality-acceptances.json
+Concept
+Characters
+Relationships
+World
+Locations
+World Rules
+Knowledge
+Threads
+Ending
+Long-term Arcs
 ```
 
-現行`state.json`:
-
-```text
-version = 5
-```
-
-Story truth、execution state、attempts、Closureが一つのmutable objectへ混在します。
-
-version-1はこのlayoutをauthorityとして使用しません。
+個別Candidateをそのまま並べるのではなく、相互矛盾を解消した統合版を採用します。
 
 ---
 
-## 15. 現行出力
+### Plan
 
-現行prototypeは最終時に直接`output/`を作ります。
+将来の執筆方針を段階的に作ります。
 
 ```text
-output/
-  series.md
-  volume-01.md
-  volume-02.md
-  ...
-  quality-acceptances.json
+Series Plan
+Volume Plan
+Chapter Plan
+Scene Plan
 ```
 
-現行には次がありません。
+Planは予定であり、本文に書かれた事実ではありません。
+
+---
+
+### Scene Card
+
+一つのSceneについて、本文生成に必要な条件を定めます。
 
 ```text
-Publication ID
-Publication Validation
-Publication manifest
-Publication Gate
-output/CURRENT
+POV
+参加人物
+場所
+目的
+開始状況
+必須beat
+Conflict
+開示制約
+許可する継続性更新
+終了時の変化
 ```
 
 ---
 
-## 16. 現行prototypeの制約
+### Scene本文
 
-現行コードを次の用途へ使わないでください。
+Scene Cardと現在のStory状態に基づき、日本語散文を生成します。
 
-```text
-version-1 crash-safety検証
-strict structured-output保証
-credential安全性保証
-private/public projection保証
-Evidence offset／hash保証
-Generation／HEAD保証
-Publication Gate保証
-production release判定
-```
-
-主なlegacy構造:
+本文には次を含めません。
 
 ```text
-13 semantic stage names
-one mutable state.json
-critique／closure terminology
-JSON-wrapped prose
-source-tree prompt fallback
-json_object response mode
-direct State mutation
-direct final output replacement
+JSON
+内部識別子
+Review結果
+Prompt
+Provider情報
+実装用metadata
 ```
 
 ---
 
-# Version-1 target
+### ReviewとRevision
 
-## 17. 50 Stage
+ReviewはCandidateの問題点を返します。
 
-Canonical Stage family:
+Review自身がCandidateを書き換えることはありません。
 
-| family | count |
-|---|---:|
-| Input | 3 |
-| Initial design | 8 |
-| Planning | 12 |
-| Scene generation | 12 |
-| Scene commit | 4 |
-| Volume Handoff | 4 |
-| Completion | 3 |
-| Publication | 4 |
-| **total** | **50** |
-
-完全なregistryは[Pipeline contracts](docs/design/pipeline_contracts.md)を参照してください。
+Revisionは、修正差分ではなく完全な置換Candidateを返します。
 
 ---
 
-## 18. Canonical lifecycle
+### 継続性
+
+継続性更新は、確定対象の本文に実際に書かれた変化だけを反映します。
+
+更新例:
 
 ```text
-INPUT-01
-→ INPUT-02／03 when Keywords
-→ INIT-01..06／REV／ID
-→ SERIES-01..ID
-→ VOL-01..ID
-→ CH-01..ID
-→ SC-01..CHK
-→ PROSE-01..CHK
-→ DELTA-01..CHK
-→ COMMIT-01..04
-→ next Scene／Chapter／VH
-→ VH-01..ID
-→ next Volume／COMP-PRE
-→ COMP-AUDIT
-→ COMP-SAVE
-→ OUT-01
-→ OUT-02
-→ COMP-PUBLISH
-→ OUT-03
-→ completed
+人物の現在位置
+人物が知った事実
+Relationshipの変化
+Threadの進行
+所有物
+負傷
+時間経過
+Location状態
 ```
 
-未登録transitionは拒否します。
+各更新は、本文中のEvidenceと関連付けます。
+
+Planに書かれているだけの変更は採用しません。
 
 ---
 
-## 19. Story adoption
+### Volume Handoff
 
-現在の採用済みStory snapshot:
-
-```text
-canon/HEAD
-```
-
-HEADが選ぶimmutable Generation:
+各巻の終了時に、実際の巻末状態を次巻へ引き渡します。
 
 ```text
-current-canon.json
-knowledge-items.json
-story-state.json
-evidence-index.json
-commit-manifest.json
-generation-manifest.json
-```
-
-Generation directoryが存在するだけではadoptedではありません。
-
-HEADの通常mutation owner:
-
-```text
-INIT-ID
-COMMIT-04
-VH-ID
+主要人物の状態
+Relationshipの状態
+解決済みThread
+未解決Thread
+新しい制約
+Endingへの進捗
+次巻で無視できない結果
 ```
 
 ---
 
-## 20. Canon、State、Evidence
+### Completion
 
-### Canon
-
-固定identityと不変事実:
-
-```text
-Character
-Relationship
-World entity
-Temporal rule
-Thread
-Ending criterion
-Knowledge item
-```
-
-### Story State
-
-現在変化する値:
-
-```text
-Character State
-directional Relationship State
-Thread status／progress／volume disposition
-Character／Reader Knowledge
-Story clock
-```
-
-### Evidence
-
-Scene本文で裏付けられた更新:
-
-```text
-literal unique quote
-Unicode code-point offsets
-quote hash
-prose hash
-Scene／Commit identity
-```
-
----
-
-## 21. CandidateとReview
-
-候補はversioned immutable historyとして保存します。
-
-```text
-runtime/candidates/.../v0001/
-runtime/candidates/.../v0002/
-```
-
-各version:
-
-```text
-candidate artifact
-review.json
-candidate-manifest.json
-```
-
-Active candidateはRun Stateが指すManifestだけです。
-
-次から選択しません。
-
-```text
-最大version
-最新mtime
-raw provider audit
-directory scan
-```
-
----
-
-## 22. ReviewとRevision
-
-Review response:
-
-```text
-summary
-issues
-```
-
-Revision:
-
-```text
-元candidate contractの完全置換
-```
-
-禁止:
-
-```text
-patch
-diff
-修正箇所だけ
-Reviewがnext Stageを決める
-mechanical errorをresidual issueにする
-```
-
----
-
-## 23. Scene lifecycle
-
-```text
-SC-CHK
-  → CARD_ACCEPTED
-
-PROSE-CHK
-  → PROSE_FROZEN
-
-DELTA-CHK
-  → DELTA_ACCEPTED
-
-COMMIT-03
-  → COMMIT_PREPARED
-
-COMMIT-04
-  → Scene／Generation adoption
-```
-
-一つのScene lifecycleは同じsource Generationを使います。
-
-HEADが変わったstale Scene chainをrebaseしません。
-
----
-
-## 24. Writer-safe本文
-
-Writer Contextは次を含みません。
-
-```text
-Thread author truth
-Thread resolution condition
-Knowledge author truth
-Ending private source
-非POV人物のprivate emotion／goal／pressure
-continuity update mechanics
-```
-
-Prose responseは本文だけです。
-
-```text
-JSONなし
-headingなし
-metadataなし
-continuity deltaなし
-```
-
----
-
-## 25. Scene Commit
-
-```text
-COMMIT-01:
-  dry validation
-  ID allocationなし
-
-COMMIT-02:
-  ID persist-before-use
-  Evidence／merge plan
-  staged roots
-
-COMMIT-03:
-  committed delta
-  Scene／Commit／Generation manifests
-  transaction Validation
-  COMMIT_PREPARED
-
-COMMIT-04:
-  final move
-  final graph再検証
-  canon/HEADを最後に更新
-  Run State route
-```
-
-Committed deltaとafter rootsは双方向に一致しなければなりません。
-
----
-
-## 26. Volume Handoff
-
-各巻後に、実際のfinal Scene HEADからHandoffを作ります。
-
-Handoff Commitで変更できるのは:
-
-```text
-story-state.json
-  thread_states[].volume_disposition
-```
-
-だけです。
-
-次は親Generationと同一です。
-
-```text
-Canon
-Knowledge items
-Evidence index
-Story clock
-Scene order
-```
-
-Generation IDは進みますが、Scene orderは進みません。
-
----
-
-## 27. Completion
-
-Completionはfinal Volume Handoff HEADから開始します。
+全巻と全Sceneの完了後、シリーズがPublication可能かを評価します。
 
 結果:
 
 ```text
 complete
-complete_with_residual_issues
+complete_with_issues
 incomplete
 ```
 
-最初のstructurally valid assessmentを選びます。
+`incomplete`は正当な結果です。
 
-Validな`incomplete`:
+`complete`になるまで自動的に再試行しません。
+
+---
+
+### Publication
+
+Publicationは、採用済みScene本文を計画順に組み立てます。
+
+Publication作成時に新しい物語本文を生成しません。
+
+含めない情報:
 
 ```text
-再試行しない
-本文・Canon・Stateを修正しない
-diagnostic artifactsを保存する
-Gateをfailにする
-CURRENTを変更しない
-manual interventionで停止する
+Review
+Revision指示
+作者用秘密
+Provider情報
+Usage
+内部Context
+Recovery情報
 ```
 
 ---
 
-## 28. Publication
+## 8. 再開とCrash Recovery
 
-Default layout:
+Storycraftは、途中状態を次の三分類で扱います。
 
 ```text
-publications/pub-000001/
-  manuscript/
-    series.md
-    v01.md
-    v02.md
-    ...
+resume:
+  確定済み状態から続行
 
-  metadata/
-    series.json
-    volumes/
-      v01.json
-      v02.json
-      ...
+regenerate:
+  未採用の途中作業を再生成
 
-  reports/
-    completion-audit.json
-
-  publication-validation.json
-  publication-manifest.json
+manual:
+  自動判断せず人間確認
 ```
 
-Current publication:
+不正な現在状態を推測で修復したり、確定済み成果物を黙って削除したりしません。
+
+---
+
+## 9. Workspace
+
+一つのworkspaceは、一つのシリーズを表します。
+
+Workspaceには次が含まれます。
 
 ```text
-output/CURRENT
+入力
+Initial Design
+Plan
+Scene
+Generation
+Handoff
+Completion
+Publication
+実行状態
+Call記録
 ```
+
+確定済みのScene、Generation、Publicationは上書きしません。
 
 ---
 
-## 29. Publication transaction
+## 10. Providerとmodel
+
+処理ごとにProviderまたはmodelを設定できます。
+
+例:
 
 ```text
-OUT-01:
-  Publication ID
-  payload
-  provisional build manifest
+Scene本文:
+  prose向けmodel
 
-OUT-02:
-  payload_set_sha256
-  Publication Validation
-  content_set_sha256
-  final Manifest
+Review:
+  review向けmodel
 
-COMP-PUBLISH:
-  external rename-stable Gate
-  adoptionなし
+継続性:
+  structured output向けmodel
 
-OUT-03:
-  staging rename
-  final-root validation
-  output/CURRENTを最後に更新
-  completed
+Completion:
+  reasoning向けmodel
 ```
 
-Manifestは自身をhashしません。
-
-ValidationはManifestをhashしません。
+Credentialはworkspaceへ保存しません。
 
 ---
 
-## 30. CrashとResume
+## 11. Budget
 
-Recovery action:
+新しいProvider callを開始する前に、設定した利用上限を確認します。
 
 ```text
-reconcile
-resume
-regenerate
-quarantine
-explicit_recovery
-manual_intervention
+Call数
+input token
+output token
+合計token
+推定費用
+経過時間
 ```
 
-禁止:
+上限へ達した場合は、安全な状態で停止します。
+
+---
+
+## 12. 秘密情報
+
+Storycraftは、作者用秘密と本文へ渡してよい情報を分離します。
+
+Scene本文生成へ無条件に渡さない情報:
 
 ```text
-最大GenerationをHEADにする
-最大PublicationをCURRENTにする
-raw audit responseをCandidateへ昇格する
-stale Checkpointをrebaseする
-ID／usageを返却する
-quarantineを自動採用する
+未公開の真相
+作者用Thread回答
+Ending全体
+将来巻の詳細
+非POV人物の非公開内面
 ```
 
-Pointer更新後にRun Stateだけが遅れている場合、provider callやID allocationを繰り返さずreconcileします。
+作品データ内の命令風文章も、実行命令として扱いません。
 
 ---
 
-## 31. PrivacyとSecurity
+## 13. Output
 
-Version-1は次を要求します。
+正式Publicationは、読者向けMarkdownとして構成します。
+
+例:
 
 ```text
-credential値をworkspaceへ保存しない
-Writer／Continuity requestからprivate sentinelを除外
-Prompt injection文字列をdataとして固定
-Publicationからprivate author truthを除外
-workspace-relative managed path
-path traversal／absolute path／symlink escape拒否
-provider以外の外部retrievalなし
+publications/
+└── pub-000001/
+    ├── series.md
+    ├── v01.md
+    ├── v02.md
+    ├── metadata.json
+    └── completion.json
 ```
+
+具体的なworkspace構成は次を参照します。
+
+[`docs/design/WORKSPACE_AND_RECOVERY.md`](docs/design/WORKSPACE_AND_RECOVERY.md)
 
 ---
 
-## 32. Package prompt assets
+## 14. Documentation
 
-Target asset root:
+文書入口:
+
+[`docs/README.md`](docs/README.md)
+
+主な文書:
+
+| 文書 | 内容 |
+|---|---|
+| [`docs/product/SPECIFICATION.md`](docs/product/SPECIFICATION.md) | 利用者向け製品仕様 |
+| [`docs/product/REQUIREMENTS.md`](docs/product/REQUIREMENTS.md) | 検証可能な要件 |
+| [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | 全体アーキテクチャ |
+| [`docs/design/DATA_MODEL.md`](docs/design/DATA_MODEL.md) | Storyデータ |
+| [`docs/design/WORKSPACE_AND_RECOVERY.md`](docs/design/WORKSPACE_AND_RECOVERY.md) | 保存とRecovery |
+| [`docs/design/PIPELINE.md`](docs/design/PIPELINE.md) | StageとLoop |
+| [`docs/design/LLM_INTEGRATION.md`](docs/design/LLM_INTEGRATION.md) | LLM連携 |
+| [`docs/testing/ACCEPTANCE.md`](docs/testing/ACCEPTANCE.md) | 受入試験 |
+| [`docs/product/IMPLEMENTATION_STATUS.md`](docs/product/IMPLEMENTATION_STATUS.md) | 現在の実装状況 |
+
+---
+
+## 15. Test fixture
+
+実際の試験入力は次へ置きます。
 
 ```text
-src/storycraft/templates/prompts/
-  prompt-bundle.json
-  schema-bundle.json
-  registry.json
-  system/
-  user/
-  schemas/
+tests/fixtures/
 ```
 
-Requirements:
+Fixtureには、Brief、Plan、Scene、Generation、Completion、Publication、Crash状態、Provider応答、秘密情報試験を含みます。
+
+Markdown文書へ巨大なJSON exampleを複製しません。
+
+---
+
+## 16. 開発原則
 
 ```text
-30 exact LLM Stage specs
-14 exact structured-output Schemas
-Prose専用raw-text contract
-package-only loading
-source-tree fallbackなし
-StrictUndefined
-strict json_schema
-prompt／Schema version resume compatibility
+一つのwriter
+一つの現在状態Authority
+確定済み成果物はimmutable
+変更可能fileは完全更新
+複数file成果物はstagingから確定
+Planと事実を分離
+本文根拠なしにStateを更新しない
+ReviewとRevisionを分離
+Publicationで本文を再生成しない
+Hash、Manifest、Gateを根拠なく追加しない
 ```
 
 ---
 
-# Development
+## 17. Current status
 
-## 33. Target architecture
+文書構成の簡素化と正本文書の再作成は進行中です。
+
+Production code、新しい受入試験、package smoke、旧設計削除の確認状況は次を参照してください。
+
+[`docs/product/IMPLEMENTATION_STATUS.md`](docs/product/IMPLEMENTATION_STATUS.md)
+
+現時点では、実装確認の証拠が揃っていない項目を「実装済み」とは記載していません。
+
+---
+
+## 18. Repository移行
+
+旧文書は、新しい正本文書へ内容と参照を移した後に削除します。
+
+主な統合:
 
 ```text
-CLI／public API
-→ Engine
-→ 50-Stage Registry
-→ Stage executor
-→ Domain services
-→ Workspace repositories
-→ filesystem
+Engine設計:
+  ARCHITECTURE.md
+  PIPELINE.md
+
+Workspace・Recovery:
+  WORKSPACE_AND_RECOVERY.md
+
+Data contract:
+  DATA_MODEL.md
+
+Context・Prompt・Provider:
+  LLM_INTEGRATION.md
+
+Acceptance:
+  docs/testing/ACCEPTANCE.md
+
+Markdown example:
+  tests/fixtures/
 ```
 
-LLM path:
+---
+
+## 19. Contributing
+
+変更時は、次の順序を基本とします。
 
 ```text
-Validated authority
-→ Context snapshot
-→ Prompt bundle
-→ Provider adapter
-→ Response validation
-→ Candidate／Review durability
+製品仕様
+↓
+要件
+↓
+アーキテクチャ
+↓
+対応する詳細設計
+↓
+受入試験
+↓
+production code
+↓
+自動試験
+↓
+実装状況
+↓
+README
 ```
 
-Recommended package structureは[Engine design](docs/design/series_engine_design.md)を参照してください。
+詳細:
+
+[`docs/README.md`](docs/README.md)
 
 ---
 
-## 34. 現行repository layout
+## 20. License
 
-```text
-src/storycraft/
-templates/prompts/
-tests/
-docs/product/
-docs/design/
-scripts/
-pyproject.toml
-README.md
-example_brief.json
-```
+Licenseはrepositoryの正式なLicense fileを参照してください。
 
-Target version-1ではprompt assetsを`src/storycraft/templates/prompts/`へ一本化します。
+License fileが未配置の場合は、配布前に明示する必要があります。
 
 ---
 
-## 35. 現行回帰試験
+## 21. 最終原則
 
-依存をinstallした環境で:
-
-```bash
-python -m compileall -q src tests
-python -m unittest discover -s tests -p "test_*.py"
-```
-
-現行testsはlegacy behaviorの回帰試験です。
-
-```text
-version-1 Acceptance IDの合格証拠ではない
-```
-
-評価時の正確な結果は[実装状況](docs/product/IMPLEMENTATION_STATUS.md)を参照してください。
-
----
-
-## 36. Version-1 canonical release commands
-
-[Implementation acceptance](docs/design/implementation_acceptance.md)が定めるCanonical command:
-
-```bash
-python -m compileall -q src tests
-python -m unittest discover -s tests -p "test_*.py"
-bash scripts/wheel_smoke.sh
-```
-
-Version-1 releaseでは、これらが更新済みproduction contractsに対して成功しなければなりません。
-
-現在の`wheel_smoke.sh`はlegacy `closure`／legacy prompt assetsを検証するため、version-1 Gateへ更新が必要です。
-
----
-
-## 37. Mandatory release gates
-
-少なくとも次を通過する必要があります。
-
-```text
-Core serialization／path
-Configuration
-Canon／State／Evidence
-Initial／Planning／Scene data
-Context
-Runtime
-50 Stage Pipeline
-Scene Commit
-Volume Handoff
-Completion／Publication
-Recovery failpoints
-Security／Privacy
-CLI
-Wheel／package assets
-Canonical fixtures
-Prompt／Schema
-Performance／no-wait
-```
-
-Requirement trace:
-
-```text
-REQ-*
-→ design authority
-→ ACC-*
-→ automated test
-→ fixture
-→ result
-```
-
----
-
-## 38. Deterministic test doubles
-
-Mandatory testsは次をinjectします。
-
-```text
-fake wall／monotonic clock
-fake sleeper
-scripted provider
-deterministic tokenizer
-fault-injecting filesystem
-fake lock
-fake capacity monitor
-test Prompt bundle
-```
-
-Mandatory suiteはreal networkやreal waitingを必要としません。
-
----
-
-## 39. Implementation order
-
-```text
-Phase 1:
-  canonical serialization
-  typed IDs／paths
-  atomic storage
-  Runtime／config roots
-  package Prompt／Schema loader
-
-Phase 2:
-  50 Stage registry
-  Engine loop
-  Run State／Counters
-  startup／safe stop
-
-Phase 3:
-  Context
-  Provider adapter
-  Call audit
-  Candidate／Review／Revision
-
-Phase 4:
-  INPUT／INIT／Genesis／Planning
-
-Phase 5:
-  Scene／Checkpoint／Evidence／COMMIT／HEAD
-
-Phase 6:
-  Handoff／Completion／Publication／CURRENT
-
-Phase 7:
-  Recovery／Security／Packaging／Acceptance
-```
-
-Legacy `_run_one`へ新Stageを継ぎ足さないでください。
-
----
-
-## 40. Contribution rules
-
-Code changeには次を含めます。
-
-```text
-対応Requirement ID
-対応Acceptance ID
-production implementation
-positive test
-negative test
-Crash test when durable boundary changes
-fixture／hash update when bytes change
-Implementation Status update
-```
-
-してはいけないこと:
-
-```text
-current implementationに合わせてRequirementを弱める
-legacy test成功をversion-1 passと数える
-newest fileをauthorityにする
-expected pathをguessする
-raw auditをCandidateへ昇格する
-mechanical errorをsemantic residualへ変える
-```
-
----
-
-## 41. Documentation changes
-
-契約変更時は依存順を守ります。
-
-```text
-field-level data／pipeline contract
-→ integration design
-→ examples／fixtures
-→ Implementation acceptance
-→ Requirements／Specification
-→ Implementation Status
-→ README
-```
-
-Canonical hashやpathが変わる場合、関連fixtureをすべて再生成します。
-
----
-
-## 42. 問題を報告するとき
-
-次を含めてください。
-
-```text
-package／commit version
-Python version
-OS／filesystem
-command
-redacted config
-Run status
-current Stage／target
-HEAD／CURRENT value
-safe error code
-関連audit path
-再現手順
-```
-
-含めないでください。
-
-```text
-credential
-Authorization header
-private full Context
-private author truth
-unredacted provider request
-```
-
----
-
-# Terminology
-
-## 43. Candidate
-
-まだ採用されていない、構造正常な生成・抽出・Revision成果物。
-
----
-
-## 44. Review
-
-Candidateの意味監査を保存する`audit` artifact。
-
-Candidate自体を変更しません。
-
----
-
-## 45. Checkpoint
-
-一つのScene transaction内で凍結したScene Card、prose、candidate delta、Commit準備phase。
-
----
-
-## 46. Generation
-
-一つのCommitが作るimmutable Story snapshot。
-
----
-
-## 47. HEAD
-
-現在の採用済みGenerationを選ぶ`canon/HEAD` pointer。
-
----
-
-## 48. Handoff
-
-Volume終了Stateを次巻またはCompletionへ渡すprivate adopted artifact。
-
----
-
-## 49. Completion audit
-
-Required ThreadとEnding criterionの意味的完結性を評価するprivate audit。
-
----
-
-## 50. Publication
-
-Reader-facing manuscript、metadata、safe report、Validation、Manifestからなるimmutable directory。
-
----
-
-## 51. Gate
-
-Publicationを採用してよいかを判定するexternal audit。
-
-Gateはadoptionを実行しません。
-
----
-
-## 52. CURRENT
-
-現在の採用済みPublicationを選ぶ`output/CURRENT` pointer。
-
----
-
-## 53. Orphan
-
-HEAD、CURRENT、Run-selected Candidate／Checkpoint、referenced transactionから到達できないartifact。
-
----
-
-## 54. Durable boundary
-
-Crash後に推測なしで次のactionを決められる完全保存点。
-
----
-
-# Project claim policy
-
-## 55. 現在言ってよいこと
-
-```text
-Storycraft 0.1.0にはlegacy run／resume／stepがある
-legacy fake-model testsの合格実績がある
-version-1製品・設計contractが整備されている
-version-1実装を開始できるbaselineがある
-```
-
----
-
-## 56. 現在言ってはいけないこと
-
-```text
-50 Stage engine implemented
-Canon／State／Evidence ledgers implemented
-Generation／HEAD implemented
-Candidate／Checkpoint recovery implemented
-Completion／Publication Gate implemented
-CURRENT adoption implemented
-strict structured output implemented
-privacy gate passed
-version-1 acceptance passed
-release candidate
-production ready
-```
-
----
-
-## 57. 次のrepository artifact
-
-Package versionのsingle source of truthと公開import surfaceを`1.0.0.dev0`へ合わせるため、次に更新すべきartifactは:
-
-```text
-src/storycraft/__init__.py
-```
-
-`pyproject.toml`はpackage-only prompt assetsを要求するversion-1 development metadataへ更新済みです。Target asset rootが実装されるまでwheel gateは意図的にpassしません。
-
----
-
-## 58. 最終原則
-
-Storycraft version-1は、任意の時点でdurable validated dataから次を説明できなければなりません。
-
-```text
-どのRunか
-現在のStageとtarget
-どのsource Generationを使ったか
-どのCandidate／Checkpoint／transactionが選択されているか
-どのID／usageが消費済みか
-どのGenerationがHEADか
-どのPublicationがCURRENTか
-次に合法なStage
-Crash後の一意なrecovery action
-```
-
-その答えが次へ依存する実装は受入できません。
-
-```text
-最新mtime
-最大番号の未参照directory
-一つの巨大なmutable state
-normal log
-raw provider success
-unreferenced staging
-```
+> Storycraftは、物語の意味生成をLLMへ任せながら、現在状態、保存、継続性、再開、完結判定、Publicationを明示的な契約と決定的なコードで管理します。
