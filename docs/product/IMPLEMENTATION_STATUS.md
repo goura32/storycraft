@@ -16,6 +16,6 @@
 - `ending_evidence_proposals`、`ending_evidence_index`、完結監査でのindex利用
 - `max_completion_audit_attempts`/`completion_audit_attempts_used`、response structure retry、COMP-PRE/COMP-AUDIT/COMP-PUBLISH分離、現行`closure`から独立した完結監査
 - `story_state`/`runtime_state`分離、`knowledge_items`、完全pipeline/ledger/context/runtime/configuration/acceptance contract、新workspace構成とgeneration/HEAD原子的commit
-- series map、scene state machine、resume recovery、ID allocator idempotency、timeout cancellation、run budget、evidence offset、audit gzip、output Markdown contract、acceptance tests
+- series map統合、完全field contract、thread progress 0..4、nested relationship state、knowledge projection、token-aware context budget、genesis generation、orphan recovery、publication pointer、budget accounting、runtime file schemas、evidence ID、semantic sample validation、scene state machine、resume recovery、ID allocator idempotency、timeout cancellation、audit gzip、output Markdown contract、acceptance tests
 
 現行実装が上記を満たすとは主張しない。旧state migrationや互換shimは対象にしない。

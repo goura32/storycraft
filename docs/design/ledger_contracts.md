@@ -1,126 +1,162 @@
 # Ledger contracts
 
-> 台帳・状態・更新の正本。[pipeline contracts](pipeline_contracts.md)が工程I/O、[workspace layout](workspace_layout.md)が保存先を定める。`initial_design_bundle`、`current_canon`、`story_state`、`runtime_state`は別の正本である。
+> 台帳・state・field契約の唯一の正本。工程は[pipeline contracts](pipeline_contracts.md)、Contextは[context contracts](context_contracts.md)、保存pathは[workspace layout](workspace_layout.md)を参照する。
 
-## ID・Schema共通規則
+## 共通SchemaとID
 
-保存用objectは`additionalProperties: false`を原則とし、記載のないfieldを拒否する。IDはコードだけがtype別counterで採番する。`char-000001`、`rel-000001`、`loc-000001`、`org-000001`、`item-000001`、`sys-000001`、`rule-000001`、`thread-000001`、`ending-000001`、`fact-000001`を使う。counterは6桁、欠番許容、再利用禁止である。
+全保存objectは`additionalProperties: false`である。全fieldは明記しない限り`nullable: false`、defaultなし、作成者は「LLM候補→コード検証」、正本は`canon/HEAD`が指すgenerationである。IDはコードだけがtype別counterで採番し、6桁・欠番許容・再利用禁止である。
 
-## 四層の正本
+| type | ID | creator | mutability | allowed operation | validation |
+|---|---|---|---|---|---|
+| character | `char-000001` | code | immutable | none | type counter |
+| relationship | `rel-000001` | code | immutable | none | type counter |
+| location / organization / item / system | `loc/org/item/sys-000001` | code | immutable | none | type counter |
+| temporal rule / thread / ending / fact / evidence | `rule/thread/ending/fact/ev-000001` | code | immutable | none | type counter |
 
-| 層 | 正本とする情報 | 保存先 | 禁止する重複 |
-|---|---|---|---|
-| initial_design_bundle | 固定事実、作者真実、ending criteria、長期arc、初期主要record | `canon/initial-design.json` | 現在感情・進捗 |
-| current_canon | recordの固定部分、scope、record_lifecycle、参照関係、採用済み局所Canon | `canon/current-canon.json` | current値、reader知識 |
-| story_state | 人物・関係・threadの現在値、knowledge、clock、所有・同行 | `canon/story-state.json` | fixed/作者真実 |
-| runtime_state | 工程、対象、checkpoint、counter、停止理由、再開位置、call_id | `runtime/run-state.json`と`runtime/counters.json` | 物語Canon/State |
+## enum
 
-人物の感情・関係の現在状態・thread進捗は**story_stateだけ**が正本である。`current_canon`のrecordに`current`を持たせない。
+| name | values |
+|---|---|
+| character role | `protagonist|love_interest|antagonist|ally|family|mentor|rival|supporting` |
+| relationship type | `central|romantic|family|friendship|alliance|rivalry|authority|conflict` |
+| structural role | `primary|secondary|supporting` |
+| world entity kind | `location|organization|item|system|culture|history` |
+| temporal rule kind | `deadline|travel_duration|recovery_rule|cycle|progression_rule|age_rule` |
+| knowledge subject type | `character|relationship|world_entity|thread|ending_criterion|event` |
+| evidence type | `state_update|knowledge_update|thread_update|ending_criterion|new_canon_item|time_update` |
+| chapter completion role | `opening|development|turn|climax|resolution` |
+| trust | `none|low|medium|high|absolute` |
+| record lifecycle | `active|inactive|retired` |
+| thread status | `open|in_progress|resolved|retired` |
+| knowledge status | `unknown|suspects|misunderstands|partially_knows|knows` |
 
-## 共通フィールド
+## 正本層
 
-| field | 型 | 必須 | 作成者 | 可変性 / operation | evidence | 目安 | 正本 |
-|---|---|---:|---|---|---|---|---|
-| `id` | string | はい | コード | 不変 | 不要 | prefix+連番 | 各台帳 |
-| `type` | enum | はい | LLM候補→コード検証 | 不変 | 不要 | 定義enum | current_canon |
-| `scope` | enum | はい | LLM候補→コード | `transition`のみ | 局所変更は必須 | scene/chapter/volume/series | current_canon |
-| `record_lifecycle` | enum | はい | コード | `transition`のみ | 局所変更は必須 | active/inactive/retired | current_canon |
-| `created_scene_id` | string/null | はい | コード | 不変 | 局所recordは必須 | scene ID | current_canon |
-| `fixed` | object | はい | LLM候補→採用 | 初期revisionのみ | 不要 | type別 | initial/current canon |
-| `references` | array<string> | 任意 | LLM候補→コード検証 | `append/remove` | 変更時必須 | 0〜50 | current_canon |
+| layer | content | source of truth | mutable | prohibited duplicate |
+|---|---|---|---|---|
+| initial design | fixed initial design and author truth | `canon/initial-design.json` | no after INIT-ID | current state |
+| series map | adopted volume-level plan | `plans/series-map.json` | no in v1 | chapter/scene detail |
+| current canon | records, fixed facts, lifecycle, references | `canon/HEAD` generation | typed delta only | current emotion/progress |
+| story state | dynamic character/relationship/thread/knowledge/clock | `canon/HEAD` generation | typed delta only | author truth |
+| runtime | checkpoints/counters/run state | `runtime/` | runtime only | canon/state |
 
-`resolved`はrecord_lifecycleではない。threadの完了は`story_state.thread_states[].thread_status`で表す。巻境界の処理は`volume_disposition: resolve|carry_over|retire`であり、carry_overは状態値ではない。
+## Canon records
 
-## current_canonのrecord契約
+### Common record fields
 
-### characters
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `id` | string | yes | no | none | code | immutable | none | registered ID | current canon |
+| `record_type` | enum | yes | no | none | code | immutable | none | known type | current canon |
+| `scope` | enum `scene|chapter|volume|series` | yes | no | `series` | code | transition | transition | scope graph | current canon |
+| `record_lifecycle` | enum | yes | no | `active` | code | transition | transition | active→inactive→retired | current canon |
+| `created_scene_id` | string | yes | yes | null | code | immutable | none | null only genesis | current canon |
+| `references` | array<string> | yes | no | `[]` | code | mutable | append/remove | each known ID, unique | current canon |
 
-| field | 型 | 必須 | 作成者 | 可変性 | evidence | 目安 | 正本 |
-|---|---|---:|---|---|---|---|---|
-| `id,name,aliases,role` | string/array | はい | LLM候補→コード | 不変 | 不要 | aliases 0〜10 | canon |
-| `fixed.core_trait,values,background,immutable_facts,appearance_anchor,speech_anchor` | string/array | はい | LLM候補 | 初期revisionのみ | 不要 | 各1〜500字 | initial/canon |
-| `scope,record_lifecycle,references` | 共通 | はい | コード | 共通規則 | 変更時必須 | - | canon |
+### Character and relationship canon fields
 
-### relationships
+| record / field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| character `name` | string | yes | no | none | LLM | initial-only | none | non-empty, unique display name | initial design |
+| character `role` | character role enum | yes | no | none | LLM | initial-only | none | enum | initial design |
+| character `fixed` | object | yes | no | none | LLM | initial-only | none | required fixed profile | initial design |
+| relationship `participant_a_id` | character ID | yes | no | none | code | immutable | none | known character | current canon |
+| relationship `participant_b_id` | character ID | yes | no | none | code | immutable | none | different known character | current canon |
+| relationship `relationship_type` | relationship type enum | yes | no | none | LLM | initial-only | none | enum | initial design |
+| relationship `structural_role` | structural role enum | yes | no | `supporting` | LLM | initial-only | none | enum | initial design |
+| relationship `origin` | string | yes | no | none | LLM | initial-only | none | non-empty | initial design |
 
-| field | 型 | 必須 | 作成者 | 可変性 | evidence | 正本 |
-|---|---|---:|---|---|---|---|
-| `id,relationship_type` | string/enum | はい | LLM候補→コード | 不変 | 不要 | canon |
-| `participant_a_id,participant_b_id` | string | はい | LLM候補→コード | 不変 | 不要 | canon |
-| `fixed.origin,structural_role` | string | はい | LLM候補 | 初期revisionのみ | 不要 | initial/canon |
+### World, rule, thread, ending, knowledge canon fields
 
-方向値はstory_stateの`relationship_states[id].directions`に保存し、`a_to_b`は必ず`participant_a_id`から`participant_b_id`への状態、`b_to_a`は逆方向を指す。
+| record / field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| world `kind` | world entity kind enum | yes | no | none | LLM | immutable | none | enum | current canon |
+| world `name` | string | yes | no | none | LLM | initial-only | none | non-empty | initial design |
+| world `fixed` | object | yes | no | none | LLM | initial-only | none | kind-specific schema | initial design |
+| temporal `kind` | temporal rule kind enum | yes | no | none | LLM | immutable | none | enum | current canon |
+| temporal `fixed_rule` | string | yes | no | none | LLM | initial-only | none | non-empty | initial design |
+| thread `description` | string | yes | no | none | LLM | initial-only | none | non-empty | initial design |
+| thread `author_truth` | string | yes | no | none | LLM | initial-only | none | never writer-visible | initial design |
+| thread `resolution_condition` | string | yes | no | none | LLM | initial-only | none | non-empty | initial design |
+| ending `description` | string | yes | no | none | LLM | immutable | none | non-empty | initial design |
+| ending `required` | boolean | yes | no | true | LLM | immutable | none | boolean | initial design |
+| knowledge `subject_type` | knowledge subject type enum | yes | no | none | code | immutable | none | enum | current canon |
+| knowledge `subject_id` | ID | yes | no | none | code | immutable | none | known ID | current canon |
+| knowledge `canonical_fact` | string | yes | no | none | LLM | immutable | none | non-empty | current canon |
+| knowledge `writer_visible_label` | string | yes | no | none | LLM | immutable | none | non-empty | current canon |
+| knowledge `author_truth` | string | yes | no | none | LLM | immutable | none | never writer-visible | current canon |
+| knowledge `scope` | scope enum | yes | no | `scene` | code | immutable | none | enum | current canon |
+| knowledge `created_scene_id` | scene ID | yes | yes | null | code | immutable | none | adopted scene or null | current canon |
+| knowledge `record_lifecycle` | lifecycle enum | yes | no | `active` | code | transition | transition | lifecycle graph | current canon |
 
-### world entities / temporal rules
+## Story state
 
-| 台帳 | field | 型 | 必須 | 作成者 | 可変性 | evidence |
-|---|---|---|---:|---|---|---|
-| world_entities | `kind,name,fixed.description,immutable_rules,sensory_anchors` | kindは定義enum、nameはstring、fixedはtype別field群 | はい | LLM候補→コード | fixedは初期revisionのみ | 不要 |
-| temporal_rules | `kind,description,scope,fixed_rule,related_ids` | kindは定義enum、descriptionはstring、related_idsはID配列 | はい | LLM候補→コード | rule本体不変 | 不要 |
+### Relationship state is nested only
 
-world entityの可変値（所有者、場所、状態）はstory_stateの`entity_states`に置く。organizationの状態enumは`active|suspended|dissolved`でありrecord_lifecycleと混同しない。
+Directional trust aliases flattened into field names are prohibited.
 
-### threads / ending criteria / knowledge items
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `public_relation` | string | yes | no | none | LLM→code | mutable | set | non-empty | story state |
+| `a_to_b.trust` | trust enum | yes | no | `medium` | LLM→code | mutable | transition | trust enum | story state |
+| `a_to_b.perception` | string | yes | no | none | LLM→code | mutable | set | non-empty | story state |
+| `a_to_b.emotional_stance` | string | yes | no | none | LLM→code | mutable | set | non-empty | story state |
+| `a_to_b.current_intention` | string | yes | no | none | LLM→code | mutable | set | non-empty | story state |
+| `b_to_a.*` | same as `a_to_b.*` | yes | no | none | LLM→code | mutable | set/transition | same schema | story state |
+| `shared_state` | string | yes | no | none | LLM→code | mutable | set | non-empty | story state |
 
-| 台帳 | field | 型 | 必須 | 作成者 | 可変性 | evidence | 正本 |
-|---|---|---|---:|---|---|---|---|
-| threads | `thread_type,required,description,author_truth,resolution_condition,presentation_rule` | enum/bool/string | はい | LLM候補→コード | 初期revisionまたは明示replan | 不要 | initial/canon |
-| ending_criteria | `description,required,evidence_scope,source_ending_text` | string/bool | はい | LLM候補→コード | 不変 | 不要 | initial/canon |
-| knowledge_items | `subject_type,subject_id,description,author_truth,scope,created_scene_id` | subject_type/scopeは定義enum、他はstring | はい | LLM候補→コード | 本文evidence付き局所追加可 | 追加時必須 | canon |
+| state field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `character_states[id].location_id` | location ID | yes | yes | null | code | mutable | set | known location | story state |
+| `character_states[id].physical_condition` | string | yes | yes | null | LLM→code | mutable | set | non-empty if set | story state |
+| `character_states[id].emotional_state` | string | yes | yes | null | LLM→code | mutable | set | non-empty if set | story state |
+| `character_states[id].current_goal` | string | yes | yes | null | LLM→code | mutable | set | non-empty if set | story state |
+| `character_states[id].current_pressure` | string | yes | yes | null | LLM→code | mutable | set | non-empty if set | story state |
+| `thread_states[id].thread_status` | enum | yes | no | `open` | code | mutable | transition | status/progress matrix | story state |
+| `thread_states[id].progress` | integer | yes | no | 0 | code | mutable | set | 0..4, non-decreasing except retire | story state |
+| `knowledge_state[fact-id:audience-id].status` | knowledge status enum | yes | no | `unknown` | code | mutable | transition | audience is known ID | story state |
+| `story_clock.current_order` | integer | yes | no | 0 | code | mutable | set | increment only | story state |
+| `story_clock.time_label` | string | yes | yes | null | LLM→code | mutable | set | evidence if changed | story state |
+| `story_clock.parallel_group_id` | string | yes | yes | null | LLM→code | mutable | set | evidence if changed | story state |
+| `story_clock.last_scene_id` | scene ID | yes | yes | null | code | mutable | set | adopted scene | story state |
 
-`knowledge_state.fact_id`は既知のknowledge item IDだけを参照する。`author_truth`はwriter viewへ渡さない。threadに`reader_knowledge_status`は置かない。ending criterion本体にstatusは置かず、supports/contradicts件数と監査assessmentは派生情報である。
+Thread matrix: `open=0`; `in_progress=1..3`; `resolved=4`; `retired=0..3`。`current_order`は本文evidence不要で、毎scene commitに`after_order = before_order + 1`でコードが更新する。
 
-## story_stateフィールド契約
+## Continuity delta and update matrix
 
-| collection.field | 型 | 必須 | 作成者 | 可変性 / operation | evidence | 正本 |
-|---|---|---:|---|---|---|---|
-| `character_states[id].location_id` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
-| `.physical_condition,.emotional_state,.current_goal,.current_pressure` | string/null | はい | 初期bundle→コード | set | 必須 | story_state |
-| `relationship_states[id].directions.a_to_b/b_to_a` | object | はい | 初期bundle→コード | set | 必須 | story_state |
-| `.trust,.perception,.emotional_stance,.current_intention` | trustは定義enum、他はstring | 任意 | LLM候補→コード | set | 必須 | story_state |
-| `entity_states[id].owner_id,location_id,condition,organization_state` | string/enum | 任意 | LLM候補→コード | set | 必須 | story_state |
-| `thread_states[id].thread_status` | enum | はい | 初期bundle→コード | transition | 必須 | story_state |
-| `.progress,.active_pressure` | integer/string | はい/任意 | LLM候補→コード | set | 必須 | story_state |
-| `knowledge_state[fact_id,audience].knowledge_status` | enum | はい | LLM候補→コード | transition | 必須 | story_state |
-| `story_clock.current_order` | integer | はい | コード | set | 必須 | story_state |
-| `.time_label,.parallel_group_id,last_scene_id` | string/null | 任意 | LLM候補/コード | set | clock update時必須 | story_state |
+`time_update`は`time_relation,time_label,elapsed_hint,parallel_group_id,evidence`をLLMが返す。`before_order,after_order,last_scene_id`はコードが付与する。`time_relation`は`same_time|later|next_day|after_interval|parallel`。
 
-thread statusは`open|in_progress|resolved|retired`、進捗は0〜4で非減少。clockは毎場面採用で必ず`after_order = before_order + 1`。同時刻は`time_label`または`parallel_group_id`で表し、orderは一意に増える。
+本文由来knowledge proposalは`local_key,subject_type,subject_id,canonical_fact,writer_visible_label,scope,scene_id,evidence`だけを持つ。`author_truth`は禁止する。
 
-## continuity delta
-
-| field | 型 | 必須 | 作成者 | 可変性 | evidence | 上限 | 正本 |
-|---|---|---:|---|---|---|---:|---|
-| `existing_item_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜50 | story_state |
-| `new_item_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | policy以下 | current_canon |
-| `knowledge_item_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | policy以下 | knowledge_items |
-| `knowledge_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜50 | story_state |
-| `thread_updates` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜20 | story_state |
-| `ending_evidence_proposals` | array<object> | はい | LLM候補 | revision可 | 各要素必須 | 0〜20 | evidence index |
-| `story_clock_update` | object | はい | LLM候補→コード | revision可 | 必須 | 1 | story_state |
-| `handoff_summary` | string | はい | LLM候補 | revision可 | 本文成立事実 | 50〜300字 | artifact |
-
-updateは`operation,target_type,target_id,field,before,after,scene_id,evidence`。許可operationは`set|append|remove|transition`のみ。`before`は採用前stateと一致、`after`は採用後stateと一致、evidenceは凍結本文の完全一致でなければ棄却する。knowledge item proposalは`local_key,subject_type,subject_id,description,author_truth,scope,scene_id,evidence`を必須とし、LLMは永続IDを作らない。
-
-## update matrix
-
-自由なJSON Patchは禁止する。許可operationは`set|append|remove|transition`だけである。
+自由JSON Patchは禁止。更新は以下のみである。
 
 | target_type | field | operation | before必須 | evidence必須 | validation |
 |---|---|---|---:|---:|---|
 | character_state | location_id | set | Yes | Yes | known location ID |
-| character_state | physical_condition | set | Yes | Yes | non-empty string |
-| character_state | emotional_state | set | Yes | Yes | non-empty string |
-| character_state | current_goal | set | Yes | Yes | non-empty string |
-| relationship_state | public_relation | set | Yes | Yes | non-empty string |
-| relationship_state | a_to_b_trust | transition | Yes | Yes | `none|low|medium|high|absolute` |
-| relationship_state | b_to_a_trust | transition | Yes | Yes | `none|low|medium|high|absolute` |
-| thread_state | thread_status | transition | Yes | Yes | allowed graph |
-| thread_state | progress | set | Yes | Yes | 0〜100、減少禁止 |
-| canon_record | record_lifecycle | transition | Yes | Yes | `active→inactive→retired`、retired固定 |
+| character_state | physical_condition | set | Yes | Yes | non-empty |
+| character_state | emotional_state | set | Yes | Yes | non-empty |
+| character_state | current_goal | set | Yes | Yes | non-empty |
+| character_state | current_pressure | set | Yes | Yes | non-empty |
+| relationship_state | public_relation | set | Yes | Yes | non-empty |
+| relationship_state | a_to_b.trust | transition | Yes | Yes | trust enum |
+| relationship_state | b_to_a.trust | transition | Yes | Yes | trust enum |
+| relationship_state | a_to_b.perception | set | Yes | Yes | non-empty |
+| relationship_state | b_to_a.perception | set | Yes | Yes | non-empty |
+| thread_state | thread_status | transition | Yes | Yes | status/progress matrix |
+| thread_state | progress | set | Yes | Yes | 0..4 |
+| canon_record | record_lifecycle | transition | Yes | Yes | lifecycle graph |
 | canon_record | references | append/remove | Yes | Yes | known ID |
-| knowledge_state | status | transition | Yes | Yes | audience別enum |
+| knowledge_state | status | transition | Yes | Yes | knowledge status enum |
 
-## evidence index
+## Evidence index
 
-`evidence_id,evidence_type,target_id,scene_id,quote,relation,start_offset,end_offset,quote_sha256`を必須とする。relationは`supports|contradicts`。同一`target_id,scene_id,quote_sha256,relation`は重複排除する。LLMはquoteだけを返しoffsetを返さない。quote出現0件はresponse structure error、1件はコードがoffsetを付与、複数件はより長いquoteを再要求する。
+| field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| `evidence_id` | evidence ID | yes | no | code allocated | code | immutable | none | `ev-000001` | evidence index |
+| `evidence_type` | evidence type enum | yes | no | none | code | immutable | none | enum | evidence index |
+| `target_id` | ID | yes | no | none | code | immutable | none | known target | evidence index |
+| `scene_id` | scene ID | yes | no | none | code | immutable | none | adopted scene | evidence index |
+| `quote` | string | yes | no | none | LLM→code | immutable | none | exact prose substring | evidence index |
+| `relation` | enum `supports|contradicts` | yes | no | none | LLM→code | immutable | none | enum | evidence index |
+| `start_offset,end_offset` | integer | yes | no | none | code | immutable | none | exact NFC offsets | evidence index |
+| `quote_sha256` | hex string | yes | no | none | code | immutable | none | hash quote | evidence index |

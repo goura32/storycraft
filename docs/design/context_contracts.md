@@ -1,35 +1,45 @@
 # Context contracts
 
-> Context投影の正本。元データは[ledger contracts](ledger_contracts.md)、工程I/Oは[pipeline contracts](pipeline_contracts.md)を参照する。Builderは純粋関数で、同一の正本snapshotと設定から同一JSON・同一`context_hash`を返す。
+> Context Builderの唯一の正本。field台帳は[ledger contracts](ledger_contracts.md)、operation入力は[pipeline contracts](pipeline_contracts.md)、token設定は[configuration contracts](configuration_contracts.md)を参照する。
 
 ## 共通規則
 
-| 項目 | 契約 |
-|---|---|
-| 並び順 | type → volume_number → chapter_number → scene_number → persistent ID。配列はこの順、object keyはUTF-8 codepoint順。 |
-| hash | NFC正規化・key sort・compact JSONをUTF-8化したSHA-256。 |
-| overflow | JSONを途中切断しない。低優先recordを決定的に除外し、既存handoff/summaryを優先する。必須情報が上限内に収まらなければ機械的停止。 |
-| 要約 | Builder内部でLLM要約をしない。採用済みhandoff/summaryだけを利用する。 |
-| secret | `author_truth`、`resolution_condition`、未採用候補はwriter系contextに入れない。 |
+Builderは純粋関数である。同一input snapshot・effective config・operationから同一NFC JSONと`context_hash`を返す。keyはUnicode codepoint昇順、recordはtype→volume→chapter→scene→persistent ID順で並べる。JSON途中切断、Builder内LLM要約、未採用候補の混入は禁止する。
 
-## Builder契約
+hard token limitは`min(max_context_tokens_by_operation, model_context_window_tokens - reserved_output_tokens_by_operation - protocol_overhead_tokens)`である。provider tokenizerがなければUnicode code point数から`ceil(code_points / 1.5)`を推定tokenとし、provider usageがあれば実測を優先する。必須入力が収まらなければ機械停止する。
 
-| builder | 入力正本 | 選択・秘密投影 | 上限 / overflow優先順 |
+## Builder table
+
+| builder | operation | source of truth | required projected fields | forbidden | deterministic overflow exclusion order |
+|---|---|---|---|---|---|
+| initial design | INIT-01..04 | adopted brief | brief all fields | runtime/audit | 1. none; brief exceeds hard limit = stop |
+| series map | SERIES-01 | initial design | concept, records, arcs, threads, ending criteria | runtime/raw responses | 1. retired supporting records 2. sensory anchors 3. non-primary fixed detail |
+| volume design | VOL-01 | initial design, series map, HEAD, prior handoff | target map record, current state, prior handoff, unresolved major threads | future volume plan detail, raw prose | 1. retired supporting 2. distant volume supporting 3. sensory anchors 4. non-central dynamic detail |
+| chapter design | CH-01 | adopted volume design, HEAD | target volume, current state, assigned thread targets | future chapter/scene artifacts | 1. retired supporting 2. non-target scope 3. sensory anchors 4. non-central detail |
+| scene card | SC-01 | adopted chapter, HEAD | target assignment, directly referenced records, state, time floor | author truth unavailable to design? none in author context; raw prose | 1. retired supporting 2. unassigned supporting 3. sensory anchors 4. nonparticipant dynamic detail |
+| writer | PROSE-01 | adopted card, HEAD, knowledge state, prior scene handoff | writer view below | author truth, resolution condition, other private knowledge, future detail, unadopted data | 1. sensory anchors 2. nonparticipant visible record 3. nonmajor current detail 4. distant handoff |
+| continuity | DELTA-01 | frozen prose, pre-scene HEAD, policy, ID index | full prose, baseline state, allowed targets | author truth, permanent ID allocation | 1. no optional removal; mandatory content overflow = stop |
+| volume handoff | VH-01 | scene handoffs, chapter-end state, start/end generation delta, major states, clock, volume evidence | listed input only | full volume prose, unadopted artifacts | 1. retired supporting records 2. resolved supporting thread detail 3. sensory anchors 4. noncentral detail |
+| completion audit | COMP-AUDIT | adopted manuscript artifacts, volume handoffs, current canon, story state, evidence index, initial design, series map | criteria, major threads, supports/contradicts evidence, handoffs | publication terminology, raw calls, unadopted content | 1. scene-level supporting detail 2. sensory anchors 3. retired supporting records 4. duplicate summaries |
+
+## Writer knowledge projection
+
+Writer output is an `additionalProperties:false` object. All listed fields are required, non-null, default none, created by code projection, immutable within the call, and source of truth is the Context snapshot.
+
+| field | type | allowed operation | validation |
 |---|---|---|---|
-| `build_initial_design_context` | brief | brief全量のみ | 20,000文字 / 入力超過は停止 |
-| `build_series_map_context` | initial bundle | author truth・ending criteriaを含むauthor context | 30,000文字 / sensory anchor→supporting recordを除外 |
-| `build_volume_design_context` | initial bundle, series map, current canon, story state, prior handoff | 対象巻、未完了major thread、前巻handoffを優先。author context | 36,000文字 / 完了supporting→遠いworld recordを除外 |
-| `build_chapter_design_context` | 採用volume design, current canon, story state | 対象巻のみ。author context | 30,000文字 / 非対象scope recordを除外 |
-| `build_scene_card_context` | 採用chapter design, current canon, story state, required thread assignment | 対象章・場面、直接参照recordだけ。author context | 24,000文字 / supporting recordを除外。必須assignmentが残らなければ停止 |
-| `build_writer_context` | scene card, story state, current canon, knowledge state, prior handoff, style profile | POV、participant、visible world、POVが`knows`のfact、reader status、直前handoffだけ。author truth、resolution condition、他人物private knowledge、future scene/volume、ending秘密、未採用候補を除外 | 28,000文字 / sensory anchor→非participant visible recordを除外 |
-| `build_continuity_context` | frozen prose, story state開始snapshot, allowed targets, knowledge items, new_item_policy, ID index | frozen prose全文、開始state、既知IDを必須。author truthはproposal検証にだけコードが使いLLMへ出さない | 32,000文字 / 本文または必須stateが収まらなければ停止 |
-| `build_volume_handoff_context` | 採用済み当該巻artifact, current canon, story state | 採用本文・state・未完了threadだけ。未採用候補除外 | 30,000文字 / completed supporting recordを除外 |
-| `build_completion_audit_context` | initial bundle, series map, current canon, story state, evidence index, published artifacts | author context。全criterion、全major thread、supports/contradicts evidenceを必須 | 48,000文字 / scene proseを含めずvolume handoffとevidence引用を優先。必須監査情報不足は停止 |
+| `scene_card` | object | project | adopted card only |
+| `pov_character` | object | project | card POV only |
+| `visible_characters` | array<object> | project | participant/visible IDs only |
+| `visible_relationship_state` | object | project | nested ledger state only |
+| `visible_world` | array<object> | project | card-visible records only |
+| `known_facts` | array<object> | project | POV status projection matrix |
+| `previous_handoff` | object/null | project | immediately prior adopted handoff |
+| `style_profile` | object | project | adopted profile |
+| `forbidden_disclosures` | array<string> | project | generated from withheld constraints |
 
-## writer projection
+For every knowledge item about the POV: `unknown` is omitted; `suspects` emits `{writer_visible_label,status:"suspects"}`; `misunderstands` emits `{writer_visible_label,status:"misunderstands"}` explicitly as misunderstanding; `partially_knows` emits disclosed label and status; `knows` emits label and status. `author_truth` is never emitted. Other character knowledge is never emitted unless the scene card makes its expression directly observable.
 
-`writer_view`のfieldは`scene_card,pov_character,visible_characters,visible_relationship_state,visible_world,known_facts,reader_known_facts,previous_handoff,style_profile,forbidden_disclosures`に固定する。`known_facts`はPOV characterの`knowledge_status=knows`だけ、`reader_known_facts`は`revealed|partially_revealed|hinted`だけを含む。POV以外のcharacter knowledge、`author_truth`、解決条件、将来設計を含めない。
+## Context audit
 
-## 選択ログ
-
-各builderは`context_hash`、入力正本hash、除外したrecord ID、文字数、上限、overflow有無をcall auditへ記録する。除外の再試行や恣意的な並び替えはしない。
+Each call audit stores `context_hash,input_snapshot_hash,operation,hard_token_limit,estimated_tokens,provider_input_tokens,excluded_record_ids,overflowed`. `provider_input_tokens` is nullable and is filled only from provider usage. Exclusion order may not be retried or reordered.

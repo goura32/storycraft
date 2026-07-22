@@ -1,48 +1,46 @@
 # Configuration contracts
 
-> 設定、timeout、budgetの正本。秘密を除いた実効設定は`runtime/effective-config.json`へ保存する。
+> LLM、token、timeout、budget、profile、resume互換性の唯一の正本。秘密を除いたeffective configは`runtime/effective-config.json`へ保存する。
 
-## LLMとretry
+## Model and token fields
 
-| field | 型 | 必須 | default | 規則 |
-|---|---|---:|---|---|
-| `provider` | string | はい | なし | provider名 |
-| `base_url` | string | はい | なし | HTTPS又はlocal HTTP URL |
-| `model` | string | はい | なし | run manifestへ固定 |
-| `thinking` | boolean | はい | false | provider指定 |
-| `stream` | boolean | はい | true | timeout監視対象 |
-| `temperature` | number | はい | 0.7 | 0.0〜2.0 |
-| `top_p` | number | はい | 1.0 | 0.0〜1.0 |
-| `seed` | integer/null | はい | null | provider非対応時はnull |
-| `structured_output_mode` | enum | はい | `json_schema` | `json_schema`のみ |
-| `max_transport_retries` | integer | はい | 2 | 0〜10 |
-| `max_response_structure_retries` | integer | はい | 2 | 0〜10 |
-| `max_revision_rounds` | integer | はい | 1 | 0〜10 |
-| `max_completion_audit_attempts` | integer | はい | 2 | 1〜10 |
-| `backoff_initial_seconds` | number | はい | 1 | >0 |
-| `backoff_multiplier` | number | はい | 2 | >=1 |
-| `backoff_max_seconds` | number | はい | 30 | >0 |
+| field | type | required | nullable | default | creator | mutability | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|
+| `provider,base_url,model` | string | yes | no | none | input | run-fixed | non-empty | effective config |
+| `model_context_window_tokens` | integer | yes | no | none | input | run-fixed | >0 | effective config |
+| `reserved_output_tokens_by_operation` | object<string,integer> | yes | no | none | input | run-fixed | every operation >=0 | effective config |
+| `max_context_tokens_by_operation` | object<string,integer> | yes | no | none | input | run-fixed | every operation >0 | effective config |
+| `protocol_overhead_tokens` | integer | yes | no | 0 | input | run-fixed | >=0 | effective config |
+| `token_estimator` | enum | yes | no | `unicode_code_points_div_1_5` | input | run-fixed | only named estimator | effective config |
+| `temperature,top_p,seed` | number/number/integer|null | yes | yes for seed | `0.7,1.0,null` | input | run-fixed | provider bounds | effective config |
+| `structured_output_mode` | enum | yes | no | `json_schema` | input | run-fixed | `json_schema` only | effective config |
 
-## timeout・budget
+Context hard limit is `min(max_context_tokens_by_operation[operation], model_context_window_tokens - reserved_output_tokens_by_operation[operation] - protocol_overhead_tokens)`. If it is not positive, startup fails. Text length is a reference metric only. Without provider tokenizer/usage, `estimated_tokens = ceil(Unicode code point count / 1.5)` for UTF-8 text; provider usage is authoritative when available.
 
-| field | 型 | default | 契約 |
-|---|---|---:|---|
-| `connect_timeout_seconds` | integer | 30 | 接続待機上限 |
-| `first_event_timeout_seconds` | integer | 120 | stream初イベント上限 |
-| `idle_timeout_seconds` | integer | 120 | 最終イベント後の上限 |
-| `total_call_timeout_seconds` | integer | 900 | 1 call全体上限 |
-| `max_llm_calls` | integer/null | null | 枯渇で機械停止 |
-| `max_total_input_tokens` | integer/null | null | 枯渇で機械停止 |
-| `max_total_output_tokens` | integer/null | null | 枯渇で機械停止 |
-| `max_elapsed_seconds` | integer/null | null | 枯渇で機械停止 |
-| `max_estimated_cost` | number/null | null | 枯渇で機械停止 |
+## Retry and timeout
 
-timeoutではstreamをcloseしworkerを終了してcall失敗へ分類し、transport retryへ渡す。watchdogがログだけ出して処理を継続することは禁止する。`null` budgetは無制限。
+| field | type | required | nullable | default | validation |
+|---|---|---:|---:|---|---|
+| `max_transport_retries` | integer | yes | no | 2 | 0..10 |
+| `max_response_structure_retries` | integer | yes | no | 2 | 0..10 |
+| `max_revision_rounds` | integer | yes | no | 1 | 0..10 |
+| `max_completion_audit_attempts` | integer | yes | no | 2 | 1..10 |
+| `connect_timeout_seconds,first_event_timeout_seconds,idle_timeout_seconds,total_call_timeout_seconds` | integer | yes | no | `30,120,120,900` | >0 |
 
-## 文字数とprofile
+Timeout closes the stream and terminates the worker before it becomes a transport failure. Transport retries never include invalid JSON/Schema; those consume response-structure retries. Every call attempt, including retry and invalid structure response, is budget-accounted.
 
-`scene_target_chars=3000`、`scene_guide_min_chars=500`、`scene_guide_max_chars=5000`、`chapter_target_chars=12000`、`volume_target_chars=60000`はSoft Targetである。空本文のみhard error。文字数だけでreject/revisionしない。NFC正規化後のUnicode code point数（改行含む、Markdown除去なし）をmetric記録する。
+## Budget
 
-KDP既定publishing profileは`volume_count_min=4`、`volume_count_recommended=5`、`volume_count_max=10`、`first_volume_role=free_entry`、`later_volume_role=paid`、`each_volume_requires_local_resolution=true`、`nonfinal_volume_requires_reader_question=true`、`platform=kdp`、`auto_publish=false`。これはCore Engine固定条件でなくprofile値である。
+| field | type | required | nullable | default | validation |
+|---|---|---:|---:|---|---|
+| `max_llm_calls,max_total_input_tokens,max_total_output_tokens,max_elapsed_seconds` | integer | yes | yes | null | null = unlimited; otherwise >=0 |
+| `max_estimated_cost` | number | yes | yes | null | null = unlimited; otherwise >=0 |
+| `pricing_table_version` | string | yes | no | none | non-empty |
 
-resumeはprompt/schema bundle version、editorial/publishing profile、model、正本影響config、code state version変更時に拒否する。log level、timeout延長、audit retentionだけは変更可。拒否対象をoverrideした場合はaudit logへ記録する。
+A call attempt increments call/token/cost accounting before response validation. Provider usage is used when available; otherwise the configured estimator is used. If `max_estimated_cost` is non-null and the selected model has unknown price, startup fails. `active_elapsed_seconds` is cumulative active execution seconds from run creation across resume; stopped time is excluded.
+
+## Profiles and resume
+
+`scene_target_chars=3000`、`scene_guide_min_chars=500`、`scene_guide_max_chars=5000`、`chapter_target_chars=12000`、`volume_target_chars=60000` are soft targets. Only empty prose is a hard error. KDP default profile has volume count 4..10, first volume free entry, later volumes paid, local resolution required, reader question for non-final volume, and `auto_publish=false`.
+
+Resume rejects changes to `state_version,code_version,prompt_bundle_version,schema_bundle_version,config_fingerprint,pricing_table_version,model,editorial_profile_id,publishing_profile_id`. It may change only log level, timeout extension, or audit retention; any permitted change is audit logged.

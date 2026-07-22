@@ -15,7 +15,8 @@ flowchart TD
   R -->|clean または上限| V[機械的検証]
   V --> ID[コードがID採番・参照変換]
   ID --> A[initial_design_bundle採用]
-  A --> VD[巻設計: 現在Canon・State]
+  A --> SM[SERIES-01..ID series map採用]
+  SM --> VD[巻設計: series map・現在Canon・State]
   VD --> CD[章設計]
   CD --> SC[場面設計 checkpoint]
   SC --> P[本文 checkpoint]
@@ -40,7 +41,7 @@ flowchart TD
 
 ## 呼び出し責務
 
-- INIT-01〜05は内部確定成果物またはbundle候補を生成し、INIT-06と`initial_design_revision`は候補全体をレビュー・一括修正する。
+- `series map`はINIT-ID後、VOL-01前に生成・review・採用する不変全巻計画である。
 - `volume_design`の入力は採用済みbundle、現在Canon、現在State、前巻handoff、巻番号、残り巻数、編集プロファイル。
 - `chapter_design`、`scene_card`、`scene`、`continuity_delta`、`volume_handoff`は共通revision loop対象。
 - `continuity_delta`は型付きupdates、new item、knowledge/thread/clock、`ending_evidence_proposals`、handoffを出力する。

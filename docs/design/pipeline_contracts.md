@@ -1,67 +1,103 @@
 # Pipeline contracts
 
-> 工程入出力の正本。台帳は[ledger contracts](ledger_contracts.md)、Contextは[context contracts](context_contracts.md)、runtimeは[runtime and recovery](runtime_and_recovery.md)、保存先は[workspace layout](workspace_layout.md)を正本とする。
+> 工程契約の唯一の正本。台帳は[ledger contracts](ledger_contracts.md)、Contextは[context contracts](context_contracts.md)、runtimeは[runtime and recovery](runtime_and_recovery.md)、保存pathは[workspace layout](workspace_layout.md)を参照する。
 
-## 共通契約
+## 共通実行契約
 
-全工程は`operation_id,target_id,input_hash,output_hash,started_at,finished_at`をauditへ保存する。LLM工程はtransport retry、response structure retry、revision roundを分離する。LLM reviewの`critical|major|minor`は停止条件でない。revision上限後は最後の構造正常候補を残存issueと採用する。構造、Schema、ID、hash、evidence、budget、timeout失敗だけが停止条件である。
+各LLM工程はcandidate→review→revision→structure checkの順で動く。transport retryは通信・timeoutだけ、response structure retryはJSON/Schemaだけ、revision roundはreview issueだけに使う。review severityは停止条件でない。revision枯渇時は最後の構造正常candidateをresidual issue付きで採用する。ID、Schema、参照、hash、evidence、budget、timeoutの失敗だけが機械停止である。
 
-修正LLMは全issue解消に必要な最小範囲と依存fieldを変更できる。工程責務内でrecord追加・削除・統合を許可するが、無関係な全体再生成はしない。本文修正はscene cardの目的・必須beat・禁止事項を保つ。
+各工程auditは`operation_id,target_id,input_hash,output_hash,started_at,finished_at`を保存する。表の「LLM」はLLM生成field、「code」はコード付与fieldであり、書かれていないfieldは出力禁止である。
 
-各行の入力・出力は`field: 型 / 必須 / 正本 / 目安`、出力状態は`internal|candidate|checkpoint|adopted|audit`である。保存は相対pathで記す。
+## 製品フロー
 
-## 工程カタログ
+`INPUT → INIT → SERIES → VOL → CH → SC → PROSE → DELTA → COMMIT → VH → COMP → OUT`。
 
-| ID | 処理・目的 | 実行条件 / 入力 | 出力・状態 | 検証 / 保存 / 失敗時 / 次 |
-|---|---|---|---|---|
-| INPUT-01 | brief読込 | brief:`object` | brief candidate | [brief fields](#brief) / `input/brief.json` / 構造不正停止 / INPUT-03 |
-| INPUT-02 | keywordsからbrief生成 | keywords:`array<string>` 1〜20 | brief candidate | response構造retry / `input/keywords.json` / 枯渇停止 / INPUT-03 |
-| INPUT-03 | brief構造検証・採用 | brief candidate | brief adopted、コード付与metadata | 必須・文字数・profile / `input/brief.json` / 停止 / INIT-01 |
-| INIT-01 | concept | brief | concept internal | 構造のみ、意味reviewなし / checkpoint / INIT-02 |
-| INIT-02 | people・relations | brief,concept | people/relations internal | local_key一意、構造のみ / checkpoint / INIT-03 |
-| INIT-03 | world・time | 01-02 | entities/rules internal | local_key参照、構造のみ / checkpoint / INIT-04 |
-| INIT-04 | arc・threads・ending | 01-03 | arcs/threads/criteria internal | local_key参照、構造のみ / checkpoint / INIT-05 |
-| INIT-05 | bundle統合 | 01-04 | initial bundle candidate、コード | 全local_key / checkpoint / INIT-06 |
-| INIT-06 | bundle全体review | bundle candidate | review audit | review型 / `audit/reviews/` / issue→INIT-REV、clean/上限→INIT-ID |
-| INIT-REV | bundle一括修正 | candidate,all issues | bundle candidate | Schema / checkpoint / INIT-06 |
-| INIT-ID | ID採番・採用 | 構造正常bundle | initial bundle/current canon/story state adopted、コード | ID・参照・hash / `canon/initial-design.json` / 停止 / SERIES-01 |
-| SERIES-01 | series map生成 | initial bundle | map candidate | volume fields、章/本文禁止 / `plans/series-map.json` / SERIES-02 |
-| SERIES-02 | map review | map candidate | review audit | 型 / issue→SERIES-REV、clean/上限→SERIES-ID |
-| SERIES-REV | map一括修正 | map,issues | map candidate | Schema / SERIES-02 |
-| SERIES-ID | map採用 | 構造正常map | map adopted | volume番号連番 / `plans/series-map.json` / VOL-01 |
-| VOL-01/02/REV/ID | 巻生成・review・修正・採用 | map,current canon,story state,handoff,target volume | volume candidate/review/adopted | 既知thread、番号 / `plans/volumes/vNN/volume-design.json` / CH-01 |
-| CH-01/02/REV/ID | 章生成・review・修正・採用 | adopted volume,current canon/state | chapters candidate/review/adopted | chapter連番、`scene_count: integer 1〜20`。採用後不変 / `chapters.json` / SC-01 |
-| SC-01/02/REV/CHK | card生成・review・修正・checkpoint | adopted chapter,scene assignment,canon/state | card checkpoint | known ID、new policy / `artifacts/scenes/.../scene-card.json` / PROSE-01 |
-| PROSE-01/02/REV/CHK | 本文生成・review・修正・凍結 | adopted card,writer context | prose checkpoint | 非空、card制約、NFC hash / `prose.md` / DELTA-01 |
-| DELTA-01/02/REV/CHK | 差分抽出・review・修正・checkpoint | frozen prose,start state,policy | delta checkpoint | before、完全一致evidence、known ID / `continuity-delta.json` / COMMIT-01 |
-| COMMIT-01 | 差分機械検証 | card,prose,delta,HEAD generation | prepared commit | Schema、before/after、clock、ID、hash / staging / 停止 / COMMIT-02 |
-| COMMIT-02 | ID割当・generation構築 | prepared commit | generation candidate、コード | idempotent mapping / staging / COMMIT-03 |
-| COMMIT-03 | scene artifact構築 | generation candidate | artifact candidate | manifest/hash / staging / COMMIT-04 |
-| COMMIT-04 | 原子的commit | validated staging | canon/state/index/artifact adopted | generation+HEAD手順 / runtime / 次scene又はVH-01 |
-| VH-01/02/REV/ID | handoff生成・review・修正・採用 | adopted volume,current canon/state | handoff candidate/review/adopted | 採用本文由来 / `artifacts/volumes/` / 次VOL又はCOMP-PRE |
-| COMP-PRE | 機械的監査前Gate | adopted artifacts,canon,state,index | preflight audit | 全巻/章/scene、prose/hash、required thread、supports、ID / failure停止 / COMP-AUDIT |
-| COMP-AUDIT | completion audit | successful preflight | audit candidate | JSON構造不正はattempt再試行、正常1件なしで停止 / COMP-SAVE |
-| COMP-SAVE | 正常audit保存 | normal audit | audit record | 最後の正常JSON / `audit/completion/` / COMP-PUBLISH |
-| COMP-PUBLISH | 公開前Gate | preflight,normal audit,staging | publish audit | staging検証 / failure停止 / OUT-01 |
-| OUT-01/02/03 | staging生成・検証・公開 | adopted artifacts,publish Gate | manuscript/report staging→output | output検証、atomic replace / `output/` / 完了 |
+## Initial design and series map fields
 
-## 主要出力field
+全表のobjectは`additionalProperties: false`。ここでの`local_key`はINIT内参照専用であり、INIT-IDでコードが永続IDへ一括変換する。
 
-### brief
+| output / field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| INIT-01 `title` | string | yes | no | none | LLM | revision | replace | 1..100 chars | candidate |
+| INIT-01 `core_concept` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-01 `genre_promise` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-01 `central_conflict` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-01 `ending_direction` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-02 character `local_key` | string | yes | no | none | LLM | revision | replace | unique local key | candidate |
+| INIT-02 character `name` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-02 character `role` | character role enum | yes | no | none | LLM | revision | replace | enum | candidate |
+| INIT-02 character `fixed` | object | yes | no | none | LLM | revision | replace | character fixed schema | candidate |
+| INIT-02 character `initial_state` | object | yes | no | none | LLM | revision | replace | state schema | candidate |
+| INIT-02 relationship `local_key` | string | yes | no | none | LLM | revision | replace | unique | candidate |
+| INIT-02 relationship `participant_a_local_key` | string | yes | no | none | LLM | revision | replace | known character key | candidate |
+| INIT-02 relationship `participant_b_local_key` | string | yes | no | none | LLM | revision | replace | different known key | candidate |
+| INIT-02 relationship `relationship_type` | enum | yes | no | none | LLM | revision | replace | relationship enum | candidate |
+| INIT-02 relationship `structural_role` | enum | yes | no | `supporting` | LLM | revision | replace | structural enum | candidate |
+| INIT-02 relationship `initial_state` | nested relationship state | yes | no | none | LLM | revision | replace | ledger relationship schema | candidate |
+| INIT-03 entity `local_key` | string | yes | no | none | LLM | revision | replace | unique | candidate |
+| INIT-03 entity `kind` | world entity kind enum | yes | no | none | LLM | revision | replace | enum | candidate |
+| INIT-03 entity `name,fixed,scope` | string/object/enum | yes | no | none | LLM | revision | replace | entity schema | candidate |
+| INIT-03 rule `local_key` | string | yes | no | none | LLM | revision | replace | unique | candidate |
+| INIT-03 rule `kind` | temporal rule kind enum | yes | no | none | LLM | revision | replace | enum | candidate |
+| INIT-03 rule `description,fixed_rule,related_local_keys,scope` | string/string/array/enum | yes | no | none | LLM | revision | replace | rule schema | candidate |
+| INIT-04 protagonist arc `start,turn,end` | string/string/string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-04 relationship arc `relationship_local_key,start,turn,end` | string/string/string/string | yes | no | none | LLM | revision | replace | known relation key | candidate |
+| INIT-04 major thread `local_key,description,author_truth,resolution_condition,presentation_rule` | string | yes | no | none | LLM | revision | replace | non-empty | candidate |
+| INIT-04 ending criterion `local_key,description,required,evidence_scope` | string/bool/enum | yes | no | none | LLM | revision | replace | required boolean | candidate |
+| series map `volume_number` | integer | yes | no | none | LLM→code | immutable after adopt | none | 1..brief.volumes, continuous | series map |
+| series map `volume_role` | enum | yes | no | none | LLM | immutable after adopt | none | `entry|development|escalation|turning_point|climax|resolution` | series map |
+| series map `volume_promise` | string | yes | no | none | LLM | immutable after adopt | none | non-empty | series map |
+| series map `protagonist_change_target` | string | yes | no | none | LLM | immutable after adopt | none | non-empty | series map |
+| series map `relationship_change_targets` | array<object> | yes | no | `[]` | LLM | immutable after adopt | none | known relation local/persistent ID | series map |
+| series map `major_thread_targets` | array<object> | yes | no | `[]` | LLM | immutable after adopt | none | major thread only | series map |
+| series map `reader_question` | string | yes | no | none | LLM | immutable after adopt | none | non-empty | series map |
+| series map `ending_position` | enum | yes | no | none | LLM | immutable after adopt | none | `opening|early|middle|late|final` | series map |
 
-| field | 型 | 必須 | 作成者 |
-|---|---|---:|---|
-| `title,genre` | string 1〜100 | はい | LLM/input |
-| `target_reader` | string 1〜200 | はい | LLM/input |
-| `protagonist.name,present_position,core_trait,current_pressure,initial_wish` | string | はい | LLM/input |
-| `key_people[]` | array 1〜12 of `{name,present_position,initial_relation_to_protagonist}` | はい | LLM/input |
-| `want,ending,editorial_profile_id,publishing_profile_id` | string | はい | LLM/input |
-| `avoid` | array<string> 0〜20 | はい | LLM/input |
-| `volumes` | integer 4〜10 | はい | LLM/input |
-| `brief_version,created_at,source_type,source_hash` | string | はい | コード |
+Series map has no chapter or scene detail; every volume number is unique and consecutive; count equals `brief.volumes`; v1 never replans an adopted map.
 
-INIT-01 outputは`core_concept,genre_promise,reader_experience,themes,central_conflict,ending_direction,tone_constraints`。INIT-02 peopleは`local_key,name,aliases,role,core_trait,values,background,immutable_facts,appearance_anchor,speech_anchor,starting_location_local_key,starting_physical_condition,starting_emotional_state,starting_goal,starting_pressure`、relationsは`local_key,participant_a_local_key,participant_b_local_key,relationship_type,origin,structural_role,starting_public_relation,a_to_b_trust,a_to_b_perception,a_to_b_emotional_stance,a_to_b_current_intention,b_to_a_trust,b_to_a_perception,b_to_a_emotional_stance,b_to_a_current_intention,shared_state`。INIT-03 entityは`local_key,kind,name,description,immutable_rules,sensory_anchors,scope`、ruleは`local_key,kind,description,fixed_rule,related_local_keys,scope`。INIT-04は`protagonist_arc,relationship_arcs,major_threads,ending_criteria,series_pacing,volume_count`。
+## Individual operation contract
 
-series map volumeは`volume_number,volume_role,volume_promise,protagonist_change_target,relationship_change_targets,major_thread_targets,reader_question,ending_position`。volume designは`volume_number,title,volume_promise,starting_state_summary,protagonist_change,relationship_changes,thread_actions,major_conflict,reader_question,ending_function,target_chapter_count`。chapter designは`chapter_number,title,purpose,start_state,end_goal,protagonist_or_relationship_change,thread_actions,scene_count,chapter_end_function`。scene cardは`scene_id,volume_number,chapter_number,scene_number,pov_character_id,participant_ids,location_id,time_relation,time_label,scene_purpose,required_beats,emotional_change_target,relationship_change_target,thread_actions,reader_disclosures,withheld_constraints,allowed_update_targets,new_item_policy,length_guidance,chapter_completion_role`。
+All rows define: objective; condition/input/source; output/state; LLM/code fields; forbidden references; mechanical validation; review; retry/revision; adoption; storage; failure; next.
 
-reviewは`review_id,target_operation_id,target_id,issues[]`、issueは`code,severity,path,description,evidence,suggested_change`。deltaは`existing_item_updates,new_item_proposals,knowledge_item_proposals,knowledge_updates,thread_updates,ending_evidence_proposals,time_update,handoff_summary`。handoffは`volume_number,narrative_handoff,open_pressures,character_states,relationship_states,carried_threads,story_clock,next_volume_constraints`。completion auditは`audit_attempt,criteria_assessments,thread_assessments,contradictions,residual_issues,overall_assessment`で、criterion assessmentは`criterion_id,supports_evidence_ids,contradicts_evidence_ids,assessment,explanation`。
+| ID | contract |
+|---|---|
+| VOL-01 | **目的**巻design candidate。**条件/入力/正本**adopted series map、HEAD canon/state、prior adopted handoff。**出力/state**volume candidate。**LLM**`volume_number,title,volume_promise,starting_state_summary,protagonist_change,relationship_changes,thread_actions,major_conflict,reader_question,ending_function,target_chapter_count`。**code**operation metadata。**禁止**future volume detailと未採用本文。**検証**target number、known IDs、series target適合。**review**約束・thread配分・状態開始。**retry/revision**structure/revision。**採用**VOL-IDのみ。**保存**`plans/volumes/vNN/candidate.json`。**失敗**枯渇停止。**次**VOL-02。 |
+| VOL-02 | **目的**volume review。**条件/入力/正本**VOL-01 candidate。**出力/state**review audit。**LLM**review result。**code**review ID。**禁止**candidate外の新事実。**検証**review schema。**review**volume promise、map適合。**retry/revision**structure; issueならVOL-REV。**採用**なし。**保存**`audit/reviews/`。**失敗**structure枯渇停止。**次**VOL-REVまたはVOL-ID。 |
+| VOL-REV | **目的**volume修正。**条件**structure正常candidateとissues。**出力**candidate。**LLM**VOL-01 fieldのみ。**code**round。**禁止**map変更。**検証**VOL-01。**review**再実行。**retry/revision**revision round消費。**採用**なし。**保存**candidate revision。**失敗**最後の構造正常候補へ。**次**VOL-02。 |
+| VOL-ID | **目的**volume採用。**条件**structure正常candidate。**入力正本**candidate/map/HEAD。**出力**adopted design。**LLM**なし。**code**hash/adopted metadata。**禁止**内容変更。**検証**hash/IDs/map。**retry**なし。**採用**原子的。**保存**`plans/volumes/vNN/volume-design.json`。**失敗**停止。**次**CH-01。 |
+| CH-01 | **目的**chapter candidate。**条件/正本**adopted volume+HEAD。**出力**chapter list candidate。**LLM**`chapter_number,title,purpose,start_state,end_goal,protagonist_or_relationship_change,thread_actions,scene_count,chapter_completion_role`。**code**metadata。**禁止**scene detail。**検証**1..target count、scene_count 1..20、known IDs。**review**volume配分。**retry/revision**structure/revision。**採用**CH-ID。**保存**`plans/volumes/vNN/chapters-candidate.json`。**失敗**停止。**次**CH-02。 |
+| CH-02 | **目的**chapter review。**入力**CH-01。**出力**review。**LLM**review result。**code**review ID。**禁止**新章。**検証**review schema。**review**順序、thread、ending role。**retry/revision**structure/revision。**採用**なし。**保存**audit。**失敗**停止。**次**CH-REV/CH-ID。 |
+| CH-REV | **目的**chapter修正。**入力**candidate/issues。**出力**candidate。**LLM**CH-01 field。**code**round。**禁止**adopted volume変更。**検証**CH-01。**review**CH-02。**retry/revision**round消費。**採用**なし。**保存**revision。**失敗**最後の構造正常候補。**次**CH-02。 |
+| CH-ID | **目的**chapter採用。**入力**candidate。**出力**adopted chapters。**LLM**なし。**code**hash。**禁止**scene_count変更。**検証**chapter連番。**retry**なし。**採用**atomic。**保存**`plans/volumes/vNN/chapters.json`。**失敗**停止。**次**SC-01。 |
+| SC-01 | **目的**scene card candidate。**入力正本**adopted chapter、HEAD、scene assignment。**出力**card candidate。**LLM**`scene_id,volume_number,chapter_number,scene_number,pov_character_id,participant_ids,location_id,time_relation,time_label,scene_purpose,required_beats,emotional_change_target,relationship_change_target,thread_actions,reader_disclosures,withheld_constraints,allowed_update_targets,new_item_policy,length_guidance,chapter_completion_role`。**code**scene ID。**禁止**author truth、未知knowledge。**検証**known IDs/policy/assignment。**review**POV・開示・thread。**retry/revision**structure/revision。**採用**SC-CHK。**保存**scene artifact candidate。**失敗**停止。**次**SC-02。 |
+| SC-02 | **目的**card review。**入力**SC candidate。**出力**review。**LLM**review result。**禁止**本文。**検証**review schema。**review**card contract。**retry/revision**structure/revision。**採用**なし。**保存**audit。**失敗**停止。**次**SC-REV/SC-CHK。 |
+| SC-REV | **目的**card修正。**入力**candidate/issues。**出力**candidate。**LLM**SC-01 fields。**code**round。**禁止**chapter/volume採用物変更。**検証**SC-01。**review**SC-02。**retry/revision**round消費。**採用**なし。**保存**revision。**失敗**last structure-valid。**次**SC-02。 |
+| SC-CHK | **目的**card checkpoint。**入力**structure正常card。**出力/state**CARD_ACCEPTED。**LLM**なし。**code**NFC hash/checkpoint。**検証**schema/ID。**採用**checkpointのみ。**保存**`artifacts/scenes/vNN/cNN/sNN/scene-card.json`。**失敗**停止。**次**PROSE-01。 |
+| PROSE-01 | **目的**本文candidate。**入力正本**adopted cardとwriter context。**出力**prose candidate。**LLM**`manuscript_text`。**code**metadata。**禁止**writer context外秘密。**検証**non-empty/NFC/card rules。**review**POV/自然文/beat。**retry/revision**structure/revision。**採用**PROSE-CHK。**保存**artifact。**失敗**停止。**次**PROSE-02。 |
+| PROSE-02 | **目的**本文review。**入力**prose/card。**出力**review。**LLM**review result。**禁止**新canon。**検証**review schema。**review**card保全。**retry/revision**structure/revision。**採用**なし。**保存**audit。**失敗**停止。**次**PROSE-REV/CHK。 |
+| PROSE-REV | **目的**本文修正。**入力**prose/issues/card。**出力**prose。**LLM**manuscript text。**禁止**card外変更。**検証**PROSE-01。**review**PROSE-02。**retry/revision**round消費。**採用**なし。**保存**revision。**失敗**last structure-valid。**次**PROSE-02。 |
+| PROSE-CHK | **目的**本文凍結。**入力**structure正常prose。**出力/state**PROSE_FROZEN。**code**NFC SHA-256。**検証**hash/nonempty。**保存**`prose.md`。**失敗**停止。**次**DELTA-01。 |
+| DELTA-01 | **目的**continuity candidate。**入力正本**frozen prose、開始HEAD snapshot、policy。**出力**delta candidate。**LLM**`existing_item_updates,new_item_proposals,knowledge_item_proposals,knowledge_updates,thread_updates,ending_evidence_proposals,time_update,handoff_summary`。**code**none。**禁止**永続ID/author truth/clock order。**検証**before/quote/known ID。**review**state整合。**retry/revision**structure/revision。**採用**DELTA-CHK。**保存**artifact。**失敗**停止。**次**DELTA-02。 |
+| DELTA-02 | **目的**delta review。**入力**delta/prose。**出力**review。**LLM**review result。**禁止**本文修正。**検証**review schema。**review**evidence意味。**retry/revision**structure/revision。**採用**なし。**保存**audit。**失敗**停止。**次**DELTA-REV/CHK。 |
+| DELTA-REV | **目的**delta修正。**入力**delta/issues/prose。**出力**delta。**LLM**DELTA-01 fields。**禁止**本文/author truth。**検証**DELTA-01。**review**DELTA-02。**retry/revision**round消費。**採用**なし。**保存**revision。**失敗**last structure-valid。**次**DELTA-02。 |
+| DELTA-CHK | **目的**delta checkpoint。**入力**structure正常delta。**出力/state**DELTA_ACCEPTED。**code**hash。**検証**evidence exact/before。**保存**`continuity-delta.json`。**失敗**停止。**次**COMMIT-01。 |
+| VH-01 | **目的**handoff candidate。**入力正本**当該巻scene handoff、章末state、巻開始/終了generation差分、主要人物/中心関係/thread actions/clock/evidence index。**出力**handoff candidate。**LLM**`volume_number,narrative_handoff,open_pressures,character_states,relationship_states,carried_threads,story_clock,next_volume_constraints`。**禁止**巻本文全文、未採用artifact。**検証**known IDs。**review**次巻に必要な状態。**retry/revision**structure/revision。**採用**VH-ID。**保存**volume artifacts。**失敗**停止。**次**VH-02。 |
+| VH-02 | **目的**handoff review。**入力**VH candidate。**出力**review。**LLM**review result。**禁止**本文全文。**検証**review schema。**review**state/evidence。**retry/revision**structure/revision。**採用**なし。**保存**audit。**失敗**停止。**次**VH-REV/VH-ID。 |
+| VH-REV | **目的**handoff修正。**入力**candidate/issues。**出力**candidate。**LLM**VH-01 fields。**code**round。**禁止**canon/state変更。**検証**VH-01。**review**VH-02。**retry/revision**round消費。**採用**なし。**保存**revision。**失敗**last structure-valid。**次**VH-02。 |
+| VH-ID | **目的**handoff採用。**入力**candidate。**出力**adopted handoff。**code**hash。**検証**schema/IDs。**採用**atomic。**保存**`artifacts/volumes/vNN/handoff.json`。**失敗**停止。**次**next VOL-01 / COMP-PRE。 |
+| OUT-01 | **目的**publication staging。**入力正本**adopted manuscript artifacts、handoffs、current canon、story state、evidence index、initial design、series map。**出力**staging Markdown/report/metadata。**LLM**なし。**code**renderer。**禁止**audit raw/prompt/author truth。**検証**order/nonempty/no secret。**保存**`.staging/publication`。**失敗**停止。**次**OUT-02。 |
+| OUT-02 | **目的**output検証。**入力**staging。**出力**validation result。**code**hash/Markdown checks。**禁止**変更。**検証**all output rules。**retry**なし。**採用**なし。**保存**staging manifest。**失敗**停止、CURRENT不変。**次**OUT-03。 |
+| OUT-03 | **目的**pointer公開。**入力**validated staging。**出力**publication adopted。**code**publication ID/CURRENT。**検証**rename then pointer atomic replace。**採用**publication pointer。**保存**`publications/<id>/`, `output/CURRENT`。**失敗**old pointer維持。**次**complete。 |
+
+## Review and completion field contracts
+
+| output / field | type | required | nullable | default | creator | mutability | allowed operation | validation | source of truth |
+|---|---|---:|---:|---|---|---|---|---|---|
+| review `review_id,target_operation_id,target_id` | string | yes | no | none | code | immutable | none | known operation/target | audit |
+| review issue `code,severity,path,description,evidence,suggested_change` | string/enum | yes | no | none | LLM | immutable | none | severity `critical|major|minor` | audit |
+| volume handoff `volume_number` | integer | yes | no | none | LLM→code | immutable | none | adopted volume | artifact |
+| volume handoff `narrative_handoff` | string | yes | no | none | LLM | immutable | none | adopted facts only | artifact |
+| volume handoff `open_pressures,character_states,relationship_states,carried_threads,story_clock,next_volume_constraints` | object/array | yes | no | none | LLM→code | immutable | none | state/ID matching | artifact |
+| completion audit `audit_attempt` | integer | yes | no | none | code | immutable | none | 1..max | audit |
+| completion audit `criteria_assessments,thread_assessments,contradictions,residual_issues` | array | yes | no | `[]` | LLM | immutable | none | audit schema | audit |
+| completion audit `overall_assessment` | enum | yes | no | none | LLM | immutable | none | `pass|pass_with_issues|fail` | audit |

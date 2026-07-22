@@ -2,7 +2,7 @@
 
 briefまたはkeywordsを起点に、個人出版向けの日本語小説シリーズを最後まで書き切るCLIです。
 
-次期仕様の大きな流れは、**シリーズ初期設計 → 初期bundle採用 → 巻・章・場面の反復 → 本文・差分・Canon更新を含む場面採用 → 巻handoff → 完結監査 → Markdown出力**です。後続巻は初期Canonではなく、更新済みの現在Canon・現在Stateを参照します。レビューは品質改善に利用しますが、完結監査はrevisionではなく独立した監査attemptです。
+次期仕様の正式フローは、**入力確定 → シリーズ初期設計 → series map生成・レビュー・採用 → 巻設計 → 章設計 → 場面設計 → 本文生成 → 継続性差分抽出 → 場面commit → 巻handoff → 完結監査 → 出力**です。後続巻はHEADが指す現在Canon・Story Stateを参照します。詳細は[製品仕様](docs/product/SPECIFICATION.md)と[pipeline contracts](docs/design/pipeline_contracts.md)を参照してください。
 
 > 現行実装との差分は[実装状況](docs/product/IMPLEMENTATION_STATUS.md)を参照してください。
 
