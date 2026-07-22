@@ -1,39 +1,45 @@
 # Storycraft 要件
 
-この文書は、Storycraft Version 1が満たすべき製品要件を定める。
+この文書は、Storycraft Version 1が満たすべき検証可能な要件を定める。
 
-最上位の設計原則は[`../architecture/ARCHITECTURE_PRINCIPLES.md`](../architecture/ARCHITECTURE_PRINCIPLES.md)である。
+上位文書:
 
-利用者向けの説明は`SPECIFICATION.md`、現行実装の到達状況は`IMPLEMENTATION_STATUS.md`、具体的な試験は`../design/implementation_acceptance.md`へ分離する。
+- 製品仕様: [`SPECIFICATION.md`](SPECIFICATION.md)
+- アーキテクチャ: [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)
+
+実装状況は`IMPLEMENTATION_STATUS.md`、具体的な保存形式・処理手順・データ構造は`../design/`以下、Release判定に使う試験は`../testing/ACCEPTANCE.md`で定める。
 
 ---
 
-## 1. 前提
+# Part I: 文書の使い方
 
-Storycraft Version 1は次を前提とする。
+## 1. 要件の役割
+
+この文書は「実装が何を満たすべきか」を定める。
+
+次の詳細は定義しない。
 
 ```text
-単一writer
-ローカルfilesystem
-一つのworkspace
-一つの実行状態ファイル
-確定済みdirectoryの上書き禁止
-一時directoryからのatomic rename
-Hashは原則使用しない
-外部監査なし
+具体的なworkspace path
+JSON field名
+directory内のfile名
+Python module
+内部関数
+Provider固有request
+詳細なatomic write手順
 ```
+
+これらは下位の設計文書で定める。
 
 ---
 
-## 2. 要件表記
+## 2. 要件ID
 
-要件ID:
+要件IDは次の形式とする。
 
 ```text
 REQ-<分類>-<連番>
 ```
-
-分類:
 
 | 分類 | 意味 |
 |---|---|
@@ -44,243 +50,245 @@ REQ-<分類>-<連番>
 | `SEC` | 安全性と秘密情報 |
 | `NFR` | 非機能とRelease |
 
-この文書の要件は、明示がない限りすべてVersion 1の必須要件である。
-
 ---
 
-## 3. 要件の優先順位
+## 3. 必須度
 
-要件数そのものを品質指標にしない。
+この文書の要件は、明示がない限りすべてVersion 1の必須要件である。
 
-Releaseに必要な要件はすべて同じ重要度を持つが、実装順は次を優先する。
+すべてを`P0`など同じ優先度で表示する方式は使用しない。
+
+実装順は次を優先する。
 
 ```text
-保存と実行状態
+永続状態と排他
 Sceneの正常系
 Crash後の再開
 秘密情報の分離
-CompletionとPublication
-最適化と追加機能
+完結判定
+Publication
+追加最適化
 ```
 
 ---
 
-## 4. 設計との関係
+## 4. 仕様との追跡
 
-要件は「何を満たすか」を定める。
+各要件は、対応する`SPECIFICATION.md`の節を示す。
 
-次の詳細は設計文書へ委譲する。
+製品仕様に直接現れない内部整合性要件は、`ARCHITECTURE.md`の該当節を示す。
 
-```text
-JSON field
-path
-Stage名
-Python module
-atomic write手順
-provider request形式
-```
-
-設計が要件を満たせない場合は、要件を弱めず設計を修正する。
+対応節は、上位文書の説明をこの文書へ再掲するためではなく、要件の根拠を確認するために使う。
 
 ---
 
-# Part 1: 機能要件
+# Part 2: 機能要件
 
 ## 5. 機能要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-FR-001` | Storycraftは、一度のBriefまたはKeywords入力から、日本語の長編シリーズを計画・執筆・継続性管理・完結判定・Publication作成まで実行しなければならない。 | 自動全体試験 |
-| `REQ-FR-002` | 生成対象は4〜10巻でなければならない。 | 入力・計画試験 |
-| `REQ-FR-003` | 公開CLIは`run`、`resume`、`step`を提供しなければならない。 | CLI試験 |
-| `REQ-FR-004` | `run`は新規workspaceだけを初期化し、既存workspaceを上書きしてはならない。 | CLI・workspace試験 |
-| `REQ-FR-005` | `resume`は既存workspaceの実行状態を読み、再入力なしで再開しなければならない。 | 再開試験 |
-| `REQ-FR-006` | `step`は最大一つの意味的Stageを完了して返らなければならない。 | Stage境界試験 |
-| `REQ-FR-007` | 開始時の入力はBriefまたはKeywordsの正確に一方でなければならない。 | 入力試験 |
-| `REQ-FR-008` | Keywords入力から生成したBriefは、利用者のKeyword、avoid、ending、volume hintを保持しなければならない。 | Brief生成試験 |
-| `REQ-FR-009` | 初期設計はConcept、人物、Relationship、World、Thread、Ending、Knowledgeを含まなければならない。 | 初期設計試験 |
-| `REQ-FR-010` | Series planは全巻の役割、主人公変化、主要Relationship変化、主要Thread進行、Endingへの到達を定義しなければならない。 | Series plan試験 |
-| `REQ-FR-011` | 各Volume planは、その巻開始時の実際のStory状態と前巻Handoffを参照しなければならない。 | Volume plan試験 |
-| `REQ-FR-012` | 各Chapter planは、親Volume planと現在のStory状態を参照し、順序付きScene planを持たなければならない。 | Chapter plan試験 |
-| `REQ-FR-013` | 採用済みplanは上書きしてはならない。修正が必要な場合は新しいversionを作らなければならない。 | 不変性試験 |
-| `REQ-FR-014` | Scene CardはPOV、参加人物、場所、目的、必須beat、開示、禁止開示、許可更新を定義しなければならない。 | Scene Card試験 |
-| `REQ-FR-015` | 本文生成へ渡す情報は、Scene執筆に必要な情報だけに限定しなければならない。 | Writer Context試験 |
-| `REQ-FR-016` | 本文生成結果は自然な日本語のScene本文だけでなければならない。 | 本文形式試験 |
-| `REQ-FR-017` | 本文生成結果にJSON、front matter、heading、箇条書き、表、code fence、内部metadataを含めてはならない。 | 本文形式試験 |
-| `REQ-FR-018` | 継続性更新は凍結済み本文に実際に書かれた変化だけを対象にしなければならない。 | 継続性試験 |
-| `REQ-FR-019` | 継続性更新はScene Cardで許可された対象だけを変更しなければならない。 | 許可更新試験 |
-| `REQ-FR-020` | 通常Sceneは新しいMajor Thread、Ending条件、Temporal ruleを作成してはならない。 | 禁止更新試験 |
-| `REQ-FR-021` | Reviewは候補の問題点だけを返し、候補を書き換えてはならない。 | Review試験 |
-| `REQ-FR-022` | Revisionは候補全体の置換版を返し、patchやdiffだけを返してはならない。 | Revision試験 |
-| `REQ-FR-023` | 通信失敗、応答形式不正、意味的Revisionは別々に扱い、それぞれ上限を持たなければならない。 | Retry試験 |
-| `REQ-FR-024` | 一つのSceneでは、Scene Card、本文、継続性更新、Scene確定が完了するまで同じ基準Generationを使用しなければならない。 | Scene一貫性試験 |
-| `REQ-FR-025` | Scene確定時は、Scene成果物と新しいGenerationを一時directoryで完成させてから最終directoryへrenameしなければならない。 | Scene確定Crash試験 |
-| `REQ-FR-026` | 各Volume終了時に、実際の巻末状態から次巻または完結判定用のHandoffを作成しなければならない。 | Handoff試験 |
-| `REQ-FR-027` | Handoffは巻末状態の要約と次巻制約を表し、本文全体を再生成または変更してはならない。 | Handoff試験 |
-| `REQ-FR-028` | 完結判定は最終Volume Handoff後に実行しなければならない。 | 完結開始条件試験 |
-| `REQ-FR-029` | 完結判定は`complete`、`complete_with_issues`、`incomplete`のいずれかを返さなければならない。 | 完結判定試験 |
-| `REQ-FR-030` | 意味的に`incomplete`である結果を、`complete`になるまで再試行してはならない。 | incomplete試験 |
-| `REQ-FR-031` | Publicationは採用済みplanとScene本文から、全巻Markdown、巻別Markdown、metadata、完結結果を作成しなければならない。 | Publication試験 |
-| `REQ-FR-032` | Publicationを最終directoryへrenameし、実行状態へ反映した後だけrunを`completed`にしなければならない。 | Publication Crash試験 |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-FR-001` | BriefまたはKeywordsから、日本語長編シリーズの初期設計、計画、Scene執筆、継続性管理、完結判定、Publication作成までを一つの制作工程として実行できなければならない。 | 1, 5, 18 | 全体試験 |
+| `REQ-FR-002` | 一つのシリーズは4〜10巻で構成しなければならない。 | 7 | 入力・計画試験 |
+| `REQ-FR-003` | 公開CLIは、新規実行、再開、一段階実行に対応しなければならない。 | 13〜15 | CLI試験 |
+| `REQ-FR-004` | 新規実行は、既存作品を確認なしで上書きしてはならない。 | 13 | CLI・workspace試験 |
+| `REQ-FR-005` | 再開時は、元のBriefまたはKeywordsの再入力を要求してはならない。 | 14 | 再開試験 |
+| `REQ-FR-006` | 一段階実行は、利用者にとって意味のある一つの処理段階だけを完了して終了しなければならない。 | 15 | Stage境界試験 |
+| `REQ-FR-007` | 新規作品の入力方式は、BriefまたはKeywordsの正確に一方でなければならない。 | 9 | 入力試験 |
+| `REQ-FR-008` | 入力が不足、範囲外、または相互に矛盾する場合は、作品生成を開始せず問題を利用者へ示さなければならない。 | 7, 10〜12 | 入力検証試験 |
+| `REQ-FR-009` | Keywordsから生成したBriefは、必須Keyword、避ける内容、Endingの希望、巻数の希望を保持しなければならない。 | 11 | Brief生成試験 |
+| `REQ-FR-010` | 初期設計は、Concept、主要人物、主要Relationship、世界、Knowledge、主要Thread、Endingの方向、長期的な人物変化を含む一つの整合した作品設計でなければならない。 | 19 | 初期設計試験 |
+| `REQ-FR-011` | シリーズ計画は、各巻の役割、主人公変化、主要Relationship変化、主要Thread進行、重要な開示、危機の拡大、Endingへの到達を定義しなければならない。 | 20 | シリーズ計画試験 |
+| `REQ-FR-012` | 巻計画は、シリーズ計画に加え、巻開始時の実際の作品状態と前巻Handoffを参照しなければならない。 | 21, 36 | 巻計画試験 |
+| `REQ-FR-013` | 章計画は、親巻計画を章の目的、開始状況、終了時の変化、主要な対立、必要な開示、順序付きSceneへ具体化しなければならない。 | 22 | 章計画試験 |
+| `REQ-FR-014` | 採用済みの計画を修正する場合は、既存内容を隠れて上書きせず新しい版として扱わなければならない。 | 20〜22, 62 | 計画版管理試験 |
+| `REQ-FR-015` | Scene Cardは、POV、参加人物、場所、目的、開始状況、必須beat、Conflict、開示制約、許可する継続性更新、終了時の変化を定義しなければならない。 | 23 | Scene Card試験 |
+| `REQ-FR-016` | 本文生成へ渡す情報は、そのSceneの執筆に必要な情報へ限定しなければならない。 | 24, 58〜60 | Writer入力試験 |
+| `REQ-FR-017` | Scene本文は自然な日本語散文であり、JSON、内部識別子、Review結果、実装用metadata、執筆指示を本文として含めてはならない。 | 24 | 本文形式試験 |
+| `REQ-FR-018` | 一つのSceneでは、Scene Card、本文、継続性更新、Scene確定が完了するまで同じ作品状態を基準にしなければならない。 | 25 | Scene基準状態試験 |
+| `REQ-FR-019` | 継続性更新は、確定対象の本文に実際に書かれた変化だけを反映しなければならない。 | 30, 31 | 継続性試験 |
+| `REQ-FR-020` | 継続性更新は、そのSceneで許可された対象だけを変更しなければならない。 | 32 | 許可更新試験 |
+| `REQ-FR-021` | 通常Sceneが主要Thread、Ending条件、世界の基本法則、重要人物の真相などの大きな構造を変更する場合は、明示的な計画または作品設計のRevisionとして扱わなければならない。 | 32 | 禁止更新試験 |
+| `REQ-FR-022` | 継続性更新には、どのSceneのどの本文表現に基づき、何をどのように変更したかを確認できるEvidenceを関連付けなければならない。 | 33 | Evidence試験 |
+| `REQ-FR-023` | 本文が曖昧で状態変化を一意に判断できない場合は、断定的に更新せず、変更なし、不確定状態、Review、人間確認のいずれかとして扱わなければならない。 | 34 | 曖昧性試験 |
+| `REQ-FR-024` | Reviewは候補の問題点を返し、候補そのものを書き換えてはならない。 | 26 | Review試験 |
+| `REQ-FR-025` | Revisionは、Reviewを受けた完全な置換候補を返し、差分だけを永続的な修正版としてはならない。 | 27 | Revision試験 |
+| `REQ-FR-026` | 通信失敗、応答形式不正、意味的Revisionは区別し、それぞれ独立した上限で処理しなければならない。 | 28, 29, 48〜50, 54 | Retry分類試験 |
+| `REQ-FR-027` | Revision上限に達しても問題が残る候補を無理に採用してはならず、停止理由を利用者へ示さなければならない。 | 28, 50 | Revision上限試験 |
+| `REQ-FR-028` | 各巻終了時に、実際の巻末状態を要約したHandoffを作り、次巻計画または完結判定へ引き渡さなければならない。 | 35, 36 | Handoff試験 |
+| `REQ-FR-029` | 完結判定は、全巻、全予定Scene、主要Thread、Ending条件、未完了処理を評価できる状態になった後に実行しなければならない。 | 37, 38 | 完結開始条件試験 |
+| `REQ-FR-030` | 完結判定は`complete`、`complete_with_issues`、`incomplete`のいずれかを返し、意味的な`incomplete`を`complete`になるまで再試行してはならない。 | 39, 40 | 完結判定試験 |
+| `REQ-FR-031` | Publicationは、完結判定が`complete`または`complete_with_issues`の場合だけ、採用済みの計画とScene本文から作成しなければならない。 | 42, 43, 45 | Publication条件試験 |
+| `REQ-FR-032` | `complete_with_issues`でPublicationを作成する場合は、残る注意事項を利用者が確認できるようにし、読者向け本文へ内部警告を自動挿入してはならない。 | 46 | Publication注意事項試験 |
+| `REQ-FR-033` | Publication作成時に、新しいScene、設定、人物の内面、結末を追加してはならない。 | 43, 47 | Publication決定性試験 |
+| `REQ-FR-034` | Publicationには、内部Review、Revision指示、作者用秘密情報、Provider情報、利用量記録、内部Context、障害調査情報を含めてはならない。 | 44 | Publication公開範囲試験 |
 
-# Part 2: データ・保存要件
+# Part 3: データ・保存要件
 
 ## 6. データ・保存要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-DATA-001` | 現在の実行位置を表す正本は`runtime/run-state.json`だけでなければならない。 | 実行状態試験 |
-| `REQ-DATA-002` | `run-state.json`はrun status、current stage、target、current generation、current publication、active candidate、active sceneを持たなければならない。 | Schema試験 |
-| `REQ-DATA-003` | 変更可能なJSONは完全ファイルとしてatomic replacementしなければならない。 | atomic write試験 |
-| `REQ-DATA-004` | 確定済みGeneration、Scene、Publication directoryは上書きしてはならない。 | 不変性試験 |
-| `REQ-DATA-005` | Generationは`canon.json`、`state.json`、`evidence.json`、`commit.json`を持たなければならない。 | Generation試験 |
-| `REQ-DATA-006` | Scene directoryは`scene-card.json`、`prose.md`、`continuity.json`、`commit.json`を持たなければならない。 | Scene artifact試験 |
-| `REQ-DATA-007` | Publication directoryは全巻・巻別Markdown、metadata、completion resultを持たなければならない。 | Publication layout試験 |
-| `REQ-DATA-008` | Evidenceは少なくともScene ID、本文引用、更新対象、変更内容を持たなければならない。 | Evidence試験 |
-| `REQ-DATA-009` | Evidenceの本文引用は採用済みScene本文で確認できなければならない。 | Evidence照合試験 |
-| `REQ-DATA-010` | Hashは原則として保存契約へ含めてはならない。 | Schema・文書試験 |
-| `REQ-DATA-011` | Manifest graph、Publication Gate、独立HEAD／CURRENT pointerをVersion 1の正本として使用してはならない。 | 構成試験 |
-| `REQ-DATA-012` | IDは必要な種類だけを単調増加で管理し、使用前にcounterへ保存し、失敗した番号を再利用してはならない。 | ID試験 |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-DATA-001` | 現在のrun位置を表す独立した正本は一つだけでなければならない。 | 14, 51, 52 | Authority試験 |
+| `REQ-DATA-002` | 変更可能な永続状態は、部分的な書換えではなく完全な状態として安全に更新しなければならない。 | 14, 51 | 状態更新Crash試験 |
+| `REQ-DATA-003` | 複数ファイルで構成される成果物は、不完全な構成を確定済みとして観察できない方法で確定しなければならない。 | 51, 52 | 成果物確定Crash試験 |
+| `REQ-DATA-004` | 確定済みのStory状態、Scene成果物、Publicationは上書きしてはならない。 | 25, 47, 62 | 不変性試験 |
+| `REQ-DATA-005` | Evidenceは、対象Scene、本文引用、更新対象、変更内容を識別できなければならない。 | 33 | Evidence形式試験 |
+| `REQ-DATA-006` | Hashは、具体的な利用目的、検出後の処理、より単純な代替がない理由を説明できない限り、永続データ契約へ含めてはならない。 | 製品仕様外・アーキテクチャ12 | 設計レビュー |
+| `REQ-DATA-007` | 同じ現在状態を表す複数の独立pointer、Manifest、Gateを正本として使用してはならない。 | 製品仕様外・アーキテクチャ13〜14 | Authority構成試験 |
+| `REQ-DATA-008` | 永続識別子は必要な種類だけを単調に割り当て、失敗により未使用となった番号を再利用してはならない。 | 51, 52 | ID試験 |
 
-# Part 3: 運用要件
+# Part 4: 運用要件
 
 ## 7. 運用要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-OPS-001` | 一つのworkspaceへ同時に書き込めるprocessは一つだけでなければならない。 | lock競合試験 |
-| `REQ-OPS-002` | Version 1はローカルfilesystemだけを対象としなければならない。 | 環境・文書試験 |
-| `REQ-OPS-003` | 設定は完全な一つの設定objectとしてmaterializeしなければならない。 | 設定試験 |
-| `REQ-OPS-004` | Credential値は設定fileへ保存せず、環境変数など外部sourceから取得しなければならない。 | Credential試験 |
-| `REQ-OPS-005` | Provider callはconnect、first response、idle、total timeoutを設定できなければならない。 | timeout試験 |
-| `REQ-OPS-006` | Call数、token、cost、経過時間の予算を設定し、次のprovider call前に確認しなければならない。 | budget試験 |
-| `REQ-OPS-007` | 各provider callはStage、target、provider、model、時刻、usage、resultまたはerrorをAuditへ記録しなければならない。 | Audit試験 |
-| `REQ-OPS-008` | Auditは調査用であり、CandidateやStory状態の正本として使用してはならない。 | Recovery試験 |
-| `REQ-OPS-009` | 進捗表示はrun-stateと採用済みplanから計算しなければならない。 | 進捗試験 |
-| `REQ-OPS-010` | 利用者による停止は、安全な保存境界で実行状態へ反映しなければならない。 | 停止試験 |
-| `REQ-OPS-011` | 途中成果物は`runtime/staging/`へ置き、確定後に最終directoryへrenameしなければならない。 | staging試験 |
-| `REQ-OPS-012` | 不完全な一時成果物は必要に応じて`runtime/orphans/`へ移動できるが、自動採用してはならない。 | orphan試験 |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-OPS-001` | 一つのworkspaceへ同時に書き込めるprocessは一つだけでなければならない。 | 3, 65 | 排他試験 |
+| `REQ-OPS-002` | Version 1はローカルfilesystem上の単一利用者workspaceを動作対象としなければならない。 | 3, 6 | 対応環境試験 |
+| `REQ-OPS-003` | 実行開始時に、利用する設定を一つの完全な設定として確定しなければならない。 | 53〜55 | 設定試験 |
+| `REQ-OPS-004` | 利用者は、処理の種類ごとに利用するProviderまたはmodelを設定できなければならない。 | 53 | Provider設定試験 |
+| `REQ-OPS-005` | Credentialはworkspaceへ保存せず、利用者環境の外部sourceから取得しなければならない。 | 56 | Credential試験 |
+| `REQ-OPS-006` | 外部Providerとの通信には、接続、応答開始、応答停止、処理全体を制限できるtimeoutを設定できなければならない。 | 48, 54 | Timeout試験 |
+| `REQ-OPS-007` | Call数、token量、推定費用、経過時間の利用上限を設定でき、新しいProvider callの開始前に上限を確認しなければならない。 | 55 | Budget試験 |
+| `REQ-OPS-008` | 各Provider callについて、処理段階、対象、Provider、model、時刻、usage、結果またはerrorを障害調査用に記録しなければならない。 | 53〜55 | Audit試験 |
+| `REQ-OPS-009` | 進捗表示は、現在の処理段階、巻・章・Scene、完了範囲、停止理由、再開可否、完結判定、Publication結果を利用者が理解できる形で示さなければならない。 | 17 | 進捗表示試験 |
+| `REQ-OPS-010` | 利用者による停止要求は、可能な限り安全な処理境界で反映し、再開可能な状態を残さなければならない。 | 16 | 停止・再開試験 |
 
-# Part 4: 再開・復旧要件
+# Part 5: 再開・復旧要件
 
 ## 8. 再開・復旧要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-REC-001` | 起動時はlock、実行状態、現在Generation、現在Publication、active workの順に確認しなければならない。 | 起動試験 |
-| `REQ-REC-002` | 実行状態が読め、必要な確定済み入力が存在する場合は現在Stageから再開しなければならない。 | resume試験 |
-| `REQ-REC-003` | 不完全な候補、一時directory、Context、Reviewだけが存在する場合は推測採用せず再生成しなければならない。 | 再生成試験 |
-| `REQ-REC-004` | 最終directoryへのrename後、実行状態更新前にCrashした場合は、そのdirectoryが予定された唯一の成果物であり必須fileが読めるときだけ実行状態を更新して再開しなければならない。 | rename後Crash試験 |
-| `REQ-REC-005` | `run-state.json`が読めない場合は自動修復してはならない。 | 破損状態試験 |
-| `REQ-REC-006` | 実行状態が指す確定済みdirectoryが存在しない場合は人間対応としなければならない。 | 欠落成果物試験 |
-| `REQ-REC-007` | 同じIDの確定済みdirectoryが競合する場合は人間対応としなければならない。 | 競合試験 |
-| `REQ-REC-008` | Counterが既存IDより小さい場合は自動的に巻き戻しや再採番をしてはならない。 | counter試験 |
-| `REQ-REC-009` | 完結判定が`incomplete`の場合はPublicationを採用せず人間対応としなければならない。 | incomplete試験 |
-| `REQ-REC-010` | 同じdurable stateに対するRecoveryを繰り返しても、新しいCall ID、Generation、Publication、usageを不必要に作ってはならない。 | 冪等性試験 |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-REC-001` | 起動時は、排他状態、現在の実行状態、必要な確定済み成果物、途中作業の有無を確認しなければならない。 | 14, 51 | 起動確認試験 |
+| `REQ-REC-002` | 現在状態を読み取れ、必要な確定済み入力が存在する場合は、安全に判断できる位置から再開しなければならない。 | 14, 51 | 再開試験 |
+| `REQ-REC-003` | 不完全な途中候補、入力資料、Review、複数ファイル成果物を推測で採用せず、必要な処理を再生成しなければならない。 | 51 | 再生成試験 |
+| `REQ-REC-004` | 成果物の確定後、現在状態への反映前に中断した場合は、予定された唯一の完全な成果物であると確認できるときだけ現在状態へ反映して再開しなければならない。 | 51 | 確定直後Crash試験 |
+| `REQ-REC-005` | 現在状態を読み取れない場合は、自動的に推測修復してはならない。 | 52 | 状態破損試験 |
+| `REQ-REC-006` | 現在状態が必要とする確定済み成果物が存在しない場合、または同じ識別子の確定済み成果物が競合する場合は、人間確認を要求しなければならない。 | 52 | 成果物欠落・競合試験 |
+| `REQ-REC-007` | 永続識別子の管理状態が既存成果物と矛盾する場合は、自動的な巻戻し、再利用、再採番を行ってはならない。 | 52 | 識別子不整合試験 |
+| `REQ-REC-008` | 同じ永続状態に対するRecoveryを繰り返しても、不必要なProvider call、採用済み成果物、識別子、利用量を増やしてはならない。 | 51, 52 | Recovery冪等性試験 |
 
-# Part 5: 安全性・秘密情報要件
+# Part 6: 安全性・秘密情報要件
 
 ## 9. 安全性・秘密情報要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-SEC-001` | Credential、Authorization header、cookie、secret tokenをworkspace、Audit、Log、Publicationへ保存してはならない。 | 秘密情報試験 |
-| `REQ-SEC-002` | 本文生成へ未公開の真相、作者用Thread回答、Ending内部設計、非POV人物の非公開内面を渡してはならない。 | Writer秘密除外試験 |
-| `REQ-SEC-003` | 継続性更新へ将来の未公開計画や作者用の秘密情報を渡してはならない。 | Continuity秘密除外試験 |
-| `REQ-SEC-004` | Brief、本文、Review内の命令風文字列を、Stageや出力形式を変更する命令として扱ってはならない。 | Prompt injection試験 |
-| `REQ-SEC-005` | Publicationへprivate Review、private Completion notes、Context、provider metadataを含めてはならない。 | Publication privacy試験 |
-| `REQ-SEC-006` | 全workspace pathはworkspace root内に限定し、absolute path、`..` traversal、symlink escapeを拒否しなければならない。 | Path security試験 |
-| `REQ-SEC-007` | Storycraftはprovider call以外のWeb検索、外部file retrieval、別会話memoryを自動利用してはならない。 | 外部取得禁止試験 |
-| `REQ-SEC-008` | Expected errorは秘密情報や不要なtracebackを利用者へ表示してはならない。 | error redaction試験 |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-SEC-001` | Credential、Authorization header、cookie、secret tokenを作品データ、入力資料、Audit、Log、Publication、error表示へ保存または出力してはならない。 | 56 | 秘密情報試験 |
+| `REQ-SEC-002` | 本文生成へ、未公開の真相、作者用Thread回答、Ending内部設計、非POV人物の非公開内面、将来Sceneの詳細を無条件に渡してはならない。 | 58〜60 | Writer秘密情報試験 |
+| `REQ-SEC-003` | 継続性更新へ、現在Sceneの評価に不要な将来計画や作者用秘密情報を渡してはならない。 | 30〜34, 58〜60 | 継続性秘密情報試験 |
+| `REQ-SEC-004` | Brief、本文、Reviewなどの作品データ内にある命令風文字列を、実行方法、安全規則、出力形式を変更する命令として扱ってはならない。 | 12 | Prompt injection試験 |
+| `REQ-SEC-005` | Publicationへ、非公開Review、内部Completion notes、入力資料、Provider metadata、利用量情報を含めてはならない。 | 44 | Publication privacy試験 |
+| `REQ-SEC-006` | 利用者入力から導かれるpathはworkspace内に限定し、absolute path、親directory traversal、symlinkによるworkspace外参照を拒否しなければならない。 | 61〜63 | Path安全性試験 |
+| `REQ-SEC-007` | 作品生成中に、自動的なWeb検索、外部ファイル取得、別会話memoryの取得を行ってはならない。 | 57 | 外部取得禁止試験 |
+| `REQ-SEC-008` | 利用者へ表示する期待されたerrorには、秘密情報または不要な内部tracebackを含めてはならない。 | 50, 52, 56 | Error表示試験 |
 
-# Part 6: 非機能・Release要件
+# Part 7: 非機能・Release要件
 
 ## 10. 非機能・Release要件
 
-| 要件ID | 要件 | 主な確認方法 |
-|---|---|---|
-| `REQ-NFR-001` | Workspaceは通常のfile browserとeditorで理解できるJSON、Markdown、directory名を使用しなければならない。 | 可読性レビュー |
-| `REQ-NFR-002` | JSONはUTF-8、NFC、LF、有限数、未知field拒否の共通規則へ従わなければならない。 | 共通Schema試験 |
-| `REQ-NFR-003` | 採用済み本文とPublicationの組み立ては、同じ入力から決定的に再生成できなければならない。 | 再現性試験 |
-| `REQ-NFR-004` | ContextはStageに必要な情報だけを読み込み、シリーズ全体の巨大なmutable objectを前提としてはならない。 | Context性能試験 |
-| `REQ-NFR-005` | 全provider callは最終requestのtoken量をCall開始前に確認しなければならない。 | token試験 |
-| `REQ-NFR-006` | Mandatory testはreal network、real credential、real waitingを必要としてはならない。 | test環境試験 |
-| `REQ-NFR-007` | PromptとSchemaはinstalled package内の一つのasset rootから読み込み、source-tree fallbackを使用してはならない。 | wheel試験 |
-| `REQ-NFR-008` | Release前に正常系、Review／Revision、通信失敗、形式不正、Scene Crash、Publication Crash、秘密除外、incomplete、lock競合を自動試験しなければならない。 | release suite |
+| 要件ID | 要件 | 対応仕様節 | 主な確認方法 |
+|---|---|---|---|
+| `REQ-NFR-001` | 利用者が、通常のfile browserとeditorで入力、計画、Scene本文、継続性、Handoff、完結判定、Publicationを確認できなければならない。 | 61 | 可読性確認 |
+| `REQ-NFR-002` | 構造化データは、UTF-8、日本語文字の一貫した正規化、有限数、明示されたfieldだけを受け付ける共通規則に従わなければならない。 | 64, 67 | 共通形式試験 |
+| `REQ-NFR-003` | 同じ採用済み作品状態からPublicationを再作成した場合、本文の順序と内容を決定的に再構成できなければならない。 | 47 | Publication再現試験 |
+| `REQ-NFR-004` | 外部Providerへ渡す入力資料は、処理に必要な情報へ限定し、作品全体の無制限な読込みを前提としてはならない。 | 16, 58〜60 | 入力資料量試験 |
+| `REQ-NFR-005` | 各Provider callは、最終的に送信する入力のtoken量をCall開始前に確認しなければならない。 | 55 | Token上限試験 |
+| `REQ-NFR-006` | 必須自動試験は、実network、実Credential、実時間の長い待機を必要としてはならない。 | 67, 68 | 試験環境確認 |
+| `REQ-NFR-007` | 配布packageをinstallした環境だけで、実行に必要なPromptと構造定義を解決できなければならない。 | 64, 67 | Package smoke試験 |
+| `REQ-NFR-008` | Release前に、正常系、Review／Revision、通信失敗、形式不正、Scene途中中断、成果物確定直後中断、秘密情報除外、`incomplete`、排他競合を自動試験しなければならない。 | 67, 68 | Release試験 |
 
-# Part 7: 管理
+# Part 8: 管理
 
 ## 11. 要件数
 
 | 分類 | 範囲 | 件数 |
 |---|---|---:|
-| `FR` | `REQ-FR-001`〜`REQ-FR-032` | 32 |
-| `DATA` | `REQ-DATA-001`〜`REQ-DATA-012` | 12 |
-| `OPS` | `REQ-OPS-001`〜`REQ-OPS-012` | 12 |
-| `REC` | `REQ-REC-001`〜`REQ-REC-010` | 10 |
+| `FR` | `REQ-FR-001`〜`REQ-FR-034` | 34 |
+| `DATA` | `REQ-DATA-001`〜`REQ-DATA-008` | 8 |
+| `OPS` | `REQ-OPS-001`〜`REQ-OPS-010` | 10 |
+| `REC` | `REQ-REC-001`〜`REQ-REC-008` | 8 |
 | `SEC` | `REQ-SEC-001`〜`REQ-SEC-008` | 8 |
 | `NFR` | `REQ-NFR-001`〜`REQ-NFR-008` | 8 |
-| **合計** |  | **82** |
+| **合計** |  | **76** |
 
 ## 12. 実装状況との分離
 
-この文書へ実装済み／未実装の状態を書かない。
+この文書へ実装済み、部分実装、未実装の状態を書かない。
 
 実装状況は`IMPLEMENTATION_STATUS.md`へ記録する。
 
 次だけでは要件を満たしたことにならない。
 
 ```text
-設計書に記載した
-似たfieldがある
+設計書へ記載した
+似た名前のfieldが存在する
 legacy testが通る
-happy pathだけ動く
-手動確認で問題がなかった
+正常系だけ動く
+手動確認だけを行った
 ```
 
 要件を満たしたと判断するには、production codeと対応する自動試験が必要である。
 
-## 13. 変更管理
+## 13. 下位設計の制約
 
-要件を変更する場合:
+下位設計は、この文書の要件を満たす範囲で具体的なpath、field、処理順を決定する。
 
-1. 利用者向け意味が変わる場合は`SPECIFICATION.md`も修正する。
-2. 最上位原則と矛盾しないことを確認する。
-3. 対応する設計文書を修正する。
-4. 自動試験を修正する。
+下位設計は次を行ってはならない。
+
+```text
+製品仕様を狭める
+新しい利用者制約を暗黙に追加する
+複数の現在状態authorityを作る
+HashやManifestを根拠なく必須化する
+Acceptance文書だけで新しい仕様を追加する
+```
+
+## 14. 変更管理
+
+要件を変更する場合は、次の順で確認する。
+
+1. `SPECIFICATION.md`の利用者向け意味が変わるか確認する。
+2. `ARCHITECTURE.md`の原則と矛盾しないことを確認する。
+3. 対応する設計文書を更新する。
+4. 対応する自動試験を更新する。
 5. `IMPLEMENTATION_STATUS.md`を更新する。
-6. READMEの説明を最後に更新する。
+6. 最後にREADMEを更新する。
 
-既存実装に合わせて必須要件を弱めてはならない。
+既存実装へ合わせるためだけに必須要件を弱めてはならない。
 
-## 14. この文書の受入条件
+## 15. この文書の受入条件
 
 この文書は次を満たさなければならない。
 
 ```text
 要件IDが一意
-各分類に欠番がない
-合計82件
-すべて日本語で理解できる
-Hash、Manifest、Gateを不要な必須要件として再導入していない
+分類内に欠番がない
+合計76件
+各要件が検証可能
+各要件に上位文書の根拠がある
+具体pathやJSON fieldを要件として固定していない
+Hash、Manifest、Gateを根拠なく再導入していない
 単一writer・ローカルfilesystem前提と一致する
-実装状況を誇張していない
-最上位設計原則へのlinkが解決する
+実装状況を記載していない
 ```
 
 ---
 
-## 15. 最終原則
+## 16. 要件追加時の確認
 
-要件の追加・変更時は、次を確認する。
+新しい要件を追加する前に、次を確認する。
 
 ```text
+利用者または実装のどの問題を解決するか
+既存要件と重複していないか
+製品仕様に根拠があるか
 単一writerでも必要か
 ローカルfilesystemでも必要か
-run-state.jsonで代替できないか
-immutable directoryで代替できないか
-atomic renameで代替できないか
-利用者価値を説明できるか
+下位設計だけで解決できないか
+自動試験で確認できるか
 ```
 
 説明できない要件は追加しない。
