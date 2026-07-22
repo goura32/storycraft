@@ -1,108 +1,98 @@
 # シリーズ生成フロー設計
 
-> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、再開・採用・出力の実装契約は[シリーズエンジン設計方針](series_engine_design.md)とする。この文書は、工程ごとの正本、LLMの責務、変更権限を定める。
+> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、採用・保存・停止の設計正本は[シリーズエンジン設計方針](series_engine_design.md)とする。この文書はLLM呼び出しの依存関係、順番、各呼び出しの責務を定める。
 
-## 目的
+## 1. フローの読み方
 
-利用者が手入力briefまたは自由keywordsを一度だけ渡し、途中確認なしで完結した複巻小説Markdownを得る。keywords時はLLMがbriefを生成し、創作内容を評価せず手入力briefと同じ構造契約だけを通す。継続性情報は本文の補助メモではなく、本文より先に確定するCanonと、場面ごとに更新される現在状態で管理する。
-
-## 工程の流れ
+図の外側は製品フェーズと採用済み正本の順番、各「品質改善対象」の内側はLLMの生成・全体レビュー・一括修正・全体再レビューを表す。レビューのseverityは外側の遷移を止めない。構造検証だけが候補の採否を決める。
 
 ```mermaid
 flowchart TD
-    Brief[手入力brief または keywordsから生成] --> Characters[人物初期台帳]
-    Characters --> Relationships[関係初期台帳]
-    Relationships --> World[世界初期台帳]
-    World --> Timeline[時間初期台帳]
-    Timeline --> Threads[主要項目初期台帳]
-    Threads --> Canon[Canonの横断確認・確定]
-    Canon --> VolumeMap[volume_map: 既存thread IDの巻別配分]
+    Input[入力確定: brief] --> IC[INIT-01 作品コンセプト]
+    IC --> ICR[INIT-02 主要人物・人物関係]
+    ICR --> IWT[INIT-03 世界・temporal_rules]
+    IWT --> ISA[INIT-04 全体変化・伏線・ending criteria]
+    ISA --> ICA[INIT-05 初期Canon・初期State組立]
+    ICA --> IDR[INIT-06 初期設計全体レビュー]
+    IDR --> IDFix[初期設計全体を一括修正]
+    IDFix --> IDR
+    IDR --> InitialAdopt[シリーズ初期設計bundleを採用]
 
-    subgraph PerVolume[巻ごと: volume_map順に反復]
+    subgraph PerVolume[巻ごとに反復]
+      direction TD
+      InitialAdopt --> VD[巻設計]
+      VD --> CD[章設計]
+      subgraph PerChapter[章ごとに反復]
         direction TD
-        Chapters[対象巻の章一覧を1回生成]
-        Chapters --> SelectChapter[未処理の章を選択]
-
-        subgraph PerChapter[章ごと: 章一覧の順に反復]
-            direction TD
-            SelectChapter --> SelectScene[未執筆の場面を選択]
-
-            subgraph PerScene[場面ごと: chapter.scene_count回反復]
-                direction TD
-                SelectScene --> Card[場面カード]
-                Card --> Prose[本文を凍結]
-                Prose --> Continuity[継続性抽出・状態更新]
-                Continuity --> AdoptScene[本文・要約・状態更新を一体で採用]
-            end
-
-            AdoptScene --> MoreScenes{この章に未執筆場面があるか}
-            MoreScenes -- はい --> SelectScene
+        CD --> SCD[場面設計]
+        subgraph PerScene[場面ごとに反復]
+          direction TD
+          SCD --> Prose[本文生成]
+          Prose --> Delta[継続性差分抽出]
+          Delta --> Apply[機械的Canon・現在State更新]
+          Apply --> SceneAdopt[場面採用]
         end
-
-        MoreScenes -- いいえ --> MoreChapters{この巻に未処理の章があるか}
-        MoreChapters -- はい --> SelectChapter
-        MoreChapters -- いいえ --> Summary[巻要約を1回生成]
+        SceneAdopt --> SCD
+      end
+      SceneAdopt --> VH[巻handoff]
     end
-
-    VolumeMap --> Chapters
-    Summary --> MoreVolumes{volume_mapに未処理の巻があるか}
-    MoreVolumes -- はい --> Chapters
-    MoreVolumes -- いいえ --> Closure[完結確認]
-    Closure --> Output[Markdown出力]
+    VH --> Completion[完結監査]
+    Completion --> Output[Markdown出力]
 ```
 
-`volume_map` は確定Canonの既存thread IDを、各巻の `introduce`、`advance`、`resolve` 操作へ配分する。新しい人物、設定、因果、出来事、結末条件は作らない。表示用の `reader_question` は最終巻以外にだけ置き、結末到達条件の唯一の正本はbriefの `ending` とする。全巻の詳細章・場面・本文を最初に固定しない。各巻の章一覧は、その巻の開始時に、確定Canonと対象巻の操作、前巻までの採用済み要約を入力として作る。
+実装時には、ループ終端を章数・場面数・巻数の採用済み設計から決定する。図の自己ループは、未処理の次の場面、章、巻へ進むことを表し、同じ成果物を再生成することを意味しない。
 
-図中の各LLM工程は、別文書の共通ライフサイクル（草稿 → 構造検証 → 批評 → 必要時revision → 最終批評 → 採用）を個別に通る。ここで示す矢印は、**採用済み正本を次の単位へ渡す外側の反復順**である。場面は`scene_card`、`scene`、`continuity`の三工程を完了して初めて採用済み場面になる。
-## 正本と更新権限
+## 2. 共通品質改善呼び出し
 
-| 正本 | 固定情報 | 現在状態 | 更新できる工程 |
+品質改善対象は、初期設計、巻設計、章設計、場面設計、本文、継続性差分、巻handoff、完結意味監査である。各対象は次の呼び出し順を持つ。
+
+```text
+生成 → 機械的検証 → 対象全体レビュー → 全issueを一括修正
+   → 機械的検証 → 対象全体の再レビュー → … → 採用・残存issue保存
+```
+
+- 修正は対象成果物全体と全issueを一回で渡す。issue別・field別・台帳別に分割しない。
+- 上限後は最新の構造正常候補を採用する。残存issueは監査情報であり、停止条件ではない。
+- 構造不正は有限回の生成または再抽出で回復を試みる。枯渇、LLM通信・JSON失敗、レビューJSON不正は停止する。
+
+## 3. 初期設計のLLM呼び出し
+
+| 呼び出し | 採用済み入力 | 出力・責務 | 変更してはならないこと |
 |---|---|---|---|
-| 人物 | プロフィール、物語上の役割 | 目的、圧力、場所、通常知識 | 許可済み場面の状態更新だけ |
-| 関係 | 関係の意味 | 現在の関係、読者が知る関係 | 許可済み場面の状態更新だけ |
-| 世界 | 場所・組織・重要物の事実、規則、利用条件 | 所在、所有、アクセス可否 | 許可済み場面の状態更新だけ |
-| 時間 | 基準時点、期限、移動・回復規則 | 進行、実施済み、失効 | 許可済み場面の状態更新だけ |
-| 主要項目 | 作者の真実、開示規則、導入・回収条件 | 未導入、進行中、回収済み | 許可済み場面の状態更新だけ |
-| volume_map | 巻順、既存thread IDの操作、最終巻以外の表示用問い | なし | Canon確定後のvolume_map工程だけ |
+| INIT-01 `initial_concept` | brief、編集プロファイル | 作品の核、ジャンル、読者体験、テーマ、主対立、終了方向 | 人物台帳詳細、章・場面・本文、ID |
+| INIT-02 `initial_characters_relationships` | brief、INIT-01 | 主人公・中心人物、開始State、関係、認識差、長期変化 | ID、詳細章・場面、未確定世界設定 |
+| INIT-03 `initial_world_temporal_rules` | brief、INIT-01、INIT-02 | 世界、場所、制度、重要物、`temporal_rules`、開始世界State | 全場面時点、ID、人物固定情報 |
+| INIT-04 `initial_series_arcs` | brief、INIT-01〜03 | 長期変化、問い、伏線、重要イベント、major thread、`ending_criteria` | 巻別詳細、本文、ID |
+| INIT-05 `initial_canon_assembly` | INIT-01〜04 | 初期Canon・初期State候補、知識状態 | 大量の新規主要創作、ID |
+| INIT-06 `initial_design_review` | brief、INIT-01〜05、採番済み候補 | 初期設計全体のissue | 候補の直接修正 |
+| `initial_design_revision` | 初期設計全体、INIT-06の全issue、変更範囲 | 一貫した初期設計全体の修正版 | 所有範囲外の変更、ID決定 |
 
-固定プロフィール、世界規則、作者の真実、回収条件、volume_mapは、本文・要約・状態抽出のいずれも変更できない。
+`initial_design_review`は毎回全体を読む。`initial_design_revision`後には差分レビューではなく同じ全体レビューを行う。
 
-## IDと参照
+## 4. 巻から場面までの呼び出し
 
-- 初期台帳を生成するLLMは内容だけを返す。コードが保存時に永続IDを採番する。
-- 関係以降の台帳は、採番済みの既知IDだけを参照できる。
-- 場面カードは必要な既知IDだけを可視IDとして指定する。本文には可視IDに対応する情報だけを渡す。
-- 更新許可IDは可視IDの部分集合である。未知ID、未提示ID、重複ID、固定情報への更新は拒否する。
+| 呼び出し | 入力 | 出力・責務 |
+|---|---|---|
+| `volume_design` | 初期Canon・現在State、全体変化、前巻handoff、対象巻 | 巻目的、読者体験、人物・中心関係の開始/終了目標、thread、対立、巻末問い |
+| `chapter_design` | 対象巻設計、現在Canon・State、前巻handoff | 順序付き章、目的、開始/終了目標、変化、thread action、場面数、章末機能 |
+| `scene_card` | 巻・章設計、現在Canon・State、前場面handoff、`story_clock`、writer可視情報 | POV、場所、時間進行、目的、必須イベント、変化目標、thread action、開示制約、許可更新 |
+| `scene` | 場面カード、writer投影、POV知識、読者開示、前場面handoff | 本文だけ |
+| `continuity_delta` | 凍結本文、場面カード、開始Canon・State、更新許可 | handoff、既存更新、新規項目提案、knowledge、thread、`story_clock`差分 |
 
-## LLMの責務
+`scene`に作者真実、結末条件、他人物だけの秘密、将来の詳細を渡さない。`continuity_delta`は本文を変更せず、Canonを直接更新しない。
 
-| 工程 | 入力正本 | LLMが決めること | LLMが決めてはならないこと |
-|---|---|---|---|
-| brief | 手入力briefの検証、またはkeywordsからの初回brief生成 | keywords時の創作上の選択 | 創作内容の評価・批評・修正。構造契約だけを通す |
-| 初期台帳 | brief、先行台帳 | 新規項目の内容と開始状態 | 永続ID、先行台帳の固定情報 |
-| volume_map | 確定Canonの既存thread IDとbrief | 巻順、thread操作、表示用の問い | 新しい人物・設定・因果・出来事・結末条件、未知ID |
-| 巻・章設計 | 対象volume_map、確定Canon、前巻要約 | 章の目的、開始・終了状態、場面数 | 将来巻の詳細、本文 |
-| 場面カード | 対象章、局所台帳、前場面要約、同巻の時刻下限 | POV、開始終了時刻、場所、登場人物、必須行動、伏線操作、開示・秘匿、許可更新 | 新しい主要設定、未提示主要項目、同巻の確定済み終了時刻より前への逆行 |
-| 本文 | 場面カード、writer view、前場面要約 | 自然な日本語の完成本文 | 状態更新、要約、本文外事実 |
-| 継続性抽出 | 凍結本文、場面カード、許可更新候補 | 本文から完全一致で抜き出した根拠つき要約と実際の状態更新 | 本文の修正、本文外事実、未許可更新、要約・改変した根拠文字列 |
-| 巻要約 | 対象巻の採用済み本文と状態 | 次巻への事実ベースの引継ぎ | 台帳・本文の上書き |
-| 完結監査 | 全採用状態と主要項目 | 根拠不足・未回収の指摘 | 完結の自己承認、未回収項目の書換え |
+## 5. 機械的Canon更新
 
-批評者は対象工程の候補・入力・出力契約を読み、修正可能で根拠のあるissueだけを返す。修正者は対象工程の所有範囲だけを変更し、指摘されていない正しいID・順序・本文事実を失わない。定義済みのrevision回数を尽くした後の最終批評でissueが残った場合、最後に構造契約を通過した候補を受容して下流へ進む。残存issueと受容理由は`state.json`の`quality_acceptances`および出力の`quality-acceptances.json`に保存し、隠さない。最終批評が実行・検証できなかった場合、または候補が構造契約を満たさない場合は停止する。
+`continuity_delta`の後、コードが既存ID、許可field、`before`値、本文の完全一致evidence、新規項目の種別・重複、`story_clock`の単調性を確認する。通過後にコードが新規IDを採番し、既存更新、knowledge、thread、`story_clock`を一括で適用する。
 
-## 本文と継続性の採用
+本文、handoff、検証済み差分、更新済みCanon・現在State、新規項目、`story_clock`を一体で場面採用する。major thread、ending criterion、中心テーマ、作者真実、固定世界規則は本文差分から追加・変更しない。
 
-本文と継続性抽出は別のLLM工程である。本文を先に凍結することで、要約や状態更新が本文にない人物、出来事、秘密、時間経過を創作することを防ぐ。
+## 6. 巻境界と完結
 
-状態更新には、対象ID、現在状態の変更内容、採用場面ID、本文中の根拠を持たせる。コードは根拠、可視性、許可範囲、変更可能フィールドを検証し、本文・要約・更新を一つの場面成果物としてまとめて採用する。
+| 呼び出し・処理 | 入力 | 出力・責務 |
+|---|---|---|
+| `volume_handoff` | 場面handoff、章終了State、巻内Canon差分、人物・関係State、thread状態、`story_clock` | 次巻に必要な事実handoff。全本文の再投入やコード算出値の再計算をしない |
+| `completion_audit` | 全採用状態、required ending criteria、本文evidence候補 | LLM意味監査のissue。結末情報の生成・修正や自己承認をしない |
+| 機械的完結確認 | 計画、本文、thread、ending criteria、artifact | 成果物有無、空本文、required major thread、evidence候補、参照正常性を決定的に確認 |
 
-## 完結条件
-
-完結は以下をすべて満たすときだけ成立する。
-
-1. 登録済みの主要項目がすべて回収済みである。
-2. 最終巻の結末条件を裏付ける採用済み本文がある。
-3. 計画された巻・章・場面に空本文・欠落がない。
-4. 巻本文に重複がない。
-
-LLMの完結監査は補助であり、上記のコード検証を置き換えない。
+機械的完成条件を満たした場合、`completion_audit`の残存issueは保存して出力へ進む。

@@ -1,54 +1,73 @@
 # プロンプトテンプレートと出力契約
 
-> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、工程・正本・更新権限の設計正本は[シリーズ生成フロー設計](series_engine_flow.md)とする。
+> 製品上の正本は[製品仕様](../product/SPECIFICATION.md)、LLM呼び出しの正本は[シリーズ生成フロー設計](series_engine_flow.md)とする。この文書は次期実装でtemplateと出力契約をどう構成するかを定める。現行template・JSON Schemaは今回変更しない。
 
-## 正本と構築責務
+## 1. 基本方針
 
-- 実送信プロンプトの正本は `templates/prompts/`、工程別出力スキーマの正本は `templates/prompts/schemas/` のJSONである。
-- 実送信promptは工程ごとの `user/{stage}/{kind}_{stage}.j2` を正本とする。各fileはその工程の指示・入力・出力スキーマを直接記述し、`*_stage.j2` やJinja includeには依存しない。adapterは工程名で個別fileを選ぶ。
-- `brief` はkeywords入力時だけ生成工程になる。採用条件は手入力briefと共通の構造・型・範囲であり、創作内容の品質やkeywordsとの意味的一致を決定的に検証しない。
-- `volume_map` はCanon確定後だけに生成する。既存thread IDと `introduce` / `advance` / `resolve` を巻へ配分し、新規Canon事実を作らない。
-- 批評・修正も工程ごとのtemplate入口を使い、批評には対象工程の生成スキーマも渡す。brief以外の批評は契約違反だけ、修正は対象工程の所有範囲だけを扱う。
-- `PromptTemplate` はJinja標準`tojson`の `ensure_ascii=False` と `indent=2` を環境ポリシーで一元設定する。テンプレートは整形引数を指定しない。
-- 有効なJSONオブジェクトだけを返す共通プロトコルは `system/common.j2` だけに置く。
-- 採用可否は `series_contracts.py` の決定的検証器が決める。JSON object モードやLLM自己申告だけを信用しない。
+- 一つの製品フェーズは複数のLLM呼び出しを含められる。templateのstage名と製品フェーズを同義にしない。
+- 品質改善対象は、生成、対象全体レビュー、一括修正、対象全体再レビューを共通パターンとする。ただし入力、出力、所有範囲はstageごとに定義する。
+- レビューは意味・品質上のissueを返す補助である。severity、passed/failed、継続可能性を工程停止の指示にしない。
+- templateが返す候補の採否は、LLM自己申告ではなくコードの機械的検証が決める。
+- 修正templateは、対象成果物全体、全issue、変更可能範囲、維持すべき内容を一回で受け取り、整合した成果物全体を返す。issueごと・fieldごとの修正templateは作らない。
+- LLMは永続IDを決めない。コードが検証後に採番する。
 
-## 実送信テンプレート
+## 2. 次期stage一覧
 
-| 用途 | テンプレート | 出力スキーマ |
+| stage | 役割 | 主な出力 |
 |---|---|---|
-| 生成 | `user/{stage}/generate_{stage}.j2` | `schemas/{stage}.json` |
-| 批評 | `user/{stage}/critique_{stage}.j2` | `schemas/critique.json` |
-| 改訂 | `user/{stage}/revision_{stage}.j2` | 生成と同じ `schemas/{stage}.json` |
+| `initial_concept` | INIT-01の作品コンセプト | 作品の核、ジャンル、読者体験、テーマ、対立、終了方向 |
+| `initial_characters_relationships` | INIT-02の人物・関係 | 人物、開始State、関係、認識差、長期変化 |
+| `initial_world_temporal_rules` | INIT-03の舞台・時間規則 | 世界、場所、制度、重要物、`temporal_rules` |
+| `initial_series_arcs` | INIT-04の全体変化 | 主要な問い・伏線・イベント、major thread、`ending_criteria` |
+| `initial_canon_assembly` | INIT-05の構造化 | 初期Canon・初期State・知識状態候補 |
+| `initial_design_review` | INIT-06の全体レビュー | 初期設計全体のissue一覧 |
+| `initial_design_revision` | 初期設計の一括修正 | 初期設計全体の修正版 |
+| `volume_design` | 巻設計 | 巻目的、人物・関係変化、thread、対立、問い |
+| `chapter_design` | 章設計 | 順序付き章、目的、変化、thread action、場面数 |
+| `scene_card` | 場面設計 | POV、開示制約、イベント、更新許可、文字数目安 |
+| `scene` | 本文生成 | 小説本文だけ |
+| `continuity_delta` | 本文後の差分抽出 | handoff、更新、新規項目、knowledge、thread、`story_clock`差分 |
+| `volume_handoff` | 巻境界処理 | 次巻向けの事実handoff |
+| `completion_audit` | 完結意味監査 | ending criteria・未解決へのissue |
 
-生成工程は以下である。
+現行の`brief`は入力確定時のkeywords→brief生成に残せる。既存の`characters`、`relationships`、`world`、`timeline`、`threads`、`volume_map`、`volume_chapters`、`continuity`、`volume_summary`、`closure`は、次期仕様のstageへ置換または責務移管する対象であり、互換名を残すことを要件にしない。
 
-```text
-brief / characters / relationships / world / timeline / threads / volume_map
-/ volume_chapters / scene_card / scene / continuity / volume_summary / closure
-```
+## 3. templateの入出力境界
 
-## 工程別の決定的検証
+### 初期設計
 
-| 工程 | 主な検証 |
-|---|---|
-| `brief` | 手入力briefと同じ必須項目・型・巻数範囲だけ。keywords由来の創作内容は検証・採点しない |
-| `volume_map` | 4〜10巻、配列順の巻順、既存thread IDだけ、majorの `introduce → advance* → resolve` 配分、最終巻以外の `reader_question`、最終巻の空 `reader_question`。結末の正本は `brief.ending` |
-| `characters` | 内容のみでIDなし、固定プロフィールと開始時状態 |
-| `relationships` | 既存人物IDだけを参照し、固定意味と開始時状態を持つ |
-| `world` | 内容のみでIDなし、固定事実・利用規則・開始時状態を分離 |
-| `timeline` | 既知IDだけを参照し、固定規則と開始時状態を持つ |
-| `threads` | 内容のみでIDなし、作者の真実・知識・開示規則・回収条件・開始状態を持つ |
-| `volume_chapters` | 対象巻の章数、章番号、目的、開始・終了状態、場面数 |
-| `scene_card` | 実行対象ID、既知の視点人物・開始終了時刻・場所・登場人物、必須イベント、伏線操作、開示・秘匿、場面終了時の変化、可視ID、可視IDの部分集合である更新許可ID。同じ巻で確定済みの最大終了時刻より前へ開始時刻を戻さない |
-| `scene` | 空でない `content` だけ。状態更新・要約・注釈を含めない |
-| `continuity` | 許可IDだけを更新し、更新根拠は凍結本文からそのままコピーした連続文字列で、完全一致する |
-| `volume_summary` | 既知主要項目だけを参照する巻の引継ぎ要約 |
-| `closure` | 全主要項目の回収済み状態と、本文中の結末根拠 |
+- INIT-01〜04は先行採用済み成果物だけを入力にする。人物・関係、世界・時間規則、全体変化を一回の巨大出力に混ぜない。
+- `initial_canon_assembly`は前段の構造化・統合を主目的とする。前段にない主要創作を大量追加しない。不足補完が必要なら理由を返す。
+- `initial_design_review`はbriefと初期設計全体を読み、候補を直接変更しない。
+- `initial_design_revision`は全issueを同時に解決する初期設計全体を返す。修正後も全体をレビューする。
 
-## 記録と検証手順
+### 巻・章・場面
 
-- 生の要求・応答はシリーズ作業場所の `raw/` にJSONと同stem Markdownで残す。
-- 草稿、批評、修正版、失敗理由、採用済み工程状態は `state.json` に残す。
-- 各工程は検証済み草稿を先に保存する。批評または修正に失敗しても、検証済み草稿を失わない。
-- テストでは、テンプレート展開、外部スキーマ、ID採番、台帳の工程順、本文根拠のない更新拒否、`resume`での採用済み台帳再生成防止を確認する。
+- `volume_design`は人物と中心関係の開始・終了目標を必須の設計対象とし、thread操作だけの配分にしない。
+- `chapter_design`は物語上の意味からthread actionを章へ配置する。コードによる先頭・中央・末尾への固定配分を前提にしない。
+- `scene_card`は作者真実ではなく、writerへ必要な開示制約を渡す。可視ID、更新可能ID・field、`story_clock`に沿う時間進行を明示する。
+- `scene`は本文だけを返す。Canon更新、handoff、注釈を混在させない。作者真実、結末条件、他者の秘密、将来詳細を入力に含めない。
+
+### 差分・監査
+
+- `continuity_delta`は凍結本文だけから、`existing_item_updates`、`new_item_proposals`、`knowledge_updates`、`thread_updates`、`story_clock_update`、`handoff_summary`を返す。根拠は本文からそのままコピーする。
+- `volume_handoff`は場面handoff、巻の差分、現在State、thread状態、`story_clock`を使う。対象巻の全本文を再入力しない。
+- `completion_audit`は意味上の根拠不足・未解決をissueとして返す。結末を生成、修正、自己承認しない。
+
+## 4. 機械的検証との責務分離
+
+| 対象 | templateが守ること | コードが決定的に確認すること |
+|---|---|---|
+| 構造 | 指定したJSON構造を返す | JSON parse、Schema、必須項目、型 |
+| ID | 既知IDを参照し、IDを発番しない | 既知ID、許可ID、重複、コードによる新規ID採番 |
+| 更新 | 許可範囲だけを差分候補にする | field、`before`値、本文evidence完全一致、非重複、`story_clock`非逆行 |
+| 品質 | 全体をレビューし、全issueを一括修正する | review issueを停止条件にせず、構造正常候補を採用 |
+| 完結 | 意味上の裏付けと未解決を指摘する | 必要成果物、本文、major thread、ending criterion、artifact |
+
+## 5. 監査と保存
+
+各呼び出しの要求・応答、正本候補、レビュー、修正、検証結果、残存issue、採用理由を監査可能に保存する。場面では、カード採用、本文凍結、差分抽出を内部checkpointにできるが、本文、handoff、検証済み差分、Canon・現在State更新、新規項目、`story_clock`がそろうまで後続場面への正本を更新しない。
+
+## 6. 実装移行時の確認
+
+template・Schema・validator・workflowを変更する実装タスクでは、各stageの入力所有権、出力Schema、機械的検証、品質ループ、採用・保存単位を同時に整合させる。今回の文書改訂はその設計契約のみを定め、現行のtemplate、JSON Schema、ソースコード、テストを変更しない。
