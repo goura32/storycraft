@@ -1,2432 +1,813 @@
 # Storycraft 実装状況
 
-> [製品仕様](SPECIFICATION.md)が次期正式リリースの正本。本書は、現行コードがその仕様をどこまで満たすかを記録する差分文書であり、製品仕様を現行実装へ合わせて後退させてはならない。
+最終更新日: 2026-07-23
 
-## 1. 結論
+この文書は、Storycraft Version 1について、文書、production code、自動試験、移行作業、Release判断の現在状況を記録する。
 
-現行コードは、旧state version 5と13個のlegacy semantic stageで動作する**機能的prototype**である。
+この文書は仕様や設計の正本ではない。
 
-一方、[製品仕様](SPECIFICATION.md)、[Pipeline contracts](../design/pipeline_contracts.md)、[Ledger contracts](../design/ledger_contracts.md)、[Implementation acceptance](../design/implementation_acceptance.md)が定めるversion-1実装としては、**未受入・未完成**である。
+正本:
 
-現在許可される表現:
+- 製品仕様: [`SPECIFICATION.md`](SPECIFICATION.md)
+- 製品要件: [`REQUIREMENTS.md`](REQUIREMENTS.md)
+- アーキテクチャ: [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)
+- データモデル: [`../design/DATA_MODEL.md`](../design/DATA_MODEL.md)
+- 保存と復旧: [`../design/WORKSPACE_AND_RECOVERY.md`](../design/WORKSPACE_AND_RECOVERY.md)
+- Pipeline: [`../design/PIPELINE.md`](../design/PIPELINE.md)
+- LLM連携: [`../design/LLM_INTEGRATION.md`](../design/LLM_INTEGRATION.md)
+- 受入試験: [`../testing/ACCEPTANCE.md`](../testing/ACCEPTANCE.md)
 
-```text
-legacy prototype:
-  動作確認済み
-
-version-1 design:
-  契約確定済み
-
-version-1 implementation:
-  未実装または部分基盤のみ
-
-release candidate:
-  ではない
-
-production ready:
-  ではない
-```
+この文書へ、新しい仕様、要件、Stage、path、JSON field、Recovery規則を追加してはならない。
 
 ---
 
-## 2. 評価基準日と対象
+# Part I: 状態の意味
 
-```text
-assessment_date = 2026-07-22
-source_archive = storycraft-main (11).zip
-source_archive_sha256 = 3d5e1f6c8ead0b8728596e3500582d7568c408ccb5af91d284ea6880bee138fc
+## 1. 状態分類
 
-project_version = 0.1.0
-pyproject_sha256 = bacf5c72a20099e97c109c4ab5ce83968619acc5eb1e6cd9151731d1075828d
-
-source_python_files = 12
-source_lines = 1876
-source_inventory_sha256 = c44bf1550a148eaf8a3f8c9e6a425bc6f3688e7d35566dd134b7d34da1e42e03
-
-test_files = 8
-test_lines = 1605
-test_inventory_sha256 = 4a3b89194a56b4b67b18fd40c02e9eb8b2a0d391be0c732deaa9e3d036dadcde
-```
-
-この評価は上記snapshotだけを対象とする。
-
----
-
-## 3. Status用語
-
-| status | 意味 |
+| 状態 | 意味 |
 |---|---|
-| `VERIFIED_LEGACY` | 旧実装としてコードとテストで確認できる |
-| `PARTIAL_FOUNDATION` | version-1で考え方または低位部品を再利用できるが、契約を満たさない |
-| `SPEC_ONLY` | 文書契約はあるが、対応するproduction code／acceptance testがない |
-| `BLOCKED_UNVERIFIED` | 実行環境または外部依存の不足により確認できない |
-| `DEPRECATED` | version-1では廃止し、互換authorityとして残さない |
-| `ACCEPTED_V1` |全required acceptance gateを満たす。現時点では該当なし |
+| `完了` | 成果物を作成し、内容確認まで終えている |
+| `配置確認待ち` | 完成版は作成済みだが、対象repositoryへの配置を未確認 |
+| `実装確認待ち` | 設計は存在するが、production codeと自動試験を未確認 |
+| `部分実装` | 一部のproduction codeと対応試験を確認済み |
+| `実装済み` | production codeと必要な自動試験を確認済み |
+| `未着手` | 作業未開始 |
+| `廃止予定` | 新設計への統合後に削除する |
+| `阻害` | 先に解消すべき問題がある |
 
 ---
 
-## 4. 証拠レベル
+## 2. `実装済み`の判定
 
-実装状況は次の順で判定する。
+次をすべて確認した場合だけ`実装済み`とする。
 
 ```text
-production code
-＋
-同じproduction validator／serializer／transactionを使うautomated test
-＋
-Implementation acceptance IDへのtraceability
-＋
-canonical command成功
+production codeが存在
+上位仕様と設計に一致
+対応する自動試験が存在
+正常系が成功
+主要失敗系が成功
+必要なCrash試験が成功
+installed package環境で成功
 ```
 
-次だけではversion-1実装済みとしない。
+次だけでは`実装済み`としない。
 
 ```text
-設計文書に記載されている
-legacy testが通る
-似た名前のfieldがある
-happy pathでファイルが出る
-LLM fakeがobjectを返す
+設計書に記載
+classや型だけ存在
+関数名だけ存在
+正常系を手動実行
+legacy testだけ成功
+fixtureだけ存在
 ```
 
 ---
 
-## 5. Executive status
+## 3. 現時点の確認範囲
 
-| 領域 | 現状 |
+確認済み:
+
+```text
+簡素化した文書構成
+主要文書の完成版
+受入試験項目
+test fixture一式
+旧文書の統合先
+```
+
+未確認:
+
+```text
+対象repositoryへ全成果物が配置済みか
+production codeが新設計へ追従しているか
+59件の受入試験が実装済みか
+71 fileのfixtureが配置済みか
+legacy文書参照をすべて切り替えたか
+package smokeが成功するか
+```
+
+Production codeについて、証拠なしに`実装済み`とは記録しない。
+
+---
+
+# Part II: 文書刷新
+
+## 4. 完成版を作成した成果物
+
+| 成果物 | 状態 | 内容 |
+|---|---|---|
+| `docs/architecture/ARCHITECTURE.md` | `配置確認待ち` | 原則、全体像、主要用語、文書責務 |
+| `docs/product/SPECIFICATION.md` | `配置確認待ち` | 利用者から見える製品仕様 |
+| `docs/product/REQUIREMENTS.md` | `配置確認待ち` | 76件の検証可能要件 |
+| `docs/design/DATA_MODEL.md` | `配置確認待ち` | Storyデータの意味上の正本 |
+| `docs/design/WORKSPACE_AND_RECOVERY.md` | `配置確認待ち` | 保存、排他、Crash Recovery |
+| `docs/design/PIPELINE.md` | `配置確認待ち` | 21 StageとLoop |
+| `docs/design/LLM_INTEGRATION.md` | `配置確認待ち` | Provider、Prompt、Context、Retry等 |
+| `docs/testing/ACCEPTANCE.md` | `配置確認待ち` | 59件の受入試験 |
+| `tests/fixtures/` | `配置確認待ち` | 71 fileのfixture set |
+| `docs/product/IMPLEMENTATION_STATUS.md` | `完了` | この文書 |
+
+Repository上で存在と内容を確認した後、`配置確認待ち`を`完了`へ変更する。
+
+---
+
+## 5. 未作成の文書
+
+| 文書 | 状態 | 目的 |
+|---|---|---|
+| `docs/README.md` | `未着手` | 文書一覧と推奨読書順 |
+| `README.md` | `未着手` | 製品紹介、install、quick start |
+
+---
+
+## 6. 最終文書構成
+
+```text
+README.md
+
+docs/
+├── README.md
+├── product/
+│   ├── SPECIFICATION.md
+│   ├── REQUIREMENTS.md
+│   └── IMPLEMENTATION_STATUS.md
+├── architecture/
+│   └── ARCHITECTURE.md
+├── design/
+│   ├── DATA_MODEL.md
+│   ├── WORKSPACE_AND_RECOVERY.md
+│   ├── PIPELINE.md
+│   └── LLM_INTEGRATION.md
+└── testing/
+    └── ACCEPTANCE.md
+
+tests/
+└── fixtures/
+```
+
+---
+
+# Part III: 旧文書の移行
+
+## 7. Architecture系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/architecture/ARCHITECTURE_PRINCIPLES.md` | `廃止予定` | `ARCHITECTURE.md` |
+| `GLOSSARY.md` | `作成しない` | `ARCHITECTURE.md` |
+| `DOCUMENT_STRUCTURE.md` | `作成しない` | `ARCHITECTURE.md`と`docs/README.md` |
+| `SYSTEM_ARCHITECTURE.md` | `作成しない` | `ARCHITECTURE.md` |
+
+---
+
+## 8. Pipeline・Engine系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/design/series_engine_design.md` | `廃止予定` | `ARCHITECTURE.md`、`PIPELINE.md` |
+| `docs/design/series_engine_flow.md` | `廃止予定` | `PIPELINE.md` |
+| `docs/design/pipeline_contracts.md` | `廃止予定` | `PIPELINE.md` |
+| `docs/design/contracts/pipeline/*` | `廃止予定` | `PIPELINE.md` |
+
+---
+
+## 9. Workspace・Recovery系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/design/workspace_layout.md` | `廃止予定` | `WORKSPACE_AND_RECOVERY.md` |
+| `docs/design/runtime_and_recovery.md` | `廃止予定` | `WORKSPACE_AND_RECOVERY.md` |
+| `docs/design/contracts/ledger/runtime_records.md` | `廃止予定` | `WORKSPACE_AND_RECOVERY.md` |
+| `docs/design/ledger_contracts.md`の保存部分 | `廃止予定` | `WORKSPACE_AND_RECOVERY.md` |
+
+---
+
+## 10. Data系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/design/ledger_contracts.md`の意味部分 | `廃止予定` | `DATA_MODEL.md` |
+| `docs/design/contracts/ledger/*` | `廃止予定` | `DATA_MODEL.md` |
+| `docs/design/contracts/data/*` | `廃止予定` | `DATA_MODEL.md` |
+| `docs/design/data_contract_examples.md` | `廃止予定` | `DATA_MODEL.md`、`tests/fixtures/` |
+| `docs/design/examples/*.md` | `廃止予定` | `tests/fixtures/` |
+
+---
+
+## 11. LLM系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/design/context_contracts.md` | `廃止予定` | `LLM_INTEGRATION.md` |
+| `docs/design/prompt_template_design.md` | `廃止予定` | `LLM_INTEGRATION.md` |
+| `docs/design/configuration_contracts.md` | `廃止予定` | `LLM_INTEGRATION.md`と実装Schema |
+| `docs/design/contracts/data/review_and_audit.md` | `廃止予定` | `DATA_MODEL.md`、`LLM_INTEGRATION.md` |
+
+---
+
+## 12. Acceptance系
+
+| 旧文書 | 状態 | 統合先 |
+|---|---|---|
+| `docs/design/implementation_acceptance.md` | `廃止予定` | `docs/testing/ACCEPTANCE.md` |
+| Markdown内の巨大fixture | `廃止予定` | `tests/fixtures/` |
+
+---
+
+## 13. 旧文書の削除開始条件
+
+```text
+新文書がrepositoryに存在
+相互linkが有効
+root READMEから新文書へ到達可能
+docs/READMEから新文書へ到達可能
+production codeが旧pathへ依存していない
+testが旧fixtureへ依存していない
+repository全体検索で旧参照を把握済み
+```
+
+---
+
+# Part IV: 要件実装
+
+## 14. 要件総数
+
+| 分類 | 件数 | 状態 |
+|---|---:|---|
+| 機能要件 | 34 | `実装確認待ち` |
+| データ・保存要件 | 8 | `実装確認待ち` |
+| 運用要件 | 10 | `実装確認待ち` |
+| 再開・復旧要件 | 8 | `実装確認待ち` |
+| 安全性・秘密情報要件 | 8 | `実装確認待ち` |
+| 非機能・Release要件 | 8 | `実装確認待ち` |
+| **合計** | **76** | `実装確認待ち` |
+
+未実装と断定しているのではなく、production codeと試験の照合が未完了である。
+
+---
+
+## 15. 機能領域
+
+| 領域 | 設計 | Production code | 自動試験 | 状態 |
+|---|---|---|---|---|
+| Brief | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Keywords | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Initial Design | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Series Plan | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Volume Plan | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Chapter Plan | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Scene Plan | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Scene Card | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Scene本文 | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Continuity | 完成 | 未確認 | fixtureあり・test未確認 | `実装確認待ち` |
+| Scene Commit | 完成 | 未確認 | Crash fixtureあり | `実装確認待ち` |
+| Volume Handoff | 完成 | 未確認 | fixtureあり | `実装確認待ち` |
+| Completion | 完成 | 未確認 | 3状態fixtureあり | `実装確認待ち` |
+| Publication | 完成 | 未確認 | 4巻fixtureあり | `実装確認待ち` |
+
+---
+
+## 16. CLI
+
+| 項目 | 状態 | 主な確認 |
+|---|---|---|
+| `run` | `実装確認待ち` | 既存workspaceを上書きしない |
+| `resume` | `実装確認待ち` | Recovery後の正しいStage |
+| `step` | `実装確認待ち` | 一つの意味的Stage |
+| help | `実装確認待ち` | 三commandと利用方法 |
+| error code | `実装確認待ち` | 安定したcode |
+| progress表示 | `実装確認待ち` | Stage、巻、章、Scene、停止理由 |
+
+---
+
+# Part V: データ・保存
+
+## 17. Schema
+
+| 項目 | 状態 |
 |---|---|
-| 製品・設計契約 | 完成した実装前ベースライン |
-| legacy CLI | `VERIFIED_LEGACY` |
-| legacy end-to-end fake flow | `VERIFIED_LEGACY` |
-| version-1 50 Stage engine | `SPEC_ONLY` |
-| version-1 Ledger／Generation／HEAD | `SPEC_ONLY` |
-| Candidate／Checkpoint／Transaction | `SPEC_ONLY` |
-| Volume Handoff Commit | `SPEC_ONLY` |
-| Completion／Publication Gate／CURRENT | `SPEC_ONLY` |
-| Crash／orphan recovery | `SPEC_ONLY` |
-| version-1 Acceptance suite | `SPEC_ONLY` |
-| wheel release gate | `BLOCKED_UNVERIFIED` |
-| real provider integration | `BLOCKED_UNVERIFIED` |
-| release readiness | **未受入** |
+| Brief Schema | `実装確認待ち` |
+| Initial Design Schema | `実装確認待ち` |
+| Plan Schema | `実装確認待ち` |
+| Scene Card Schema | `実装確認待ち` |
+| Continuity Schema | `実装確認待ち` |
+| Generation Schema | `実装確認待ち` |
+| Handoff Schema | `実装確認待ち` |
+| Completion Schema | `実装確認待ち` |
+| Publication Metadata Schema | `実装確認待ち` |
+
+厳密なSchema assetが一つのrootへ統合されているか確認する。
 
 ---
 
-# Part I: 現行コードの確認結果
+## 18. Workspace
 
-## 6. 現行module
+| 項目 | 状態 |
+|---|---|
+| 単一writer lock | `実装確認待ち` |
+| run-state唯一Authority | `実装確認待ち` |
+| Counter予約 | `実装確認待ち` |
+| atomic file replacement | `実装確認待ち` |
+| stagingからfinalize | `実装確認待ち` |
+| immutable final directory | `実装確認待ち` |
+| orphan隔離 | `実装確認待ち` |
+| path traversal防止 | `実装確認待ち` |
 
-```text
-src/storycraft/
-  __init__.py
-  cli.py
-  config.py
-  llm.py
-  log.py
-  prompt_template.py
-  series_contracts.py
-  series_engine.py
-  series_model.py
-  series_output.py
-  series_store.py
-  series_workflow.py
-```
+---
 
-中心構造:
+## 19. 旧保存機構
+
+Production codeに次が残っていないか確認する。
 
 ```text
-SeriesService
-  inherits SeriesWorkflow
-
-SeriesWorkflow
-  inherits ContractValidator
-
-StateStore
-  persists one state.json
-
-OpenAIStoryModel
-  generate / critique / revision
-
-OutputWriter
-  writes final Markdown directly
+canon/HEADをAuthorityにする処理
+output/CURRENTをAuthorityにする処理
+Candidate Manifest
+Checkpoint Manifest
+Generation Manifest graph
+Publication Gate
+hash chain
+Manifest reachability Recovery
 ```
 
 ---
 
-## 7. Public API
+# Part VI: Pipeline
 
-現行で確認できる公開操作:
-
-```text
-SeriesService.run
-SeriesService.resume
-SeriesService.step
-```
-
-Status:
+## 20. 目標Stage
 
 ```text
-VERIFIED_LEGACY
-```
-
-制約:
-
-- version-1の`SeriesService`／`EngineResult`契約ではない;
-- `step`はCanonical Stageを1件だけ実行するとは限らない;
-- Scene処理時はScene Card、本文、continuity、State更新を一つのlegacy `_run_one`で行う。
-
----
-
-## 8. CLI
-
-現行CLI:
-
-```text
-storycraft run
-storycraft resume
-storycraft step
-```
-
-Source-tree CLI helpは、import-only OpenAI stub下で4コマンドすべてexit 0を確認した。
-
-Status:
-
-```text
-VERIFIED_LEGACY
-```
-
-不足:
-
-```text
-version-1 exit-code registry
-safe-stop result
-Run ID／HEAD／CURRENTを含むEngineResult
-package-installed wheel smoke
-credentialなしpackage asset validation
-```
-
----
-
-## 9. Input mode
-
-現行はBriefまたはKeywordsの排他的入力を検証する。
-
-```text
-run:
-  --brief or --keywords required and exclusive
-
-step new workspace:
-  brief or keywords exactly one
-
-resume:
-  initial inputなし
-```
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-差分:
-
-- version-1のKeyword source artifactがない;
-- adopted Briefのimmutable source/hash/profile metadataがない;
-- INPUT-01〜03 Stage境界がない。
-
----
-
-## 10. Workspace lock
-
-現行`StateStore.lock()`はPOSIX `fcntl.flock`のexclusive nonblocking lockを使う。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-確認できること:
-
-```text
-別processによる同一workspaceの同時mutationを拒否
-```
-
-不足:
-
-```text
-lock metadata
-platform capability validation
-Windows対応方針
-security preflight
-startup authority validationとの統合
-```
-
----
-
-## 11. Legacy state persistence
-
-現行は次を一つのファイルへ保存する。
-
-```text
-state.json
-version = 5
-```
-
-保存は:
-
-```text
-temporary sibling
-flush
-file fsync
-replace
-directory fsync
-```
-
-で行う。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-低位のatomic complete-file patternは再利用候補である。
-
-ただしversion-1のRuntime／Ledger authorityではない。
-
----
-
-## 12. Legacy state root
-
-主なfield:
-
-```text
-brief
-keywords
-volume_map
-characters
-relationships
-world
-timeline
-threads
-chapters
-cards
-scenes
-volume_summaries
-attempts
-quality_acceptances
-closure
-completed
-last_completed_unit
-stopped_at
-stop_reason
-_active
-```
-
-Status:
-
-```text
-DEPRECATED
-```
-
-理由:
-
-```text
-story truth
-execution state
-candidate history
-review history
-completion
-```
-
-が一つのmutable objectへ混在している。
-
----
-
-## 13. Legacy workflow dispatch
-
-現行`SeriesWorkflow._run_one()`は、state内の未設定fieldを順に調べて次の処理を決める。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-現行semantic stage名:
-
-```text
-brief
-characters
-relationships
-world
-timeline
-threads
-volume_map
-volume_chapters
+input
+initial_concept
+initial_characters
+initial_relationships
+initial_world
+initial_knowledge
+initial_threads
+initial_ending
+initial_integrate
+initial_accept
+series_plan
+volume_plan
+chapter_plan
+scene_plan
 scene_card
-scene
-continuity
-volume_summary
-closure
+scene_prose
+scene_continuity
+scene_commit
+volume_handoff
+completion
+publication
 ```
 
-Canonical 50 Stage IDはproduction sourceに0件である。
+合計21 Stage。
 
----
-
-## 14. Brief validation
-
-現行は:
-
-```text
-title
-genre
-want
-avoid
-ending
-protagonist
-key_people
-volumes 4..10
-chapters_per_volume
-```
-
-を検証する。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-製品の4〜10巻要件は存在するが、version-1 Brief Schema／source metadata／unknown-field contractとは異なる。
+現在のproduction Stage Registryは未確認である。
 
 ---
 
-## 15. Legacy initial ledgers
+## 21. 廃止対象Stage
 
-現行は別々に生成する。
-
-```text
-characters
-relationships
-world
-timeline
-threads
-```
-
-各候補を簡易validatorで検証後、コードがIDを追加する。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-存在する概念:
-
-```text
-固定情報
-initial_state
-current_state
-major/supporting Thread
-author_truth
-reader/character knowledge-like fields
-```
-
-version-1 Canon／Knowledge／Story State rootとは互換でない。
-
----
-
-## 16. Legacy ID allocation
-
-現行は各arrayへ:
-
-```text
-char-0001
-rel-0001
-entity-0001
-time-0001
-thread-0001
-```
-
-のように、stage完了後のenumerationでIDを付与する。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-不足:
-
-```text
-global persistent counters
-persist-before-use
-local_key
-cross-stage deterministic allocation map
-Evidence／Commit／Generation／Publication／Call ID
-gap preservation
-recovery reconciliation
-```
-
----
-
-## 17. Legacy planning
-
-現行は:
-
-```text
-volume_map
-volume_chapters
-```
-
-を生成する。
-
-確認できる規則:
-
-```text
-4..10巻
-Major Threadのintroduce→resolve巻配分
-非最終巻reader question
-章番号の連続性
-1..4 Scene per Chapter
-```
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-不足:
-
-```text
-Series／Volume／Chapterの独立adopted artifact
-source HEAD
-prior Handoff
-plan hash chain
-immutable plan transaction
-canonical SERIES/VOL/CH Stage
-```
-
----
-
-## 18. Legacy Scene ID
-
-現行Scene ID:
-
-```text
-vNN-cNN-sNN
-```
-
-Status:
-
-```text
-DEPRECATED
-```
-
-version-1 canonical format:
-
-```text
-vNN-cNNN-sNNN
-```
-
-既存IDをversion-1 workspaceへ自動migrationしない。
-
----
-
-## 19. Legacy Scene Card
-
-現行Scene Cardは次を持つ。
-
-```text
-scene_id
-pov_character_id
-location_id
-start_time_id
-end_time_id
-character_ids
-purpose
-required_events
-thread_actions
-reader_disclosure
-withheld_information
-presentation_rules
-end_change
-visible_ids
-allowed_update_ids
-```
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-存在する有用概念:
-
-```text
-POV
-visible set
-allowed update set
-Thread action
-reader disclosure
-withheld information
-time monotonicity
-```
-
-不足:
-
-```text
-content-only candidateとfrozen cardの分離
-source Generation／plan hash
-code-owned before values
-allowed_update_targets union
-new_item_policy
-Knowledge／Ending targets
-Checkpoint manifest
-```
-
----
-
-## 20. Legacy Writer context
-
-現行はScene Cardの`visible_ids`からWriter contextを構成する。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-既存テストは一部の非可視record除外を確認する。
-
-ただしversion-1で必要なbyte-level secret sentinel試験、Writer-safe exact view Schema、non-POV private State filteringは存在しない。
-
----
-
-## 21. Legacy prose
-
-現行model responseは:
-
-```json
-{"content":"..."}
-```
-
-を要求し、空でない本文を検証する。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-version-1はraw prose text responseであり、JSON wrapperを禁止する。
-
-現行はheading／list／table／code fenceなどのprose format contractも完全には検証しない。
-
----
-
-## 22. Legacy continuity
-
-現行continuityは:
-
-```text
-handoff_summary
-state_updates[]
-```
-
-を返す。
-
-各updateは:
-
-```text
-source_scene_id
-id
-field
-value
-evidence
-```
-
-を持つ。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-存在する有用概念:
-
-```text
-Scene Cardのallowed_update_ids
-本文substring evidence
-Character／Major Threadのfield制限
-最終SceneでMajor Thread resolve要求
-```
-
-不足:
-
-```text
-candidate／committed delta分離
-before値
-typed union
-Knowledge update
-new item proposal
-Ending Evidence proposal
-literal quote一意性
-Unicode code-point offset
-quote/prose hash
-Evidence ID／index
-bidirectional root diff
-```
-
----
-
-## 23. Legacy State mutation
-
-continuityの`state_updates`を、同じ`state.json`内のrecord `current_state`へ直接適用する。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-Scene Card、prose、delta、State、Scene appendを一つのGeneration transactionとして保存しない。
-
-`canon/HEAD`も存在しない。
-
----
-
-## 24. Legacy Review／Revision
-
-現行は全legacy stageで:
-
-```text
-generate
-critique
-revision
-```
-
-を実行できる。
-
-`quality.max_critique_passes`に従ってloopし、上限後はknown issueを`quality_acceptances`へ記録して採用する場合がある。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-有用概念:
-
-```text
-semantic issueとcandidate revision
-full root objectを求める一部prompt
-known issue persistence
-```
-
-不足:
-
-```text
-generic Review Schema
-versioned candidate directory
-version-local Review
-Candidate manifest
-logical owner
-residual issue JSONL
-mechanical／semantic分類の完全分離
-max_revision_rounds契約
-```
-
-`critique`用語とAPIはversion-1で廃止する。
-
----
-
-## 25. Legacy attempt history
-
-現行`state["attempts"]`へ、draft／critique／revisionのinput、response、validationを記録する。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-これはcandidate/audit authorityではない。
-
-不足:
-
-```text
-Call ID
-immutable unique filename
-Context hash
-prompt／Schema version
-usage
-provider timing
-redaction contract
-candidate linkage
-```
-
----
-
-## 26. Legacy Volume summary
-
-各巻後に`volume_summary`と`unresolved_thread_ids`を生成する。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-version-1 Volume Handoffの代用ではない。
-
-現行summaryは独立Commit／Generationを作らず、`volume_disposition`だけを更新するtransactionもない。
-
----
-
-## 27. Legacy closure
-
-全巻後に`closure`を生成し:
-
-```text
-resolved_ids
-ending_evidence
-ending_authority
-```
-
-を検証する。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-version-1 Completion auditの代用ではない。
-
-不足:
-
-```text
-COMP-PRE
-Completion Context
-attempt-NN
-complete／complete_with_residual_issues／incomplete
-first structurally valid attempt
-private accepted audit
-valid incomplete nonretry
-```
-
----
-
-## 28. Legacy output
-
-現行`OutputWriter`は:
-
-```text
-output/
-  volume-01.md
-  volume-02.md
-  ...
-  series.md
-  quality-acceptances.json
-```
-
-を作る。
-
-一時directoryへ書き、既存outputをbackupしてrenameする。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-有用概念:
-
-```text
-plan順のVolume／Chapter／Scene assembly
-空本文・重複本文の簡易検証
-staging directory
-```
-
-不足:
-
-```text
-Publication ID
-manuscript/metadata/reports layout
-Publication Validation
-payload/content/snapshot hash
-final Manifest
-external Gate
-output/CURRENT
-OUT-01〜03
-post-rename recovery
-directory fsync
-```
-
----
-
-## 29. Legacy LLM adapter
-
-現行`LLMClient`はOpenAI-compatible endpointへstreaming callを行う。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-存在:
-
-```text
-provider base URL／model
-streaming content収集
-thinking metadata
-attempt seed
-transport error capture
-raw log保存
-```
-
-重大な差分:
-
-```text
-api_key = "ollama" hardcoded
-timeout=None
-strict json_schema未使用
-usage accountingなし
-Call ID counterなし
-request cancellationなし
-provider adapter protocolなし
-```
-
----
-
-## 30. Timeout実装
-
-設定には:
-
-```text
-first_event_timeout_seconds
-idle_timeout_seconds
-```
-
-がある。
-
-しかし現行同期stream反復は`next(chunk)`でblockし、watchdog threadはlogだけを行う。
-
-`idle_timeout`判定も次のchunk受信後に実行される。
-
-Status:
-
-```text
-SPEC_ONLY for reliable timeout
-```
-
-現行は次を保証しない。
-
-```text
-first-event timeoutで実際にcallを中断
-idle timeout中のblockを中断
-total call timeout
-connect timeout
-safe cancellation
-```
-
----
-
-## 31. Legacy prompt loader
-
-現行は:
-
-```text
-one common system prompt
-category/stage inference
-critique special case
-Jinja generic kwargs
-source-tree fallback
-singleton loader
-```
-
-を使う。
-
-Status:
-
-```text
-DEPRECATED
-```
-
----
-
-## 32. Legacy prompt assets
-
-現行inventory:
-
-```text
-Jinja templates = 40
-JSON Schema files = 14
-legacy semantic stages = 13
-```
-
-Schemaはprompt textへ整形して埋め込み、providerには:
-
-```text
-{"type":"json_object"}
-```
-
-を渡す。
-
-Status:
-
-```text
-DEPRECATED
-```
-
-version-1 strict `json_schema`、30 LLM Stage registry、package-only asset bundleではない。
-
----
-
-## 33. Raw LLM logs
-
-現行は各callの送信message、受信content、timing metadataを:
-
-```text
-raw/*.json
-raw/*.md
-```
-
-へ保存する。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-不足:
-
-```text
-persistent Call ID
-append-safe unique filename
-credential／body redaction policy
-audit compression
-retention/capacity
-prompt／Schema／Context/config identity
-raw audit nonpromotion recovery
-```
-
----
-
-## 34. Configuration
-
-現行`Settings`はYAML、default、いくつかの環境変数overrideを扱う。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-現行主なsection:
-
-```text
-llm
-retry
-quality
-output
-diversity
-```
-
-version-1のcomplete Effective config、immutable fingerprint、operation map、budget、pricing、publishing profile、audit policy、resume mutabilityはない。
-
----
-
-## 35. Signal handling
-
-現行CLIはSIGTERMで`SystemExit`を即時raiseし、終了logをflushする。
-
-Status:
-
-```text
-PARTIAL_FOUNDATION
-```
-
-version-1 safe-stopではない。
-
-atomic transactionまたはprovider call中にsignalを受けた場合、登録されたdurable boundaryまで待つStopControllerがない。
-
----
-
-# Part II: 現行テスト証拠
-
-## 36. Syntax gate
-
-実行結果:
-
-```text
-PYTHONPATH=<import-only-openai-stub>:src
-python -m compileall -q src tests
-
-result = PASS
-```
-
-Status:
-
-```text
-VERIFIED_LEGACY
-```
-
----
-
-## 37. Canonical unittest command
-
-実行結果:
-
-```text
-PYTHONPATH=<import-only-openai-stub>:src
-python -m unittest discover -s tests -p "test_*.py"
-
-Ran 83 tests
-16 subtests
-OK
-```
-
-Status:
-
-```text
-VERIFIED_LEGACY
-```
-
-注意:
-
-- `openai` packageが評価環境に無かったため、importだけを成立させるtemporary stubを使用した;
-- testsはreal provider clientを生成しない;
-- この成功はlegacy test contractの証拠である;
-- version-1 acceptance IDの証拠ではない。
-
----
-
-## 38. Dependency-independent subset
-
-OpenAI依存moduleをimportしない6 test file:
-
-```text
-52 passed
-3 subtests passed
-```
-
-Status:
-
-```text
-VERIFIED_LEGACY
-```
-
----
-
-## 39. Direct pytest result
-
-通常の:
-
-```text
-python -m pytest -q
-```
-
-はpackage未installのため:
-
-```text
-ModuleNotFoundError: storycraft
-```
-
-でcollection失敗した。
-
-`PYTHONPATH=src`では:
-
-```text
-ModuleNotFoundError: openai
-```
-
-で2 test moduleがcollection失敗した。
-
-これはcode defectと断定しないが、評価環境でcanonical dependency installationが成立していないことを示す。
-
----
-
-## 40. Acceptance traceability
-
-現行tests内の:
-
-```text
-ACC-*
-```
-
-記載数:
-
-```text
-0
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
-現行83 testsをversion-1 acceptance IDへ自動的に対応付けてはならない。
-
----
-
-## 41. Source-tree CLI smoke
-
-import-only OpenAI stub＋`PYTHONPATH=src`で:
-
-```text
-storycraft --help
-storycraft run --help
-storycraft resume --help
-storycraft step --help
-```
-
-相当のmodule実行は全てexit 0だった。
-
-Status:
-
-```text
-VERIFIED_LEGACY
-```
-
-これはwheel-installed CLI smokeではない。
-
----
-
-## 42. Wheel smoke
-
-Repositoryには:
-
-```text
-scripts/wheel_smoke.sh
-```
-
-がある。
-
-しかし評価環境では:
-
-```text
-hatchling = missing
-build = missing
-openai = missing
-```
-
-であり、`pip wheel --no-build-isolation`は:
-
-```text
-BackendUnavailable: Cannot import hatchling.build
-```
-
-で失敗した。
-
-Status:
-
-```text
-BLOCKED_UNVERIFIED
-```
-
-さらに現行scriptはlegacy `closure`／legacy prompt assetを確認するため、成功してもversion-1 packaging gateにはならない。
-
----
-
-## 43. Real provider test
-
-実provider endpoint、credential、stream timeout、strict Schema、usage取得を含むintegration testは実行していない。
-
-Status:
-
-```text
-BLOCKED_UNVERIFIED
-```
-
-Mandatory version-1 suiteはreal networkを必要としないため、これはrelease acceptanceの代用ではない。
-
----
-
-# Part III: Version-1との差分
-
-## 44. Canonical Stage engine
-
-Required:
-
-```text
-50 exact Stage IDs
-one StageRegistry
-typed StageSpec
-validated transition graph
-one canonical Stage per step
-```
-
-Current:
-
-```text
-13 legacy semantic names
-one large _run_one conditional
-missing-field inference
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 45. Engine architecture
-
-Required:
-
-```text
-SeriesService
-Engine
-StageRegistry
-Stage executors
-Domain services
-Repositories
-Provider adapter
-```
-
-Current:
-
-```text
-SeriesService inherits SeriesWorkflow
-SeriesWorkflow inherits ContractValidator
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 46. Runtime roots
-
-Required:
-
-```text
-runtime/run-manifest.json
-runtime/run-state.json
-runtime/counters.json
-runtime/effective-config.json
-```
-
-Current:
-
-```text
-state.json version 5
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 47. Canonical serialization
-
-Required:
-
-```text
-NFC
-deterministic key order
-strict numeric handling
-contract array order
-compact canonical JSON
-exact final LF
-stable SHA-256
-```
-
-Current:
-
-```text
-json.dump(..., ensure_ascii=False, indent=2)
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
-Atomic replacement aloneはcanonical serializationの証拠ではない。
-
----
-
-## 48. Managed path security
-
-Required:
-
-```text
-relative POSIX path
-fixed case
-no traversal
-no absolute path
-symlink／junction escape prevention
-fixed-width coordinates
-```
-
-Current production codeに専用path validatorはない。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 49. Canon／Knowledge roots
-
-Required:
-
-```text
-current-canon.json
-knowledge-items.json
-```
-
-Current:
-
-```text
-characters
-relationships
-world
-timeline
-threads
-```
-
-をstate.json内へ保存する。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 50. Story State root
-
-Required:
-
-```text
-character_states
-relationship_states
-thread_states
-knowledge_states
-story_clock
-```
-
-Current:
-
-```text
-各legacy record内のcurrent_state
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 51. Evidence ledger
-
-Required:
-
-```text
-evidence-index.json
-Evidence ID
-quote uniqueness
-code-point offsets
-quote／prose hash
-Commit link
-```
-
-Current:
-
-```text
-state_update.evidence substring
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 52. Genesis
-
-Required:
-
-```text
-INIT-01〜06／REV／ID
-integrated bundle
-local_key
-deterministic ID mapping
-Generation 00000000
-Commit 00000000
-HEAD-last
-```
-
-Currentは5個のlegacy ledgerを順次生成・即採番する。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 53. Immutable planning artifacts
-
-Required:
-
-```text
-plans/series-map.json
-plans/volumes/vNN/volume-design.json
-plans/volumes/vNN/chapters/cNNN/chapter-design.json
-```
-
-Currentは`state.json`内の`volume_map`／`chapters`だけである。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 54. Candidate versions
-
-Required:
-
-```text
-runtime/candidates/.../vNNNN/
-candidate artifact
-review.json
-candidate-manifest.json
-```
-
-Currentはstate内`attempts`と現在candidateのin-memory variableである。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 55. Scene Checkpoint
-
-Required phases:
-
-```text
-CARD_ACCEPTED
-PROSE_FROZEN
-DELTA_ACCEPTED
-COMMIT_PREPARED
-```
-
-CurrentにCheckpoint manifestはない。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 56. Scene Commit
-
-Required:
-
 ```text
+SC-CHK
+PROSE-CHK
+DELTA-CHK
 COMMIT-01
 COMMIT-02
 COMMIT-03
 COMMIT-04
-copy-on-write roots
-Evidence
-Scene／Commit／Generation manifest
-HEAD-last
-```
-
-Currentはcontinuity後にstate.jsonへ直接mutationする。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 57. `canon/HEAD`
-
-Current sourceの:
-
-```text
-canon/HEAD
-generation-manifest
-commit-manifest
-candidate-manifest
-checkpoint-manifest
-```
-
-実装参照数:
-
-```text
-0
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 58. Volume Handoff Commit
-
-Required:
-
-```text
-VH-01／02／REV／ID
-artifacts/handoffs/vNN.json
-commit_type = volume_handoff
-volume_disposition-only change
-Story clock unchanged
-```
-
-Currentには`volume_summary`だけがある。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 59. Completion
-
-Required:
-
-```text
 COMP-PRE
-COMP-AUDIT
 COMP-SAVE
-first structurally valid attempt
-complete／complete_with_residual_issues／incomplete
-```
-
-Currentにはlegacy `closure`だけがある。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 60. Publication
-
-Required:
-
-```text
 OUT-01
 OUT-02
-COMP-PUBLISH
 OUT-03
-Publication ID
-Validation
-Manifest
-Gate
-CURRENT-last
+COMP-PUBLISH
 ```
 
-Currentは`output/`を直接置換する。
-
-Status:
-
-```text
-SPEC_ONLY
-```
+必要な処理は内部operationへ統合する。
 
 ---
 
-## 61. Recovery
+## 22. Review／Revision
 
-Required:
+| 項目 | 状態 |
+|---|---|
+| ReviewがCandidateを書き換えない | `実装確認待ち` |
+| Revisionが完全置換 | `実装確認待ち` |
+| Revision後に再Review | `実装確認待ち` |
+| transport／format／revision分離 | `実装確認待ち` |
+| 上限到達時にblocked | `実装確認待ち` |
+
+---
+
+# Part VII: LLM連携
+
+## 23. Provider Adapter
+
+| 項目 | 状態 |
+|---|---|
+| 共通Adapter interface | `実装確認待ち` |
+| Provider error正規化 | `実装確認待ち` |
+| Usage正規化 | `実装確認待ち` |
+| structured response | `実装確認待ち` |
+| prose response | `実装確認待ち` |
+| streaming中断 | `実装確認待ち` |
+
+---
+
+## 24. Prompt asset
+
+| 項目 | 状態 |
+|---|---|
+| 一つのPrompt asset root | `実装確認待ち` |
+| installed packageへ同梱 | `実装確認待ち` |
+| source tree fallbackなし | `実装確認待ち` |
+| Prompt version | `実装確認待ち` |
+| Operation Registry | `実装確認待ち` |
+
+---
+
+## 25. Context
+
+| 項目 | 状態 |
+|---|---|
+| basis Generation明示 | `実装確認待ち` |
+| operation別最小Context | `実装確認待ち` |
+| Writer秘密情報filter | `実装確認待ち` |
+| 非POV内面の除外 | `実装確認待ち` |
+| token上限前確認 | `実装確認待ち` |
+| hash名Context path廃止 | `実装確認待ち` |
+
+---
+
+## 26. Credential・Audit
+
+| 項目 | 状態 |
+|---|---|
+| Credentialをworkspace外から取得 | `実装確認待ち` |
+| request記録から秘密値を除外 | `実装確認待ち` |
+| log redaction | `実装確認待ち` |
+| Call IDとattempt | `実装確認待ち` |
+| Stage・operation・usage | `実装確認待ち` |
+
+---
+
+# Part VIII: Recovery
+
+## 27. 三分類
 
 ```text
-reconcile
 resume
 regenerate
-quarantine
-explicit recovery
-manual intervention
+manual
 ```
 
-Current`resume`はstate.jsonをloadし、missing fieldから続行する。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
-Candidate／Checkpoint／transaction／HEAD／CURRENTのcrash matrixはない。
+この分類がproduction codeへ実装されているか確認する。
 
 ---
 
-## 62. Counters and usage
+## 28. Scene Commit Crash
 
-Required:
-
-```text
-Call ID
-Commit／Generation ID
-Evidence ID
-Publication ID
-story-record IDs
-usage
-retry／revision
-cost
-active elapsed
-```
-
-Current:
-
-```text
-in-memory seed sequence
-state attempts
-quality_acceptances
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 63. Safe stop
-
-Required:
-
-```text
-stop request flag
-registered durable boundary
-no asynchronous mutation interruption
-resume-compatible stopped state
-```
-
-Current:
-
-```text
-SIGTERM → immediate SystemExit
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 64. Prompt bundle
-
-Required:
-
-```text
-package-only asset root
-prompt-bundle.json
-schema-bundle.json
-registry.json
-30 exact LLM Stage specs
-14 exact current response Schemas
-strict Stage/version compatibility
-```
-
-Current:
-
-```text
-legacy source-tree templates
-source-tree fallback
-category/stage inference
-```
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 65. Context snapshots
-
-Required:
-
-```text
-hash-named immutable Context
-source refs
-view type／sensitivity
-token budget
-Writer／Continuity secret exclusion
-```
-
-CurrentはPython dictを直接templateへ渡す。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 66. Security acceptance
-
-Required:
-
-```text
-credential absent everywhere
-prompt injection boundary
-Writer／Continuity private sentinel exclusion
-managed path security
-audit redaction
-no external retrieval
-```
-
-Currentには一部のvisible context、safe error type、hardcoded Ollama keyがあるが、version-1 security gateはない。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-## 67. Performance acceptance
-
-Required:
-
-```text
-fake clock
-no real wait
-deterministic tokenizer
-Context scaling
-startup scaling
-large manuscript assembly
-```
-
-Current mandatory testsに完全なfake clock／tokenizer／capacity／fault-injecting filesystemはない。
-
-Status:
-
-```text
-SPEC_ONLY
-```
-
----
-
-# Part IV: Acceptance group status
-
-## 68. Core and path
-
-| acceptance area | status | current evidence |
+| Crash位置 | 期待結果 | 状態 |
 |---|---|---|
-| `ACC-CORE-*` | `SPEC_ONLY` | atomic pretty-JSON saveのみ |
-| `ACC-PATH-*` | `SPEC_ONLY` | managed path validatorなし |
+| pending設定前 | stagingを再生成 | `実装確認待ち` |
+| Scene rename後 | Generation finalizeまたは人間対応 | `実装確認待ち` |
+| Generation rename後 | run-state更新のみ | `実装確認待ち` |
+| run-state更新後 | pending整理 | `実装確認待ち` |
 
 ---
 
-## 69. Configuration
+## 29. Publication Crash
 
-| acceptance area | status | current evidence |
+| Crash位置 | 期待結果 | 状態 |
 |---|---|---|
-| `ACC-CFG-*` | `PARTIAL_FOUNDATION` | YAML/default/env override、legacy retry/quality/timeouts |
-| complete Effective config | `SPEC_ONLY` | なし |
-| immutable fingerprint | `SPEC_ONLY` | なし |
-| budgets/pricing/publishing/audit limits | `SPEC_ONLY` | なし |
+| rename前 | stagingを再生成 | `実装確認待ち` |
+| rename後 | current Publicationとcompletedを更新 | `実装確認待ち` |
+| completed更新後 | pending整理 | `実装確認待ち` |
 
 ---
 
-## 70. Ledger data
+## 30. 自動修復禁止
 
-| acceptance area | status |
-|---|---|
-| `ACC-CANON-*` | `SPEC_ONLY` |
-| `ACC-STATE-*` | `SPEC_ONLY` |
-| `ACC-EVID-*` | `SPEC_ONLY` |
-| `ACC-INIT-DATA-*` | `SPEC_ONLY` |
-| `ACC-PLAN-DATA-*` | `SPEC_ONLY` |
-| `ACC-SCENE-DATA-*` | `PARTIAL_FOUNDATION` only for legacy analogous concepts |
-| `ACC-REV-*` | `PARTIAL_FOUNDATION` only for legacy critique/revision |
-
----
-
-## 71. Context and Runtime
-
-| acceptance area | status |
-|---|---|
-| `ACC-CTX-*` | `SPEC_ONLY` |
-| `ACC-RUN-*` | `SPEC_ONLY` |
-
----
-
-## 72. Pipeline
-
-| acceptance area | status |
-|---|---|
-| `ACC-PIPE-INIT-*` | `SPEC_ONLY` |
-| `ACC-PIPE-PLAN-*` | `SPEC_ONLY` |
-| `ACC-PIPE-SCENE-*` | `SPEC_ONLY` |
-| `ACC-COMMIT-*` | `SPEC_ONLY` |
-| `ACC-VH-*` | `SPEC_ONLY` |
-| `ACC-OUT-*` | `SPEC_ONLY` |
-
-Legacy flow tests are not these acceptance groups.
-
----
-
-## 73. Recovery and security
-
-| acceptance area | status |
-|---|---|
-| `ACC-REC-*` | `SPEC_ONLY` |
-| `ACC-SEC-*` | `SPEC_ONLY` |
-
----
-
-## 74. CLI, package, prompt, performance
-
-| acceptance area | status |
-|---|---|
-| `ACC-CLI-*` | `PARTIAL_FOUNDATION` for source-tree legacy help/API |
-| `ACC-PKG-*` | `BLOCKED_UNVERIFIED` and legacy script |
-| `ACC-PROMPT-*` | `SPEC_ONLY` |
-| `ACC-PERF-*` | `SPEC_ONLY` |
-| `ACC-FIX-*` | `SPEC_ONLY` in production tests |
-
----
-
-## 75. Accepted version-1 IDs
+次が自動実行されていないことを確認する。
 
 ```text
-accepted_version_1_acceptance_ids = 0
-```
-
-この値は、current testsが0件という意味ではない。
-
-```text
-legacy automated tests:
-  83 tests + 16 subtests pass under stated stub condition
-
-version-1 acceptance proof:
-  0 IDs
+不正run-stateからの推測復元
+過去Generationへの黙った巻戻し
+Counterの自動再採番
+競合final directoryの自動削除
+古いtmp fileの自動採用
+Completion incompleteの自動再試行
 ```
 
 ---
 
-# Part V: 再利用判断
+# Part IX: 試験
 
-## 76. 再利用可能な低位pattern
+## 31. 受入試験
 
-次は設計を合わせて書き直す前提で再利用候補である。
-
-```text
-fcntl exclusive nonblocking lockの基本
-temporary sibling＋file fsync＋replace＋directory fsync
-argparseのrun／resume／step表面
-fake StoryModelによるnetworkなしflow testの考え方
-plan順Markdown assemblyの考え方
-substring Evidenceを拒否する既存negative testの意図
-raw request／responseを保存する監査の意図
-```
-
-Status:
+`docs/testing/ACCEPTANCE.md`には59件の受入試験を定義済み。
 
 ```text
-PARTIAL_FOUNDATION
+試験仕様:
+  完成版作成済み
+
+試験コード:
+  未確認
+
+実行結果:
+  未確認
 ```
 
 ---
 
-## 77. そのまま再利用してはいけないmodule
+## 32. Fixture
+
+71 fileのfixture setを作成済み。
 
 ```text
-series_workflow.py
-series_store.py
-series_contracts.py
-series_model.py
-prompt_template.py
-series_output.py
-llm.py
+brief
+keywords
+initial-design
+plans
+scene
+generation
+handoff
+completion
+publication
+workspace
+recovery
+provider
+security
+invalid
+```
+
+```text
+fixture内容:
+  作成済み
+
+repository配置:
+  確認待ち
+
+test codeからの利用:
+  未確認
+```
+
+---
+
+## 33. 必須suite
+
+| Suite | 状態 |
+|---|---|
+| unit | `実装確認待ち` |
+| schema | `実装確認待ち` |
+| workspace | `実装確認待ち` |
+| pipeline | `実装確認待ち` |
+| provider contract | `実装確認待ち` |
+| security | `実装確認待ち` |
+| crash recovery | `実装確認待ち` |
+| end-to-end | `実装確認待ち` |
+| package smoke | `実装確認待ち` |
+
+---
+
+## 34. 最優先試験
+
+```text
+Lock競合
+run-stateのatomic replacement
+Scene rename後Crash
+Generation rename後Crash
+Publication rename後Crash
+Recovery冪等性
+Writer秘密情報除外
+Evidence quote照合
+allowed updates外の拒否
+incomplete時のPublication禁止
+Publication中のProvider call 0
+installed packageからPrompt読込
+```
+
+---
+
+# Part X: Release
+
+## 35. 現在の判定
+
+```text
+Release不可
 ```
 
 理由:
 
-- authority、Stage、Schema、storage、retry、audit契約がversion-1と異なる;
-- 小修正で互換化すると旧state semanticsが新実装へ混入する;
-- acceptance failureの原因を追跡しにくくなる。
+```text
+production codeの設計適合性を未確認
+59件の受入試験実装を未確認
+必須suite結果を未確認
+package smokeを未確認
+legacy文書と旧設計参照の削除未完了
+```
+
+実装が必ず未完成だという断定ではない。
+
+Release可能と判断する証拠がまだ揃っていない。
 
 ---
 
-## 78. 薄く保てるmodule
+## 36. Release可能条件
 
 ```text
-cli.py
-series_engine.py
-config.py
-log.py
-```
-
-も全面的なcontract updateが必要だが、公開command名や責務の一部は保持できる。
-
-最終的には[Series engine design](../design/series_engine_design.md)のpackage構造へ移行する。
-
----
-
-## 79. Legacy compatibility方針
-
-version-1は次を提供しない。
-
-```text
-state.json version 5 migration
-legacy Stage alias
-legacy ID自動変換
-legacy raw logからCandidate復元
-legacy outputをCURRENTへ自動採用
-```
-
-旧workspaceはread-only historical artifactとして保持し、新しいworkspaceでrunを開始する。
-
----
-
-# Part VI: 実装順序
-
-## 80. Phase 1 — Foundation
-
-Required:
-
-```text
-typed IDs／paths
-canonical JSON／text
-hash utilities
-atomic storage
-lock capability validation
-exact config/runtime Schemas
-package prompt/schema loader
-```
-
-Current status:
-
-```text
-NOT STARTED as version-1
+全正本文書をrepositoryへ配置
+旧文書参照の切替完了
+76要件の実装追跡完了
+59受入試験の自動化
+必須suite成功
+必須試験skipなし
+実network依存なし
+実Credential依存なし
+package smoke成功
+秘密情報漏洩なし
+Crash Recovery成功
 ```
 
 ---
 
-## 81. Phase 2 — Runtime and Registry
+# Part XI: 次の作業
 
-Required:
-
-```text
-50 Stage registry
-Run manifest／Run state／counters／Effective config
-Engine loop
-Stage result validation
-operation audit
-safe stop
-startup authority validation
-```
-
-Current status:
+## 37. 文書作業
 
 ```text
-NOT STARTED
+1. docs/README.mdを作成
+2. root README.mdを全面改訂
+3. Markdown linkを新構成へ切替
+4. 旧文書参照を検索
+5. 旧文書を削除
+6. link checkを実行
 ```
 
 ---
 
-## 82. Phase 3 — LLM Candidate framework
-
-Required:
+## 38. 実装確認順
 
 ```text
-Context snapshots
-Prompt renderer
-Provider adapter
-retry coordinator
-Call ID
-LLM audit
-versioned Candidate
-generic Review／Revision
-residual issues
-```
-
-Current status:
-
-```text
-NOT STARTED
+1. package構成
+2. CLI
+3. Workspace API
+4. Schema
+5. Stage Registry
+6. Transition Engine
+7. Provider Adapter
+8. Context Builder
+9. Review／Revision
+10. Completion
+11. Publication Builder
+12. Recovery
+13. Test suite
 ```
 
 ---
 
-## 83. Phase 4 — Genesis and Planning
+## 39. Requirement trace
 
-Required:
-
-```text
-INPUT
-INIT
-Genesis
-Series／Volume／Chapter planning
-immutable plan adoption
-```
-
-Current status:
+各要件について次を追跡する。
 
 ```text
-NOT STARTED
+Requirement ID
+production code
+test ID
+test file
+最新結果
+未対応内容
 ```
 
-Legacy analogous logic exists but is not a compatible base state.
+機械生成できる場合は、test metadataからsummaryを生成する。
 
 ---
 
-## 84. Phase 5 — Scene and Commit
+## 40. Repository検索
 
-Required:
+旧文書と旧実装を削除する前に検索する。
 
 ```text
-Scene Card
-Writer-safe prose
-continuity
-Checkpoint
-Evidence
-merge
-COMMIT-01〜04
+ARCHITECTURE_PRINCIPLES
+series_engine_design
+series_engine_flow
+workspace_layout
+runtime_and_recovery
+pipeline_contracts
+ledger_contracts
+context_contracts
+prompt_template_design
+implementation_acceptance
+Publication Gate
+Candidate Manifest
+Checkpoint Manifest
+payload_set_sha256
+content_set_sha256
+CURRENT
 HEAD
 ```
 
-Current status:
+---
+
+# Part XII: 更新規則
+
+## 41. 更新タイミング
 
 ```text
-NOT STARTED
+文書をrepositoryへ配置
+production codeを確認
+自動試験を追加
+必須suiteを実行
+阻害要因を発見
+Release判定を変更
+旧文書を削除
 ```
 
 ---
 
-## 85. Phase 6 — Handoff, Completion, Publication
+## 42. 状態変更の証拠
 
-Required:
-
-```text
-VH
-Completion
-Publication
-Gate
-CURRENT
-```
-
-Current status:
+状態を`実装済み`へ変更する場合は、少なくとも次を記録する。
 
 ```text
-NOT STARTED
-```
-
----
-
-## 86. Phase 7 — Recovery and Release
-
-Required:
-
-```text
-all crash classifiers
-quarantine
-idempotent startup
-counter/usage reconciliation
-wheel smoke
-CLI gate
-acceptance trace report
-security/privacy/performance gates
-```
-
-Current status:
-
-```text
-NOT STARTED
-```
-
----
-
-# Part VII: 実装claim policy
-
-## 87. 言ってよいこと
-
-```text
-現行legacy prototypeにはrun／resume／stepがある
-旧fake flow testsは通る
-state.jsonはcomplete-file atomic replacementを使う
-legacy continuityは本文substring evidenceを要求する
-legacy outputはstaging directoryから置換する
-version-1仕様文書は実装前baselineとして整備済み
-```
-
----
-
-## 88. 言ってはいけないこと
-
-現時点で次を主張してはならない。
-
-```text
-50 Stage engine implemented
-Canon／Story State／Evidence ledger implemented
-HEAD／Generation implemented
-Candidate manifest／Checkpoint implemented
-Volume Handoff implemented
-Completion audit implemented
-Publication Gate／CURRENT implemented
-crash-safe resume implemented
-strict structured output implemented
-privacy gate passed
-wheel gate passed
-version-1 acceptance passed
-production ready
-```
-
----
-
-## 89. Status更新条件
-
-本書のstatusを上げるには、同じcommitで次が必要である。
-
-```text
-production implementation
-corresponding acceptance test
-acceptance ID traceability
-canonical command pass
-negative and crash tests where applicable
-```
-
-設計文書の追加だけではstatusを上げない。
-
----
-
-## 90. Partial status更新
-
-一つのacceptance area内で一部だけ実装した場合:
-
-```text
-実装したexact IDs
-未実装IDs
+対象commit
+production code path
+test path
+test ID
 実行command
-fixture
-known blockers
-```
-
-を記録する。
-
-area全体を`implemented`とまとめない。
-
----
-
-## 91. Release-candidate条件
-
-Release candidateと呼べるのは少なくとも次が全成功した場合だけである。
-
-```text
-compile/import gate
-full deterministic automated suite
-wheel smoke
-installed CLI smoke
-all required ACC IDs
-full success fixture
-valid incomplete fixture
-crash/failpoint matrix
-privacy/security gate
-no-network mandatory suite
-reproducible Publication gate
+実行結果
+確認日
 ```
 
 ---
 
-# Part VIII: 次の作業
+## 43. 状態の後退
 
-## 92. 最初のcode change
+以前`実装済み`だった機能が、仕様変更またはtest失敗で保証できなくなった場合は、`部分実装`または`阻害`へ戻す。
 
-最初に実装すべきproduction change:
-
-```text
-canonical serialization
-typed managed paths
-atomic storage primitives
-exact Runtime/config roots
-50 Stage registry skeleton
-```
-
-legacy `_run_one`へ新Stageを継ぎ足してはならない。
+過去のStatusを守るために失敗を隠さない。
 
 ---
 
-## 93. 最初のtest change
+## 44. 肥大化防止
 
-最初に追加すべきtest infrastructure:
-
-```text
-acceptance ID helper/report
-fake clock
-scripted provider
-deterministic tokenizer
-fault-injecting filesystem
-fake credential source
-network prohibition
-```
-
-既存legacy testsは、version-1 testsが立つまで回帰用として残してよい。
-
----
-
-## 94. First milestone exit
-
-Phase 1／2の最初のexit criteria:
+この文書へ次を追加しない。
 
 ```text
-new workspace initialization
-Run manifest／Run state／counters／Effective config
-50 Stage registry validation
-run／resume／stepが同じstartup pathを使う
-LLM callなしでINPUT-01または初期positionまで進む
-crash-safe complete-file replacement
-corresponding ACC-CORE／PATH／CFG／RUN／CLI IDs
+詳細な設計説明
+全Schema
+全Stage契約
+全試験手順
+長い障害調査log
+全commit履歴
 ```
 
 ---
 
-## 95. Documentation next step
+## 45. Release後
 
-製品文書の次の整合対象:
-
-```text
-docs/product/REQUIREMENTS.md
-README.md
-```
-
-これらは、新しい製品仕様と本Statusの用語・claim policyへ合わせる必要がある。
-
----
-
-# Part IX: Mechanical status checks
-
-## 96. Current snapshot assertions
+Release後は次を簡潔に示す。
 
 ```text
-source Python files = 12
-legacy source lines = 1876
-test files = 8
-legacy test lines = 1605
-legacy semantic stages = 13
-legacy Jinja templates = 40
-legacy JSON Schema files = 14
-canonical Stage IDs in production source = 0
-ACC ID mentions in tests = 0
-HEAD／CURRENT／manifest implementation references = 0
-local_key implementation references = 0
-strict json_schema implementation references = 0
+Release version
+対応要件数
+必須suite結果
+既知の制限
+次Versionの未着手項目
 ```
 
 ---
 
-## 97. Test assertions
+## 46. 現在の要約
+
+2026-07-23時点:
 
 ```text
-compileall:
-  pass
+文書構成:
+  簡素化設計へ再構成中
 
-legacy unittest with import-only OpenAI stub:
-  83 tests
-  16 subtests
-  pass
+主要正本文書:
+  完成版作成済み
+  repository配置確認待ち
 
-dependency-independent subset:
-  52 tests
-  3 subtests
-  pass
+受入試験:
+  59件を定義済み
+  test code未確認
 
-source-tree CLI help with stub:
-  pass
+Fixture:
+  71 fileを作成済み
+  repository配置とtest利用は未確認
 
-wheel smoke:
-  not completed
-  build backend unavailable in assessment environment
+Production code:
+  新設計への適合を未確認
 
-real provider integration:
-  not executed
+旧文書:
+  統合先を決定済み
+  削除は参照切替後
+
+Release:
+  不可
 ```
-
----
-
-## 98. Status consistency
-
-本書は次を満たさなければならない。
-
-```text
-製品仕様をlegacy実装へ合わせて弱めない
-legacy test successをversion-1 acceptanceへ数えない
-環境不足とcode failureを区別する
-実装済みと設計済みを区別する
-reuse candidateとcompatible implementationを区別する
-unknown／unverifiedを推測でpassにしない
-```
-
----
-
-## 99. Final status
-
-```text
-documentation_baseline:
-  ready for implementation
-
-legacy_prototype:
-  functioning under local deterministic tests
-
-version_1_code:
-  not accepted
-
-version_1_acceptance_ids_passed:
-  0
-
-release_status:
-  NOT A RELEASE CANDIDATE
-```
-
-version-1の実装は、legacy prototypeの延長ではなく、確定したRuntime／Pipeline／Ledger／Prompt／Publication契約に沿う新しいengineとして開始する。
