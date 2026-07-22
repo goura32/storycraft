@@ -14,6 +14,6 @@
 - 場面カードの`new_item_policy`、局所Canonのscope/lifecycle、supporting threadのcarry-over
 - 型付きupdate operation、汎用Canon merge、knowledge update、場面Outer Transaction
 - `ending_evidence_proposals`、`ending_evidence_index`、完結監査でのindex利用
-- revisionと別の`completion_audit_attempts`、現行`closure`から独立した完結監査
+- `max_completion_audit_attempts`/`completion_audit_attempts_used`、response structure retry、現行`closure`から独立した完結監査
 
 現行実装が上記を満たすとは主張しない。旧state migrationや互換shimは対象にしない。

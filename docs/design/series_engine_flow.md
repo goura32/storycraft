@@ -31,8 +31,10 @@ flowchart TD
   MV -->|No| CP[完結前提条件の機械検証]
   CP --> CA[completion audit attempt]
   CA --> CJ{監査JSON正常?}
-  CJ -->|No・上限内| CA
-  CJ -->|Yes または上限| OUT[最後の正常監査を保存し出力]
+  CJ -->|正常| SAVE[最後の正常監査を保存]
+  CJ -->|不正・attempt残あり| CA
+  CJ -->|不正・attempt枯渇| STOP[機械的エラーとして停止]
+  SAVE --> OUT[機械的完成条件を満たせば出力]
 ```
 
 ## 呼び出し責務

@@ -68,7 +68,7 @@ LLMは永続IDを生成しない。レビュー・修正中の追加・削除・
 
 `allowed_types`外、`max_items`超過、major thread、ending criterion、固定世界規則は提案不可である。許可しない場面は`max_items: 0`とする。上限は機械的な暴走防止である。
 
-新規局所Canon項目のlifecycleは、`scope`を`scene`/`chapter`/`volume`/`series`、`status`を`active`/`inactive`/`resolved`/`retired`で表す。新規supporting threadは既定で`scope: volume`、`required: false`であり、巻末に`resolved`、`carry_over`、`retired`へ移す。`carry_over`は次巻設計入力に明示する。supporting threadは既定で完結の機械的必須条件ではない。
+新規局所Canon項目のlifecycleは、`scope`を`scene`/`chapter`/`volume`/`series`、`status`を`active`/`inactive`/`resolved`/`retired`で表す。巻境界の`volume_disposition`は別enumの`resolve`/`carry_over`/`retire`である。carry_overはstatusではなく、`status: active`、`scope: series`、次巻handoff追加を意味する。supporting threadは既定で`scope: volume`、`required: false`であり、完結の機械的必須条件ではない。
 
 ## 6. 共通revision loop
 
@@ -109,8 +109,8 @@ LLMは永続IDを生成しない。レビュー・修正中の追加・削除・
 1. コードが計画、空本文、required major thread、ending evidence index、ID・artifactを検証する。
 2. LLMが意味監査する。
 3. 監査JSONを機械的検証する。
-4. 必要時は同じ入力で`completion_audit_attempts`を有限回実行する。
-5. 最後の構造正常な監査結果を保存する。
+4. 監査JSON不正かつattemptが残る場合だけ、同じ入力で`max_completion_audit_attempts`まで再監査する。
+5. 正常な監査JSONが1件以上あれば最後の正常結果を保存する。1件もなければattempt枯渇時に機械的エラーとして停止する。
 6. issueが残っても機械的完成条件を満たせば出力する。
 
 監査issueで監査JSONを修正しない。監査工程自身は本文・Canonを変更しない。出力は一時領域で検証後、原子的に公開する。
