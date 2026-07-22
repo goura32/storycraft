@@ -24,7 +24,7 @@ issues nonempty and revision_rounds_used < max_revision_rounds → REV
 issues nonempty and revision_rounds_used >= max_revision_rounds → ID または CHK
 ```
 
-最後の分岐は最新の構造正常candidateを採用し、全residual issueを`audit/residual-issues.jsonl`へappendします。採用条件は次だけです。
+最後の分岐は最新の構造正常candidateを採用し、全residual issueを`audit/residual-issues.jsonl`へappendします。これはINIT-ID、SERIES-ID、VOL-ID、CH-ID、SC-CHK、PROSE-CHK、DELTA-CHK、VH-IDに適用し、各rowは`operation_id`、`target_id`、`candidate_sha256`、`revision_rounds_used`、`issues`、`adopted_at`を含みます。採用条件は次だけです。
 
 ```text
 structurally valid candidate exists

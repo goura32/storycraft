@@ -22,7 +22,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/scene-card.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/sc-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SC-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
@@ -47,7 +47,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/scene-card-review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/sc-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card-review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SC-REV or SC-CHK |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
@@ -72,7 +72,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/scene-card.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/sc-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/scene-card.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SC-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
@@ -122,7 +122,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose.md` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/000123__prose-01__v01-c001-s001__generate__attempt-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose.md`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | PROSE-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
@@ -147,7 +147,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose-review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/prose-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose-review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | PROSE-REV or PROSE-CHK |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
@@ -172,7 +172,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/prose.md` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/prose-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/prose.md`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | PROSE-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
@@ -222,7 +222,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/delta-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | DELTA-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |
@@ -247,7 +247,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/delta-review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/delta-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/delta-review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | DELTA-REV or DELTA-CHK |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | `review_result` only |
@@ -272,7 +272,7 @@
 | candidate path | `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/delta-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/scenes/v01/c001/s001/continuity-delta.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/scenes/v01/c001/s001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | DELTA-02 |
 | failure classification | transport is only connection, HTTP, stream, or timeout; JSON/Schema/required field/enum and prose decode, empty, or whitespace-only response consume response structure retry |
 | review output | なし |

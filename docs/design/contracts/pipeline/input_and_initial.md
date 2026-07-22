@@ -22,7 +22,7 @@
 | candidate path | `runtime/candidates/input/brief.json` |
 | adopted path | `input/brief.json` |
 | audit path | `audit/operations/input-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/input/brief.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/input/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INPUT-03 |
 | failure classification | storage error or mechanical stop |
 | review output | なし |
@@ -47,7 +47,7 @@
 | candidate path | `runtime/candidates/input/brief.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/input-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/input/brief.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/input/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INPUT-03 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -97,7 +97,7 @@
 | candidate path | `runtime/candidates/initial-design/concept.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/init-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/concept.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -122,7 +122,7 @@
 | candidate path | `runtime/candidates/initial-design/people.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/init-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/people.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-03 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -147,7 +147,7 @@
 | candidate path | `runtime/candidates/initial-design/world.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/init-03.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/world.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-04 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -172,7 +172,7 @@
 | candidate path | `runtime/candidates/initial-design/arcs.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/init-04.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/arcs.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-05 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -197,7 +197,7 @@
 | candidate path | `runtime/candidates/initial-design/bundle.json` |
 | adopted path | `none` |
 | audit path | `audit/operations/init-05.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/bundle.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-06 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -222,7 +222,7 @@
 | candidate path | `runtime/candidates/initial-design/review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/init-06.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-REV or INIT-ID |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | `review_result` only |
@@ -247,7 +247,7 @@
 | candidate path | `runtime/candidates/initial-design/bundle.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/init-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/initial-design/bundle.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/initial-design/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | INIT-06 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -297,7 +297,7 @@
 | candidate path | `runtime/candidates/series-map/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/series-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/series-map/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/series-map/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SERIES-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -322,7 +322,7 @@
 | candidate path | `runtime/candidates/series-map/review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/series-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/series-map/review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/series-map/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SERIES-REV or SERIES-ID |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | `review_result` only |
@@ -347,7 +347,7 @@
 | candidate path | `runtime/candidates/series-map/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/series-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/series-map/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/series-map/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | SERIES-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |

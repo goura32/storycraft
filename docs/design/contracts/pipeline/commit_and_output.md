@@ -122,7 +122,7 @@
 | candidate path | `runtime/candidates/handoffs/v01/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/vh-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/handoffs/v01/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/handoffs/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VH-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -147,7 +147,7 @@
 | candidate path | `runtime/candidates/handoffs/v01/review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/vh-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/handoffs/v01/review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/handoffs/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VH-REV or VH-ID |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | `review_result` only |
@@ -172,7 +172,7 @@
 | candidate path | `runtime/candidates/handoffs/v01/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/vh-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/handoffs/v01/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/handoffs/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VH-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -257,7 +257,7 @@
 | contract | value |
 |---|---|
 | processor type | code |
-| execution precondition | COMP-AUDIT valid or attempt exhaustion with last valid |
+| execution precondition | latest structurally valid completion audit exists |
 | input artifact names | structurally valid audit candidate |
 | input source paths | `runtime/candidates/completion/attempt-NN.json` selected by manifest |
 | output artifact name | saved completion audit |
@@ -268,7 +268,7 @@
 | response structure retry | No |
 | revision round consumption | No |
 | mechanical validation | Schema/hash/sanitize public projection |
-| adoption condition | COMP-AUDIT valid or attempt exhaustion with last valid |
+| adoption condition | latest structurally valid completion audit exists |
 | candidate path | `none` |
 | adopted path | `audit/completion/audit.json.gz` |
 | audit path | `audit/operations/comp-save.json.gz` |

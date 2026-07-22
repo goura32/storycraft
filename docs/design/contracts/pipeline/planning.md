@@ -22,7 +22,7 @@
 | candidate path | `runtime/candidates/volumes/v01/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/vol-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/volumes/v01/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/volumes/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VOL-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -47,7 +47,7 @@
 | candidate path | `runtime/candidates/volumes/v01/review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/vol-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/volumes/v01/review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/volumes/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VOL-REV or VOL-ID |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | `review_result` only |
@@ -72,7 +72,7 @@
 | candidate path | `runtime/candidates/volumes/v01/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/vol-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/volumes/v01/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/volumes/v01/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | VOL-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -122,7 +122,7 @@
 | candidate path | `runtime/candidates/chapters/v01/c001/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/ch-01.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/chapters/v01/c001/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/chapters/v01/c001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | CH-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
@@ -147,7 +147,7 @@
 | candidate path | `runtime/candidates/chapters/v01/c001/review.json` |
 | adopted path | `none` |
 | audit path | `audit/reviews/ch-02.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/chapters/v01/c001/review.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/chapters/v01/c001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | CH-REV or CH-ID |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | `review_result` only |
@@ -172,7 +172,7 @@
 | candidate path | `runtime/candidates/chapters/v01/c001/candidate.json` |
 | adopted path | `none` |
 | audit path | `audit/llm-calls/ch-rev.json.gz` |
-| resume source | candidate manifest at `runtime/candidates/chapters/v01/c001/candidate.json`; otherwise named adopted input |
+| resume source | `runtime/candidates/chapters/v01/c001/candidate-manifest.json` (manifest-selected payload only) |
 | next stage | CH-02 |
 | failure classification | transport error, response structure error, or mechanical stop |
 | review output | なし |
