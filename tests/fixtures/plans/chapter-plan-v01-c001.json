@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "chapter_plan_id": "chapter-plan-v01-c001",
+  "volume_number": 1,
+  "chapter_number": 1,
+  "version": 1,
+  "status": "accepted",
+  "basis_generation_id": "gen-000001",
+  "volume_plan_id": "volume-plan-v01",
+  "chapter_purpose": "澪と凪を灯台で再会させる。",
+  "starting_conditions": [
+    "澪は町へ戻ったばかり",
+    "凪は灯台にいる"
+  ],
+  "ending_changes": [
+    "澪は凪が火災の夜に灯台にいたと知る"
+  ],
+  "scene_summaries": [
+    {
+      "scene_number": 1,
+      "purpose": "灯台で再会し、凪が火災の夜について一言だけ認める"
+    }
+  ],
+  "required_revelations": [
+    "凪は火災の夜に灯台にいた"
+  ],
+  "constraints": [
+    "完全な真相は明かさない"
+  ],
+  "created_at": "2026-07-23T10:25:00Z"
+}

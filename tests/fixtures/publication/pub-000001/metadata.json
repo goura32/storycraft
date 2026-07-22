@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "publication_id": "pub-000001",
+  "title": "潮騒の記憶",
+  "language": "ja",
+  "volume_count": 4,
+  "volume_entries": [
+    {
+      "volume_number": 1,
+      "title": "帰郷",
+      "chapter_count": 1,
+      "scene_count": 1,
+      "output_name": "v01.md"
+    },
+    {
+      "volume_number": 2,
+      "title": "欠けた記録",
+      "chapter_count": 1,
+      "scene_count": 1,
+      "output_name": "v02.md"
+    },
+    {
+      "volume_number": 3,
+      "title": "火の記憶",
+      "chapter_count": 1,
+      "scene_count": 1,
+      "output_name": "v03.md"
+    },
+    {
+      "volume_number": 4,
+      "title": "同じ灯",
+      "chapter_count": 1,
+      "scene_count": 1,
+      "output_name": "v04.md"
+    }
+  ],
+  "basis_generation_id": "gen-000240",
+  "completion_id": "completion-000001",
+  "completion_status": "complete",
+  "created_at": "2026-07-23T12:10:00Z"
+}

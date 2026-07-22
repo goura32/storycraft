@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "completion_id": "completion-invalid-conflict",
+  "basis_generation_id": "gen-000240",
+  "status": "complete",
+  "summary": "主要ThreadとEnding条件をすべて満たした。",
+  "precheck_summary": {
+    "all_volumes_complete": true,
+    "all_planned_scenes_committed": true,
+    "unfinished_scene_work": false
+  },
+  "thread_checks": [
+    {
+      "thread_id": "thread-missing-memory",
+      "required_for_completion": true,
+      "status": "open",
+      "evidence_scene_ids": [
+        "scene-v04-c006-s003"
+      ],
+      "assessment": "澪は改ざんを目撃した記憶を取り戻し、凪と共有した。",
+      "issues": []
+    },
+    {
+      "thread_id": "thread-sister-trust",
+      "required_for_completion": true,
+      "status": "resolved",
+      "evidence_scene_ids": [
+        "scene-v04-c006-s004"
+      ],
+      "assessment": "姉妹は互いの秘密を明かし、共同で町へ向き合った。",
+      "issues": []
+    }
+  ],
+  "ending_checks": [
+    {
+      "requirement_id": "ending-hopeful-return",
+      "status": "satisfied",
+      "evidence_scene_ids": [
+        "scene-v04-c006-s004"
+      ],
+      "assessment": "姉妹は町に残り、灯台の記録を共同管理する。",
+      "issues": []
+    }
+  ],
+  "character_arc_checks": [
+    {
+      "character_id": "char-mio",
+      "planned_end_state": "記憶の欠落を受け入れ、町に残る",
+      "actual_end_state": "記憶の不完全さを受け入れ、町に残った",
+      "status": "satisfied",
+      "evidence_scene_ids": [
+        "scene-v04-c006-s004"
+      ],
+      "assessment": "主要Arcを達成。"
+    }
+  ],
+  "relationship_arc_checks": [
+    {
+      "relationship_id": "rel-mio-nagi",
+      "planned_end_state": "真実を共有する関係",
+      "actual_end_state": "互いの秘密を共有し、共同で灯台を管理",
+      "status": "satisfied",
+      "evidence_scene_ids": [
+        "scene-v04-c006-s004"
+      ],
+      "assessment": "主要Arcを達成。"
+    }
+  ],
+  "issues": [],
+  "created_at": "2026-07-23T12:00:00Z"
+}

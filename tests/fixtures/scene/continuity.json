@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "continuity_update_id": "continuity-000001",
+  "scene_id": "scene-v01-c001-s001",
+  "basis_generation_id": "gen-000001",
+  "operations": [
+    {
+      "operation_id": "update-000001",
+      "target_type": "character_state",
+      "target_id": "char-mio",
+      "field": "current_location_id",
+      "operation": "set",
+      "old_value": "loc-seaside-town",
+      "new_value": "loc-lighthouse",
+      "reason": "澪が灯台へ到着している。",
+      "evidence_ids": [
+        "evidence-000001"
+      ]
+    },
+    {
+      "operation_id": "update-000002",
+      "target_type": "character_state",
+      "target_id": "char-mio",
+      "field": "knowledge_states",
+      "operation": "add",
+      "old_value": null,
+      "new_value": {
+        "knowledge_id": "know-nagi-at-fire",
+        "state": "knows"
+      },
+      "reason": "凪本人が火災の夜に灯台へいたと認めた。",
+      "evidence_ids": [
+        "evidence-000002"
+      ]
+    },
+    {
+      "operation_id": "update-000003",
+      "target_type": "thread_state",
+      "target_id": "thread-missing-memory",
+      "field": "status",
+      "operation": "transition",
+      "old_value": "open",
+      "new_value": "progressing",
+      "reason": "火災の夜に凪が現場へいたことが判明した。",
+      "evidence_ids": [
+        "evidence-000002"
+      ]
+    },
+    {
+      "operation_id": "update-000004",
+      "target_type": "relationship_state",
+      "target_id": "rel-mio-nagi",
+      "field": "trust",
+      "operation": "set",
+      "old_value": 2,
+      "new_value": 3,
+      "reason": "凪が事実の一部を認めた。",
+      "evidence_ids": [
+        "evidence-000002"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evidence-000001",
+      "scene_id": "scene-v01-c001-s001",
+      "quote": "扉の前には凪が立っていた。",
+      "occurrence": 1,
+      "context_before": "潮を含んだ風が、錆びた蝶番を細く鳴らしている。",
+      "context_after": "十年ぶりに見る姉の顔は、記憶の中より痩せていた。",
+      "target_type": "character_state",
+      "target_id": "char-mio",
+      "change_summary": "澪の現在位置を灯台へ更新"
+    },
+    {
+      "evidence_id": "evidence-000002",
+      "scene_id": "scene-v01-c001-s001",
+      "quote": "「いた。火が上がる前から」",
+      "occurrence": 1,
+      "context_before": "長い沈黙のあと、凪はうなずいた。",
+      "context_after": "風が止み、遠くの波だけが聞こえた。",
+      "target_type": "thread_state",
+      "target_id": "thread-missing-memory",
+      "change_summary": "凪が火災前から灯台にいた事実を澪が知る"
+    }
+  ],
+  "unchanged_assertions": [
+    "地下保管庫の鍵の現在holderは凪のまま",
+    "火災の実行者は未確定"
+  ],
+  "issues": []
+}

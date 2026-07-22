@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "review-000001",
+  "target_type": "scene_prose",
+  "target_id": "candidate-000001",
+  "target_version": 1,
+  "decision": "revise",
+  "issues": [
+    {
+      "issue_id": "issue-000001",
+      "category": "pov",
+      "severity": "error",
+      "location": "第4段落",
+      "description": "凪の内面を澪が知り得ない形で断定している。",
+      "expected": "澪から観察可能な行動として書く。",
+      "suggestion": "凪の視線や沈黙へ置き換える。"
+    }
+  ],
+  "summary": "POV違反を一件修正する必要がある。",
+  "created_at": "2026-07-23T10:50:00Z"
+}

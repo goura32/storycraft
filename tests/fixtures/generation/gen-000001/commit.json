@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "generation_id": "gen-000001",
+  "parent_generation_id": null,
+  "commit_type": "initial_design",
+  "source_artifact_type": "initial_design",
+  "source_artifact_id": "initial-design-0001",
+  "summary": "Initial Designから初期Story状態を作成。",
+  "changed_targets": [
+    "canon",
+    "state"
+  ],
+  "created_at": "2026-07-23T11:00:00Z"
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "volume_plan_id": "volume-plan-v01",
+  "volume_number": 1,
+  "version": 1,
+  "status": "accepted",
+  "basis_generation_id": "gen-000001",
+  "series_plan_id": "series-plan-0001",
+  "starting_state_summary": "澪が帰郷し、凪とは疎遠。",
+  "volume_purpose": "火災の夜と凪の関与を最初の謎として提示する。",
+  "central_conflict": "澪は凪を疑うが、町の人々は過去を話したがらない。",
+  "character_changes": {
+    "char-mio": "疑念から調査へ",
+    "char-nagi": "沈黙を維持"
+  },
+  "relationship_changes": {
+    "rel-mio-nagi": "敵意ではなく、隠された親密さが見える"
+  },
+  "thread_goals": {
+    "thread-missing-memory": "火災と記憶喪失の同時性を示す",
+    "thread-sister-trust": "凪が澪を避ける理由を示す"
+  },
+  "revelations": [
+    "凪が火災の夜に灯台にいた"
+  ],
+  "chapter_summaries": [
+    {
+      "chapter_number": 1,
+      "purpose": "帰郷と灯台での再会"
+    }
+  ],
+  "required_end_state": "澪が凪の証言を得る。",
+  "handoff_expectations": [
+    "凪の証言",
+    "地下保管庫の存在"
+  ],
+  "created_at": "2026-07-23T10:20:00Z"
+}

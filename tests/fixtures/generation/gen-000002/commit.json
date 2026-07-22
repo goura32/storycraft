@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "generation_id": "gen-000002",
+  "parent_generation_id": "gen-000001",
+  "commit_type": "scene",
+  "source_artifact_type": "scene",
+  "source_artifact_id": "scene-v01-c001-s001",
+  "summary": "凪が火災前から灯台にいたことを澪が知る。",
+  "changed_targets": [
+    "char-mio.current_location_id",
+    "char-mio.knowledge_states",
+    "rel-mio-nagi.trust",
+    "thread-missing-memory.status"
+  ],
+  "created_at": "2026-07-23T11:10:00Z"
+}

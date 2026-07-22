@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "scene_plan_id": "scene-plan-v01-c001-s001",
+  "volume_number": 1,
+  "chapter_number": 1,
+  "scene_number": 1,
+  "version": 1,
+  "status": "accepted",
+  "basis_generation_id": "gen-000001",
+  "chapter_plan_id": "chapter-plan-v01-c001",
+  "purpose": "澪と凪を再会させ、火災の夜に凪が灯台へいたことを示す。",
+  "pov_character_id": "char-mio",
+  "participant_ids": [
+    "char-mio",
+    "char-nagi"
+  ],
+  "location_id": "loc-lighthouse",
+  "starting_conditions": [
+    "澪は凪を疑っている",
+    "凪は真相を隠している"
+  ],
+  "intended_beats": [
+    "灯台への到着",
+    "ぎこちない再会",
+    "鍵についての会話",
+    "凪の短い告白"
+  ],
+  "intended_revelations": [
+    "凪は火災の夜に灯台へいた"
+  ],
+  "intended_changes": [
+    "澪が新しいKnowledgeを得る"
+  ],
+  "prohibited_disclosures": [
+    "記録改ざんの実行者",
+    "澪が目撃した内容"
+  ],
+  "created_at": "2026-07-23T10:30:00Z"
+}

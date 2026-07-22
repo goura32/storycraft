@@ -1,0 +1,5 @@
+{
+  "authorization": "Bearer sk-test-storycraft-secret",
+  "cookie": "session=secret-cookie",
+  "safe_field": "visible"
+}

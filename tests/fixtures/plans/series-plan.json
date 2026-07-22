@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "series_plan_id": "series-plan-0001",
+  "version": 1,
+  "status": "accepted",
+  "basis_generation_id": "gen-000001",
+  "volume_count": 4,
+  "series_objectives": [
+    "灯台火災の真相を段階的に明かす",
+    "澪と凪の信頼を段階的に回復する"
+  ],
+  "volume_summaries": [
+    {
+      "volume_number": 1,
+      "purpose": "澪の帰郷と最初の証言",
+      "ending_change": "凪が火災の夜に灯台へいたと判明"
+    },
+    {
+      "volume_number": 2,
+      "purpose": "町の記録改ざんを追う",
+      "ending_change": "有力者の関与が判明"
+    },
+    {
+      "volume_number": 3,
+      "purpose": "姉妹それぞれの秘密が衝突",
+      "ending_change": "澪が自分の目撃を思い出す"
+    },
+    {
+      "volume_number": 4,
+      "purpose": "真相共有と姉妹の再出発",
+      "ending_change": "主要Threadを解決"
+    }
+  ],
+  "character_arc_map": {
+    "char-mio": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "char-nagi": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "relationship_arc_map": {
+    "rel-mio-nagi": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "thread_progression": {
+    "thread-missing-memory": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "thread-sister-trust": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "revelation_schedule": [
+    {
+      "volume_number": 1,
+      "knowledge_id": "know-key-owner"
+    },
+    {
+      "volume_number": 2,
+      "knowledge_id": "know-fire-night"
+    }
+  ],
+  "ending_path": "第四巻で記録と記憶を統合し、姉妹が共同で真実を公表する。",
+  "global_constraints": [
+    "超常要素を導入しない"
+  ],
+  "created_at": "2026-07-23T10:10:00Z"
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "generation_id": "gen-000001",
+  "characters": {
+    "char-mio": {
+      "current_location_id": "loc-seaside-town",
+      "physical_condition": "healthy",
+      "emotional_condition": "guarded",
+      "goals": [
+        "火災の夜を知る"
+      ],
+      "active_constraints": [],
+      "inventory_item_ids": [],
+      "knowledge_states": {
+        "know-fire-night": "suspects",
+        "know-key-owner": "unknown"
+      },
+      "availability": "available",
+      "alive_status": "alive"
+    },
+    "char-nagi": {
+      "current_location_id": "loc-lighthouse",
+      "physical_condition": "healthy",
+      "emotional_condition": "tense",
+      "goals": [
+        "澪を守る"
+      ],
+      "active_constraints": [
+        "真相全体をまだ話さない"
+      ],
+      "inventory_item_ids": [
+        "item-basement-key"
+      ],
+      "knowledge_states": {
+        "know-fire-night": "knows",
+        "know-key-owner": "knows"
+      },
+      "availability": "available",
+      "alive_status": "alive"
+    }
+  },
+  "relationships": {
+    "rel-mio-nagi": {
+      "status": "estranged",
+      "trust": 2,
+      "affection": 7,
+      "fear": 3,
+      "hostility": 2,
+      "obligations": [],
+      "shared_secrets": [],
+      "public_status": "疎遠な姉妹",
+      "private_status": "互いを守ろうとして秘密を抱える",
+      "last_change_scene_id": null
+    }
+  },
+  "threads": {
+    "thread-missing-memory": {
+      "status": "open",
+      "progress_summary": "澪は火災の夜の詳細を知らない。",
+      "open_questions": [
+        "凪はどこにいたか",
+        "記録はなぜ欠けたか"
+      ],
+      "latest_development_scene_id": null,
+      "resolution_scene_id": null,
+      "completion_notes": null
+    },
+    "thread-sister-trust": {
+      "status": "open",
+      "progress_summary": "姉妹は十年間ほとんど話していない。",
+      "open_questions": [
+        "凪はなぜ黙っていたか"
+      ],
+      "latest_development_scene_id": null,
+      "resolution_scene_id": null,
+      "completion_notes": null
+    }
+  },
+  "timeline": {
+    "current_story_time": "第一巻・帰郷当日の午後",
+    "calendar_system": "相対時間",
+    "elapsed_time": "0日",
+    "known_deadlines": [],
+    "event_order": [],
+    "time_constraints": []
+  },
+  "inventory": {
+    "item-basement-key": {
+      "name": "地下保管庫の鍵",
+      "owner_character_id": "char-nagi",
+      "holder_character_id": "char-nagi",
+      "location_id": null,
+      "condition": "使用可能",
+      "significance": "地下保管庫へ入るために必要",
+      "visibility": "writer_private"
+    }
+  },
+  "commitments": {}
+}

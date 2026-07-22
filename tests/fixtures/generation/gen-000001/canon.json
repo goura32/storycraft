@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "generation_id": "gen-000001",
+  "records": [
+    {
+      "canon_id": "canon-000001",
+      "subject_type": "relationship",
+      "subject_id": "rel-mio-nagi",
+      "predicate": "participants",
+      "value": {
+        "character_ids": [
+          "char-mio",
+          "char-nagi"
+        ]
+      },
+      "visibility": "reader_visible",
+      "source_scene_id": null,
+      "introduced_generation_id": "gen-000001",
+      "status": "active",
+      "notes": "姉妹関係"
+    },
+    {
+      "canon_id": "canon-000002",
+      "subject_type": "location",
+      "subject_id": "loc-lighthouse",
+      "predicate": "located_in",
+      "value": {
+        "location_id": "loc-seaside-town"
+      },
+      "visibility": "reader_visible",
+      "source_scene_id": null,
+      "introduced_generation_id": "gen-000001",
+      "status": "active",
+      "notes": null
+    }
+  ]
+}

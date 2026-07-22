@@ -1,0 +1,3 @@
+scenes/scene-v01-c001-s001/
+runtime/staging/generation-gen-000002/
+runtime/run-state.json

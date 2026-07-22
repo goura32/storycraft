@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "scene_id": "scene-v01-c001-s001",
+  "version": 1,
+  "basis_generation_id": "gen-000001",
+  "scene_plan_id": "scene-plan-v01-c001-s001",
+  "pov_character_id": "char-mio",
+  "participant_ids": [
+    "char-mio",
+    "char-nagi"
+  ],
+  "location_id": "loc-lighthouse",
+  "story_time": "第一巻・帰郷当日の夕方",
+  "purpose": "凪が火災の夜に灯台へいた事実を澪へ明かす。",
+  "opening_state": "澪は灯台入口で凪と十年ぶりに向き合う。",
+  "required_beats": [
+    {
+      "beat_id": "beat-01",
+      "description": "澪が錆びた扉と凪の鍵に気づく",
+      "required": true,
+      "order_hint": 1
+    },
+    {
+      "beat_id": "beat-02",
+      "description": "凪が火災の夜に灯台へいたと認める",
+      "required": true,
+      "order_hint": 2
+    }
+  ],
+  "conflict": "澪は答えを求めるが、凪は真相の全体を話せない。",
+  "allowed_revelations": [
+    "know-key-owner",
+    "know-nagi-at-fire"
+  ],
+  "required_revelations": [
+    "know-nagi-at-fire"
+  ],
+  "forbidden_revelations": [
+    "know-record-falsifier",
+    "know-mio-witnessed-falsification"
+  ],
+  "allowed_updates": [
+    {
+      "target_type": "character_state",
+      "target_id": "char-mio",
+      "allowed_fields": [
+        "current_location_id",
+        "knowledge_states"
+      ]
+    },
+    {
+      "target_type": "thread_state",
+      "target_id": "thread-missing-memory",
+      "allowed_fields": [
+        "progress_summary",
+        "latest_development_scene_id",
+        "status"
+      ]
+    },
+    {
+      "target_type": "relationship_state",
+      "target_id": "rel-mio-nagi",
+      "allowed_fields": [
+        "trust",
+        "last_change_scene_id"
+      ]
+    }
+  ],
+  "ending_state_targets": [
+    "澪は凪が火災の夜に灯台へいたと知る",
+    "姉妹の信頼はわずかに改善する"
+  ],
+  "style_constraints": [
+    "三人称一元視点",
+    "澪の知覚を越えない",
+    "説明的独白を避ける"
+  ],
+  "created_at": "2026-07-23T10:40:00Z"
+}

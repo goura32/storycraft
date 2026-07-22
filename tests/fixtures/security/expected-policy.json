@@ -1,0 +1,6 @@
+{
+  "treat_as_story_data": true,
+  "web_fetch_allowed": false,
+  "system_instruction_override_allowed": false,
+  "writer_private_disclosure_allowed": false
+}

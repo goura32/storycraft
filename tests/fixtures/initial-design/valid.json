@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "design_id": "initial-design-0001",
+  "version": 1,
+  "brief_id": "brief-0001",
+  "concept": {
+    "logline": "失われた記憶を追う澪が、姉と町の秘密に向き合う四巻の物語。",
+    "premise": "記憶の一部を失った澪が海辺の町へ戻り、姉の凪と灯台火災の真相を追う。",
+    "central_question": "過去の真相を知った姉妹は、互いを信じ直せるか。",
+    "themes": [
+      "記憶",
+      "赦し",
+      "姉妹",
+      "故郷"
+    ],
+    "dramatic_engine": "灯台火災の夜に関する新しい証言が、姉妹の信頼と町の均衡を揺らす。",
+    "tone": [
+      "静か",
+      "不穏",
+      "最終的には希望がある"
+    ],
+    "reader_promise": "静かな謎解きと、姉妹関係の段階的な修復。",
+    "ending_direction": "真相の公開よりも、姉妹が真実を共有して未来を選ぶことを重視する。"
+  },
+  "characters": [
+    {
+      "character_id": "char-mio",
+      "name": "澪",
+      "aliases": [],
+      "role": "protagonist",
+      "public_profile": "町を離れていた二十代の女性。事故後の記憶が一部欠けている。",
+      "private_profile": "火災の直前、凪と激しく争っていたことを思い出せていない。",
+      "desires": [
+        "記憶を取り戻す",
+        "凪との関係を理解する"
+      ],
+      "fears": [
+        "自分が火災の原因だった可能性"
+      ],
+      "misbeliefs": [
+        "凪は自分を見捨てた"
+      ],
+      "strengths": [
+        "観察力",
+        "粘り強さ"
+      ],
+      "weaknesses": [
+        "疑念を抱えると他人を遠ざける"
+      ],
+      "long_term_arc": "真相の所有ではなく、共有と信頼を選ぶ。",
+      "initial_state": {
+        "current_location_id": "loc-seaside-town",
+        "physical_condition": "健康",
+        "emotional_condition": "警戒",
+        "alive_status": "alive"
+      }
+    },
+    {
+      "character_id": "char-nagi",
+      "name": "凪",
+      "aliases": [],
+      "role": "co_protagonist",
+      "public_profile": "灯台を管理する姉。町に残り続けている。",
+      "private_profile": "火災の夜、澪を守るため証言の一部を隠した。",
+      "desires": [
+        "澪を守る",
+        "町の平穏を保つ"
+      ],
+      "fears": [
+        "真相が澪を再び壊す"
+      ],
+      "misbeliefs": [
+        "黙ることが最善の保護になる"
+      ],
+      "strengths": [
+        "責任感",
+        "忍耐"
+      ],
+      "weaknesses": [
+        "秘密を抱え込む"
+      ],
+      "long_term_arc": "保護のための沈黙をやめ、対等に真実を共有する。",
+      "initial_state": {
+        "current_location_id": "loc-lighthouse",
+        "physical_condition": "健康",
+        "emotional_condition": "緊張",
+        "alive_status": "alive"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "relationship_id": "rel-mio-nagi",
+      "participant_ids": [
+        "char-mio",
+        "char-nagi"
+      ],
+      "relationship_type": "sisters",
+      "public_description": "距離のある姉妹。",
+      "private_truth": "互いを守ろうとして異なる秘密を抱えている。",
+      "initial_state": {
+        "status": "estranged",
+        "trust": 2,
+        "affection": 7,
+        "hostility": 2
+      },
+      "desired_arc": "沈黙による保護から、真実を共有する関係へ。",
+      "constraints": [
+        "突然完全に和解させない"
+      ]
+    }
+  ],
+  "world": {
+    "setting_summary": "海と崖に囲まれた小さな町。",
+    "historical_background": "十年前の灯台火災で旧管理棟が焼失した。",
+    "social_structure": "古くからの住民の結びつきが強い。",
+    "technology_or_magic": "現代日本相当。超常要素はない。",
+    "cultural_norms": [
+      "町の問題を外へ漏らさない"
+    ],
+    "major_conflicts": [
+      "火災の真相を隠したい町の有力者"
+    ],
+    "public_knowledge": [
+      "火災は事故と発表された"
+    ],
+    "private_truths": [
+      "火災直前に管理記録が改ざんされた"
+    ]
+  },
+  "locations": [
+    {
+      "location_id": "loc-seaside-town",
+      "name": "汐見町",
+      "parent_location_id": null,
+      "description": "海と崖に囲まれた小さな町。",
+      "access_constraints": [],
+      "public_facts": [
+        "灯台が町の象徴"
+      ],
+      "private_facts": []
+    },
+    {
+      "location_id": "loc-lighthouse",
+      "name": "汐見灯台",
+      "parent_location_id": "loc-seaside-town",
+      "description": "岬の先に立つ白い灯台。",
+      "access_constraints": [
+        "管理区域は凪の許可が必要"
+      ],
+      "public_facts": [
+        "十年前に旧管理棟が焼失"
+      ],
+      "private_facts": [
+        "地下保管庫に旧記録が残る"
+      ]
+    }
+  ],
+  "world_rules": [
+    {
+      "rule_id": "rule-no-supernatural",
+      "name": "現実的因果",
+      "description": "事件は人間の行動と物理的原因で説明される。",
+      "scope": "series",
+      "exceptions": [],
+      "reader_visibility": "reader_visible",
+      "change_policy": "immutable"
+    }
+  ],
+  "knowledge_facts": [
+    {
+      "knowledge_id": "know-fire-night",
+      "statement": "灯台火災は単純な事故ではない。",
+      "truth_status": "true",
+      "reader_visibility": "hidden",
+      "source_type": "initial_design",
+      "private_notes": "管理記録の改ざんが直接の手掛かり。"
+    },
+    {
+      "knowledge_id": "know-key-owner",
+      "statement": "地下保管庫の鍵は凪が持っている。",
+      "truth_status": "true",
+      "reader_visibility": "hidden",
+      "source_type": "initial_design",
+      "private_notes": null
+    }
+  ],
+  "character_knowledge": [
+    {
+      "character_id": "char-mio",
+      "knowledge_id": "know-fire-night",
+      "state": "suspects"
+    },
+    {
+      "character_id": "char-mio",
+      "knowledge_id": "know-key-owner",
+      "state": "unknown"
+    },
+    {
+      "character_id": "char-nagi",
+      "knowledge_id": "know-fire-night",
+      "state": "knows"
+    },
+    {
+      "character_id": "char-nagi",
+      "knowledge_id": "know-key-owner",
+      "state": "knows"
+    }
+  ],
+  "threads": [
+    {
+      "thread_id": "thread-missing-memory",
+      "title": "失われた記憶",
+      "question": "澪は火災の夜に何を見たのか。",
+      "importance": "major",
+      "kind": "mystery",
+      "introduced_by": "initial_design",
+      "required_for_completion": true,
+      "planned_resolution": "第四巻で凪と記録を照合し、澪が目撃した改ざんを思い出す。",
+      "reader_visibility": "reader_visible",
+      "initial_status": "open"
+    },
+    {
+      "thread_id": "thread-sister-trust",
+      "title": "姉妹の信頼",
+      "question": "澪と凪は真実を共有できるか。",
+      "importance": "major",
+      "kind": "relationship",
+      "introduced_by": "initial_design",
+      "required_for_completion": true,
+      "planned_resolution": "第四巻で互いの秘密を明かし、共同で町へ向き合う。",
+      "reader_visibility": "reader_visible",
+      "initial_status": "open"
+    }
+  ],
+  "ending": {
+    "ending_id": "ending-hopeful-return",
+    "desired_effect": "痛みを残しつつ、姉妹が同じ場所で再出発する希望。",
+    "required_outcomes": [
+      "火災の主要な真相が澪と凪に共有される",
+      "thread-missing-memoryがresolved",
+      "thread-sister-trustがresolved"
+    ],
+    "forbidden_outcomes": [
+      "姉妹のどちらかが理由なく死亡",
+      "真相が超常現象で片付く"
+    ],
+    "character_end_states": {
+      "char-mio": "記憶の欠落を受け入れ、町に残る選択をする",
+      "char-nagi": "沈黙をやめ、澪へ全記録を渡す"
+    },
+    "relationship_end_states": {
+      "rel-mio-nagi": "互いに不完全な真実を共有できる"
+    },
+    "thread_requirements": [
+      "thread-missing-memory",
+      "thread-sister-trust"
+    ],
+    "final_revelations": [
+      "管理記録改ざんの実行者",
+      "火災直前の姉妹の会話"
+    ],
+    "private_notes": "法的決着より姉妹の選択を結末の中心にする。"
+  },
+  "created_at": "2026-07-23T10:00:00Z"
+}

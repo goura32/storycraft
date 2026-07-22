@@ -1,0 +1,57 @@
+{
+  "brief": {
+    "schema_version": 1,
+    "source_type": "brief",
+    "title": "潮騒の記憶",
+    "genre": [
+      "ミステリ",
+      "ヒューマンドラマ"
+    ],
+    "audience": "一般",
+    "tone": [
+      "静か",
+      "不穏",
+      "最終的には希望がある"
+    ],
+    "premise": "記憶の一部を失った澪が海辺の町へ戻り、姉の凪と灯台火災の真相を追う。",
+    "central_question": "過去の真相を知った姉妹は、互いを信じ直せるか。",
+    "required_elements": [
+      "海辺の町",
+      "失われた記憶",
+      "姉妹",
+      "灯台"
+    ],
+    "avoid": [
+      "露悪的な残虐描写",
+      "救いのない結末"
+    ],
+    "ending_preference": "姉妹が真相を受け止め、町で新しい関係を始める。",
+    "volume_count": 4,
+    "language": "ja",
+    "style_preferences": [
+      "三人称一元視点",
+      "情景描写は簡潔",
+      "説明過多を避ける"
+    ],
+    "user_notes": null
+  },
+  "keywords": {
+    "schema_version": 1,
+    "source_type": "keywords",
+    "keywords": [
+      "海辺の町",
+      "失われた記憶",
+      "姉妹",
+      "静かな恐怖",
+      "灯台"
+    ],
+    "avoid": [
+      "露悪的な残虐描写"
+    ],
+    "ending_preference": "救いのある結末",
+    "volume_hint": 4,
+    "language": "ja",
+    "notes": "会話よりも行動と風景で緊張を描く。"
+  },
+  "expected_error": "INPUT_MODE_CONFLICT"
+}

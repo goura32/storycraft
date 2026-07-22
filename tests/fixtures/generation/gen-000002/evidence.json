@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "generation_id": "gen-000002",
+  "evidence": [
+    {
+      "evidence_id": "evidence-000001",
+      "scene_id": "scene-v01-c001-s001",
+      "quote": "扉の前には凪が立っていた。",
+      "occurrence": 1,
+      "context_before": "潮を含んだ風が、錆びた蝶番を細く鳴らしている。",
+      "context_after": "十年ぶりに見る姉の顔は、記憶の中より痩せていた。",
+      "target_type": "character_state",
+      "target_id": "char-mio",
+      "change_summary": "澪の現在位置を灯台へ更新"
+    },
+    {
+      "evidence_id": "evidence-000002",
+      "scene_id": "scene-v01-c001-s001",
+      "quote": "「いた。火が上がる前から」",
+      "occurrence": 1,
+      "context_before": "長い沈黙のあと、凪はうなずいた。",
+      "context_after": "風が止み、遠くの波だけが聞こえた。",
+      "target_type": "thread_state",
+      "target_id": "thread-missing-memory",
+      "change_summary": "凪が火災前から灯台にいた事実を澪が知る"
+    }
+  ]
+}

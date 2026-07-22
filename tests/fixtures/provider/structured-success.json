@@ -1,0 +1,16 @@
+{
+  "text": null,
+  "structured_data": {
+    "decision": "accept",
+    "issues": [],
+    "summary": "要件を満たす。"
+  },
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 80,
+    "total_tokens": 1280
+  },
+  "provider_request_id": "fake-request-0001",
+  "finish_reason": "stop",
+  "raw_metadata": {}
+}
