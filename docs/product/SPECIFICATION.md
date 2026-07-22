@@ -1,2209 +1,1121 @@
 # Storycraft 製品仕様
 
-> 次期正式リリースで利用者へ保証する振る舞いの正本。現行コードの到達状況は[実装状況](IMPLEMENTATION_STATUS.md)を参照する。この仕様を、現行実装へ合わせて後退させてはならない。
+この文書は、Storycraft Version 1について、利用者から見える振る舞いと製品としての約束を定める。
 
-Storycraftは、一度与えられたBriefまたはKeywordsから、長編の日本語シリーズを計画・執筆・継続性管理・完結監査し、検証済みMarkdown publicationとしてローカルに採用するCLI製品である。
+実装が満たすべき検証可能な要件は[`REQUIREMENTS.md`](REQUIREMENTS.md)、システム全体の設計方針は[`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)で定める。
 
-詳細な実装契約は次を正本とする。
-
-- [Pipeline contracts](../design/pipeline_contracts.md)
-- [Ledger contracts](../design/ledger_contracts.md)
-- [Workspace layout](../design/workspace_layout.md)
-- [Runtime and recovery](../design/runtime_and_recovery.md)
-- [Configuration contracts](../design/configuration_contracts.md)
-- [Context contracts](../design/context_contracts.md)
-- [Prompt template design](../design/prompt_template_design.md)
-- [Series engine design](../design/series_engine_design.md)
-- [Implementation acceptance](../design/implementation_acceptance.md)
-
-本書は製品の外部挙動を定める。内部JSON field、Schema、hash graph、transaction順序の詳細は上記設計文書へ委譲する。
+この文書では、内部の保存形式、ファイル配置、データ項目、実装moduleなどは定義しない。
 
 ---
 
-## 1. 製品の目的
+# Part I: 製品の目的
 
-利用者は、物語の基本条件を一度入力し、通常実行中に巻・章・Sceneごとの判断を繰り返し求められることなく、次を得る。
+## 1. Storycraftとは
+
+Storycraftは、日本語の長編シリーズを計画し、執筆し、継続性を管理し、完結可能性を確認し、読者向け原稿へまとめるCLIである。
+
+一つの作品について、次を一連の作業として扱う。
 
 ```text
-一貫したSeries map
-巻ごとの局所的な解決
-章・Scene単位の具体的計画
-POVと開示境界を守る日本語本文
-本文根拠付きの継続性更新
-巻をまたぐHandoff
-全Required ThreadとEnding criterionの完結監査
-巻別・全巻Markdown
-検証済みpublication metadataとCompletion report
-Crash後に再開可能なworkspace
+作品の初期設計
+シリーズ全体の計画
+各巻と各章の計画
+各Sceneの設計
+Scene本文の執筆
+本文に基づく継続性更新
+巻間の引継ぎ
+シリーズの完結判定
+読者向け原稿の作成
+```
+
+Storycraftは、単発の文章生成器ではない。
+
+長編執筆中に変化する人物、関係、Knowledge、Thread、世界状態を追跡し、後続Sceneへ引き継ぐことを中心的な責務とする。
+
+---
+
+## 2. 製品の目的
+
+Storycraftの目的は、長編シリーズ制作で発生しやすい次の問題を減らすことである。
+
+```text
+巻をまたいだ設定の矛盾
+人物のKnowledgeの不整合
+Relationship変化の欠落
+未回収Threadの放置
+計画と本文の乖離
+前Sceneの結果を無視した後続Scene
+作者だけが知る秘密の早すぎる開示
+完結していない作品の公開
+```
+
+Storycraftは、これらを完全に自動解決すると約束するものではない。
+
+しかし、問題を発見しやすくし、作品状態を明示し、再開可能な制作工程として管理する。
+
+---
+
+## 3. 想定利用者
+
+Version 1の主な利用者は、次の条件に当てはまる個人である。
+
+```text
+自分のローカル環境で執筆する
+一度に一つのprocessで作品を進める
+CLI操作に抵抗がない
+AIによる長編生成を段階的に確認したい
+最終的な品質判断を自分で行う
+```
+
+複数人による同時共同編集は、Version 1の対象ではない。
+
+---
+
+## 4. 基本方針
+
+Storycraftは、次を基本方針とする。
+
+```text
+日本語作品を生成する
+作品状態を明示的に管理する
+本文に書かれた事実だけを継続性へ反映する
+ReviewとRevisionを分ける
+公開前に完結状態を確認する
+途中停止後に再開できる
+確定済み成果物を不用意に書き換えない
+```
+
+利用者が理解できない内部複雑性を、製品価値として扱わない。
+
+---
+
+# Part II: 対象範囲
+
+## 5. Version 1で提供するもの
+
+Version 1は、次を提供する。
+
+```text
+BriefまたはKeywordsからの作品開始
+4〜10巻のシリーズ計画
+巻計画
+章計画
+Scene Card
+日本語Scene本文
+Review
+Revision
+継続性更新
+Evidence
+巻Handoff
+完結判定
+全巻原稿
+巻別原稿
+途中停止と再開
+一段階ずつの実行
 ```
 
 ---
 
-## 2. 製品が解決する問題
+## 6. Version 1で提供しないもの
 
-長編シリーズ生成では、単発の本文品質だけでなく次の問題が起きる。
-
-```text
-人物・関係・知識・時刻の矛盾
-前巻の終了Stateを無視した次巻
-未解決Threadの放置
-Ending条件を満たさない完結
-レビューによる候補の上書き
-Crash後の重複生成・ID再利用
-内部メモやauthor truthの公開物への漏洩
-途中ファイルを完成品として誤採用
-```
-
-Storycraftは、LLMの生成を厳密な候補・Review・Checkpoint・Commit・Gateへ分離し、これらを製品レベルで防止する。
-
----
-
-## 3. 対象利用者
-
-主な対象は次である。
+Version 1は、次を提供しない。
 
 ```text
-長編日本語フィクションを一括生成したい個人
-シリーズ構成と継続性を機械的に管理したい編集者・開発者
-LLM出力を再現可能なartifactとして検証したいチーム
-Crash・timeout・provider failureを含む長時間生成を安全に運用したい利用者
-```
-
-利用者が内部LedgerやStageを理解していなくても、`run`、`resume`、`step`を利用できることを要求する。
-
----
-
-## 4. 製品範囲
-
-Storycraft version 1は次を行う。
-
-```text
-4〜10巻の日本語シリーズ生成
-BriefまたはKeywords入力
-Series／Volume／Chapter／Scene計画
-Scene本文生成
-本文根拠付き継続性更新
-Volume Handoff
-Completion audit
-ローカルKDP向けMarkdown publication生成
-workspace、audit、resume、recovery
+複数利用者の同時編集
+クラウド共同作業
+外部Web検索による自動調査
+別の会話や別作品からの自動memory取得
+出版プラットフォームへの自動投稿
+電子書籍形式への直接変換
+表紙画像生成
+校正者や編集者の代替
+法的・医学的・歴史的正確性の保証
+商業的成功の保証
 ```
 
 ---
 
-## 5. 非目標
+## 7. 作品規模
 
-version 1の範囲外:
+一つのシリーズは、4〜10巻で構成する。
+
+巻数は、利用者の入力または作品設計から決定する。
+
+指定が不可能、不整合、または範囲外の場合は、処理を開始せず利用者へ問題を示す。
+
+---
+
+## 8. 基本言語
+
+Version 1の生成本文、計画、Review、完結判定、Publicationは日本語を基本とする。
+
+固有名詞、作中用語、CLI command、設定値などは必要に応じて英語を使用できる。
+
+---
+
+# Part III: 入力
+
+## 9. 入力方式
+
+新しい作品は、次のいずれか一方から開始する。
 
 ```text
-KDPその他の外部サービスへの自動アップロード
-Web UI
-対話型人間承認画面
-RAGまたは外部資料検索
-Web閲覧
-複数モデルの自動選択・投票
-複数writerによる同一workspace同時編集
-旧state/workspaceの自動migration
-既存作品の途中からの自動取り込み
-生成後の自動販売価格設定
-商業的成功や文学賞品質の保証
+Brief
+Keywords
 ```
 
-Publishing profileが販売区分を記述しても、Storycraft自身はストアへ公開しない。
+両方を同時に指定してはならない。
+
+どちらも指定されていない場合は開始しない。
 
 ---
 
-# Part I: 利用者インターフェース
+## 10. Brief入力
 
-## 6. 公開コマンド
+Briefは、利用者が作品の方向性を比較的詳しく指定する方式である。
 
-公開CLIは次の3コマンドを提供する。
+Briefでは、必要に応じて次を指定できる。
 
 ```text
-storycraft run
-storycraft resume
-storycraft step
-```
-
-内部Stageを直接指定する一般利用者向けコマンドは提供しない。
-
----
-
-## 7. `run`
-
-`run`は新しいworkspaceでシリーズ生成を開始し、terminalまたは安全な停止条件まで進める。
-
-利用者は開始時に次を指定する。
-
-```text
-workspace
-設定
-BriefまたはKeywordsのどちらか一方
-```
-
-同じworkspaceに既存runがある場合、`run`は上書きせず失敗する。
-
----
-
-## 8. `resume`
-
-`resume`は既存workspaceの正本を検証し、最後の安全なdurable boundaryから続行する。
-
-利用者はBriefやKeywordsを再指定しない。
-
-`resume`は次をしない。
-
-```text
-最新ファイルを自動選択
-最大GenerationをHEADへ設定
-途中候補を推測して採用
-使用済みID・usageを巻き戻す
-```
-
----
-
-## 9. `step`
-
-`step`は最大1件のCanonical Stageを完了して返る。
-
-用途:
-
-```text
-段階的なデバッグ
-CIでのStage境界検証
-長時間runの外部制御
-障害注入試験
-```
-
-1 Stage内部で必要なtransport／response-structure retryまたはatomic transactionは完了してよいが、次Stageまでは実行しない。
-
----
-
-## 10. 入力モード
-
-開始時の入力モードは正確に一つである。
-
-### Brief mode
-
-利用者が完全なBriefを渡す。
-
-### Keywords mode
-
-利用者がKeywordsと任意のhintを渡し、StorycraftがBrief候補を生成・採用する。
-
-両方指定または両方未指定はCLI usage errorである。
-
----
-
-## 11. Briefが表すもの
-
-Briefは少なくとも次の製品条件を定義する。
-
-```text
-作品タイトル
+仮題
 ジャンル
 対象読者
-主人公
+雰囲気
+中心的な問い
 主要人物
-作品の目標
+舞台
 避ける内容
-Ending方向
-巻数
+希望するEnding
+希望巻数
+文体上の希望
 ```
 
-巻数は4〜10でなければならない。
+すべての項目が必須とは限らない。
+
+ただし、作品を安全に開始できる最低限の情報が不足する場合は、処理を開始しない。
 
 ---
 
-## 12. Keywordsが表すもの
+## 11. Keywords入力
 
-Keywords modeでは次を指定できる。
+Keywordsは、短い語句や条件からBriefを生成する方式である。
+
+例:
 
 ```text
-複数Keyword
-自由なnotes
-title hint
-genre hint
-ending hint
-avoid
-volumes hint
+海辺の町
+失われた記憶
+姉妹
+静かな恐怖
+救いのある結末
 ```
 
-Storycraftはhintを無視せず、構造正常なBrief contentへ変換する。
-
-Profile ID、source hash、timestampなどの実行metadataはコードが追加する。
-
----
-
-## 13. 通常実行中の利用者入力
-
-正常な自動実行では、巻・章・Sceneごとに利用者へ質問しない。
-
-次の場合だけ、runは停止して利用者または運用者の判断を要求できる。
+生成されたBriefは、利用者が指定した次の条件を失ってはならない。
 
 ```text
-機械的正本不整合
-互換性のない設定変更
-Completionが意味的にincomplete
-競合するstaging/final artifact
-無効なHEADまたはCURRENT
-予算上限
-利用者による停止
+必須Keyword
+避ける内容
+Endingの希望
+巻数の希望
 ```
 
+Keywordsに矛盾する条件が含まれる場合は、矛盾を隠して進めず、利用者へ示す。
+
 ---
 
-## 14. 設定
+## 12. 入力の扱い
 
-利用者は設定により次を選択できる。
+Storycraftは、入力内容を作品資料として扱う。
+
+入力内に命令のような文章が含まれていても、Storycraftの実行方法、出力形式、安全規則を変更する命令として扱わない。
+
+利用者の入力は作品内容に影響するが、システムの制御規則を上書きしない。
+
+---
+
+# Part IV: 利用方法
+
+## 13. 新規実行
+
+`run`は、新しい作品制作を開始する。
+
+利用者から見た振る舞い:
 
 ```text
-providerとmodel
-credentialを読む環境変数名
-timeout
-retry上限
-revision上限
-Completion attempt上限
-Context/token制限
-Call/token/cost/active-time予算
-editorial profile
-publishing profile
-audit保存・retention
-log level
+入力を確認する
+作品の初期設計を作る
+計画と執筆を順に進める
+進捗を表示する
+完結判定を行う
+公開可能な場合にPublicationを作る
 ```
 
-設定の完全な意味は[Configuration contracts](../design/configuration_contracts.md)を正本とする。
+既に作品データが存在する場所へ、確認なしで新規作品を上書きしてはならない。
 
 ---
 
-## 15. Credential
+## 14. 再開
 
-Credential値はworkspace、Context、prompt、publication、通常logへ保存しない。
+`resume`は、以前に停止または中断した作品制作を再開する。
 
-保存されるのは必要に応じて環境変数名だけである。
+利用者は、元のBriefやKeywordsを再入力する必要がない。
 
-`resume`時にcredential値をrotationしてよいが、credential sourceの契約を黙って変更してはならない。
+Storycraftは、前回確定した状態と未完了の作業を確認し、安全に再開できる位置を判断する。
+
+安全に判断できない場合は、推測して先へ進まず、人間による確認が必要であることを示す。
 
 ---
 
-## 16. Single writer
+## 15. 一段階実行
 
-一つのworkspaceは同時に一つのmutating processだけが扱う。
+`step`は、意味のある一つの処理段階だけを進めて終了する。
 
-Lockを取得できない場合:
+利用目的:
 
 ```text
-既存runを破壊しない
-待機を無期限に行わない
-lock conflictとして終了する
+各段階の成果物を確認する
+費用や時間を制御する
+問題のある段階を特定する
+手動Reviewを挟む
 ```
 
+内部的な小さなファイル操作一つごとに停止するものではない。
+
 ---
 
-## 17. Exit result
+## 16. 停止
 
-CLIは少なくとも次を区別できる終了結果を返す。
+利用者は実行を停止できる。
+
+停止時は、可能な限り安全な区切りまで処理し、再開可能な状態を残す。
+
+外部応答待ちや書込中など、安全に停止できない瞬間では、処理が安全な状態へ到達してから停止することがある。
+
+---
+
+## 17. 進捗表示
+
+Storycraftは、少なくとも次を利用者へ示す。
 
 ```text
-成功または成功したstep
-usage/config error
-安全なuser/budget/manual stop
-lock conflict
-mechanical contract failure
-provider exhaustion
-unexpected internal failure
+現在の処理段階
+現在の巻・章・Scene
+完了した範囲
+停止理由
+再開可能か
+完結判定結果
+Publication作成結果
 ```
 
-正確なexit code registryは[Series engine design](../design/series_engine_design.md)を正本とする。
+内部識別子だけを表示し、利用者が状況を理解できない状態にしてはならない。
 
 ---
 
-# Part II: 生成される作品
+# Part V: 生成工程
 
-## 18. シリーズ規模
+## 18. 全体の流れ
 
-シリーズは4〜10巻である。
-
-各巻は:
+標準的な生成工程は次である。
 
 ```text
-一つ以上のChapter
-順序付きScene
-巻内の局所的な解決
-非最終巻では次巻へ残すreader question
+入力確認
+↓
+初期設計
+↓
+シリーズ計画
+↓
+巻計画
+↓
+章計画
+↓
+Scene Card
+↓
+Scene本文
+↓
+継続性更新
+↓
+Scene確定
+↓
+次のScene
+↓
+巻Handoff
+↓
+次の巻
+↓
+完結判定
+↓
+Publication
 ```
 
-を持つ。
-
-最終巻は主要な完結条件を満たさなければならない。
+ReviewとRevisionは、必要な生成段階へ挿入する。
 
 ---
 
-## 19. 言語
+## 19. 初期設計
 
-作品本文、計画の物語内容、読者向けmetadataは日本語を基本とする。
+初期設計では、作品全体の基盤を作る。
 
-次は契約上のtechnical scalarとして英数字を用いてよい。
+少なくとも次を扱う。
 
 ```text
-ID
-enum
-path
-hash
-language tag
-provider/model名
-Stage ID
+Concept
+主要人物
+主要Relationship
+世界と舞台
+Knowledge
+主要Thread
+Endingの方向
+長期的な人物変化
 ```
 
+初期設計内の要素は、互いに矛盾しない一つの作品設計として統合する。
+
 ---
 
-## 20. Series map
+## 20. シリーズ計画
 
-Series mapは全巻を通した不変の長期計画である。
+シリーズ計画は、全巻を通した物語の進行を定める。
 
-少なくとも次を定める。
+少なくとも次を示す。
 
 ```text
-各巻の構造的役割
-主人公変化
-主要Relationship変化
-Required Major Threadの進行
-Ending criterionの準備・充足
-巻内解決
-非最終巻のreader question
-最終巻の完結機能
+各巻の役割
+主人公の変化
+主要Relationshipの変化
+主要Threadの進行
+重要な開示
+危機の拡大
+Endingへの到達
 ```
 
-採用後のSeries mapは後続本文に合わせて書き換えない。
+各巻が独立した出来事の羅列にならず、シリーズ全体の因果関係を持つようにする。
 
 ---
 
-## 21. Volume design
+## 21. 巻計画
 
-各巻開始時に、その時点の実際のHEADと前巻Handoffを利用してVolume designを作る。
+巻計画は、シリーズ計画と巻開始時点の実際の作品状態から作る。
 
-Volume designは次を定める。
+前巻の結果がある場合は、その結果を反映する。
 
-```text
-巻タイトル
-開始State
-主人公・Relationshipの巻内変化
-Thread action
-Ending criterion target
-主要対立
-Chapter機能
-巻内局所解決
-次巻への移行
-```
+巻計画は、計画上そうなる予定だった状態ではなく、実際に確定した本文と作品状態を基準にする。
 
 ---
 
-## 22. Chapter design
+## 22. 章計画
 
-各Chapter開始時に、その時点のHEADと親Volume designを利用してChapter designを作る。
+章計画は、巻計画を順序付きSceneへ具体化する。
 
-Chapter designは次を含む。
+各章は少なくとも次を持つ。
 
 ```text
-Chapterタイトルと目的
-開始State
-終了目標
-中心的な人物またはRelationship変化
-Thread／Ending target
-順序付きScene plan
-Chapter末機能
+章の目的
+章開始時の状況
+章終了時の変化
+Sceneの順序
+主要な対立
+必要な開示
+次章への接続
 ```
 
 ---
 
 ## 23. Scene Card
 
-Scene Cardは本文生成前の凍結計画である。
+Scene Cardは、一つのSceneで何を書くかを定義する。
 
-利用者向けに保証される内容:
+少なくとも次を扱う。
 
 ```text
-POV人物
-登場人物
+POV
+参加人物
 場所
-時刻関係
-Scene目的
+Sceneの目的
+開始状況
 必須beat
-感情・Relationship変化
-Thread action
-Knowledge変化
-Reader disclosure
-Ending evidence target
-禁止開示
-許可されるState更新
-新規項目上限
-本文長guide
+Conflict
+開示してよい情報
+開示してはいけない情報
+許可する継続性更新
+終了時の変化
 ```
+
+Scene Cardは本文そのものではない。
 
 ---
 
-## 24. 本文
+## 24. Scene本文
 
-本文Stageは自然な日本語のScene本文だけを生成する。
+Scene本文は、Scene Cardと現在の作品状態に基づく自然な日本語散文である。
 
-本文応答には次を含めない。
+本文には、原則として次を含めない。
 
 ```text
 JSON
-front matter
-heading
+設定情報
+内部識別子
+Review結果
 箇条書き
-表
-code fence
-metadata説明
-continuity delta
-Evidence offset
-内部ID
+実装用metadata
+執筆指示
 ```
 
-Publicationの巻・章headingは後でコードが決定的に追加する。
+見出しや章番号を本文へ含めるかは、Publication構成に応じて決定する。
+
+Scene生成段階の本文は、物語本文として利用できる形であることを優先する。
 
 ---
 
-## 25. POVと開示
+## 25. 本文の基準情報
 
-一つのSceneは原則として一つのPOVを持つ。
+一つのSceneを作っている間は、同じ作品状態を基準にする。
 
-Writerへ渡すContextは次を除外する。
+Scene Card作成後に別のSceneが作品状態を変更した場合、その古いScene作業をそのまま採用しない。
 
-```text
-Thread author truth
-Thread resolution condition
-Knowledge author truth
-Endingのprivate source text
-非POV人物のprivate goal・pressure・emotion
-未来の未開示事実
-```
-
-本文は提示されていない秘密を一般的な物語パターンから推測して断定してはならない。
+古い基準に依存した本文や継続性更新は、必要に応じて作り直す。
 
 ---
 
-## 26. 新規Canon項目
+# Part VI: ReviewとRevision
 
-SceneはScene Cardが許可した場合だけ、局所的な新規項目を提案できる。
+## 26. Review
 
-許可可能な代表例:
+Reviewは、生成候補の問題点を評価する。
 
-```text
-Character
-Location
-Organization
-Item
-System
-Culture
-History
-supporting Thread
-Knowledge item
-```
-
-正確な種類はCanon契約を正本とする。
-
-Sceneごとに次を固定する。
+Reviewの対象例:
 
 ```text
-allowed_types
-Knowledge itemを許可するか
-max_items
-max_scope
-purpose
+入力条件との不一致
+内部矛盾
+人物行動の不自然さ
+Knowledge違反
+POV違反
+未許可の開示
+計画との不整合
+文章品質
+構造不足
 ```
+
+Reviewは、候補そのものを書き換えない。
 
 ---
 
-## 27. Sceneで作れないもの
+## 27. Revision
 
-通常Sceneは次を新規作成できない。
+Revisionは、Reviewで指摘された問題を修正した完全な置換候補を作る。
 
-```text
-Temporal rule
-Major Thread
-Ending criterion
-required Thread
-シリーズの固定世界規則
-```
+Revisionは、差分だけを返すものではない。
 
-上限外の提案や未許可の種類は機械的に拒否する。
+利用者や後続処理は、修正済みの完全な候補を確認できる。
 
 ---
 
-## 28. Persistent ID
+## 28. Reviewと採用
 
-LLMは永続IDを生成しない。
+Reviewに問題がなければ、候補を採用できる。
 
-候補内では`local_key`を使い、採用transaction中にコードが永続IDへ変換する。
+問題がある場合は、設定された回数の範囲でRevisionを行う。
 
-IDは:
-
-```text
-persist-before-use
-単調増加
-再利用なし
-失敗時のgapを保持
-```
-
-とする。
+Revision上限に達しても問題が残る場合は、無理に採用せず停止理由を示す。
 
 ---
 
-# Part III: ReviewとRevision
+## 29. 形式不正との区別
 
-## 29. Review対象
-
-通常のReview／Revision loopは次の候補に適用する。
+応答形式が壊れていることと、内容上の問題は区別する。
 
 ```text
-Initial-design integrated bundle
-Series map
-Volume design
-Chapter design
-Scene Card
-本文
-continuity delta
-Volume Handoff
+形式不正:
+  必須情報がない
+  読み取れない
+  指定形式と異なる
+
+内容上の問題:
+  矛盾
+  品質不足
+  計画違反
 ```
 
-Completion auditは別の規則を使う。
+形式不正の再取得と、Reviewを受けたRevisionは別の処理として扱う。
 
 ---
 
-## 30. Reviewの役割
+# Part VII: 継続性
 
-Reviewは候補全体を監査し、次だけを返す。
+## 30. 継続性管理の目的
 
-```text
-summary
-issues
-```
+継続性管理は、Scene本文によって実際に変化した作品状態を、後続Sceneへ引き継ぐために行う。
 
-Reviewは次を返さない。
+対象例:
 
 ```text
-修正版候補
-pass/fail
-next Stage
-adoption指示
-retry指示
-```
-
----
-
-## 31. Revision
-
-Issueがありrevision budgetが残る場合、Revisionは候補全体の完全置換を返す。
-
-Revisionは次を返さない。
-
-```text
-diff
-patch
-変更箇所だけ
-修正手順
-省略記号
-```
-
-以前の候補・Reviewはimmutable historyとして残る。
-
----
-
-## 32. Revision上限
-
-`max_revision_rounds`は構造正常な意味修正round数である。
-
-次はrevision roundに含まれない。
-
-```text
-初回生成
-Review
-transport retry
-response-structure retry
-source stalenessによる再生成
-```
-
----
-
-## 33. 残存Issue
-
-Revision上限後もissueが残る場合:
-
-```text
-候補が機械的に有効であること
-残存issueをimmutable auditへ保存すること
-```
-
-を条件に、候補を採用可能とする。
-
-機械的Schema違反や参照破損を残存issueとして採用してはならない。
-
----
-
-## 34. Retry区分
-
-Retryは次を分離する。
-
-### Transport retry
-
-```text
-接続失敗
-timeout
-stream中断
-登録されたretryable provider error
-```
-
-### Response-structure retry
-
-```text
-invalid UTF-8
-invalid JSON
-Schema failure
-unknown field
-本文format違反
-```
-
-### Semantic Revision
-
-```text
-構造正常候補へのReview issue
-```
-
-区分を混ぜて無制限に再試行してはならない。
-
----
-
-## 35. Provider failure
-
-Transportまたはresponse-structure retryを使い切った場合:
-
-```text
-失敗したCall IDとauditを保持
-使用量を保持
-構造不正候補を正本として保存しない
-Runをfailedまたは契約された停止状態にする
-```
-
----
-
-# Part IV: Canon、State、Evidence
-
-## 36. Canon
-
-Canonは固定の物語identity・不変事実・長期構造を持つ。
-
-代表例:
-
-```text
-Character identity
-Relationship participants/type/origin
-World entity
-Temporal rule
-Thread定義
-Ending criterion
-Knowledge itemのcanonical fact
-```
-
----
-
-## 37. Story State
-
-Story Stateは現在変化する値を持つ。
-
-```text
-Character location・condition・emotion・goal・pressure
-Relationshipの方向別trust・perception・stance・intention
-Thread status・progress・volume disposition
-Character／Reader Knowledge status
-Story clock
-```
-
-CanonとStateに同じ意味の値を重複保存しない。
-
----
-
-## 38. Knowledge
-
-Knowledge itemは固定のfact定義である。
-
-誰が知っているか、Readerへどこまで開示されたかはStory Stateで管理する。
-
-Default:
-
-```text
-Character: unknown
-Reader: withheld
-```
-
-Defaultと同じ行は保存しない。
-
----
-
-## 39. Thread
-
-Major Threadはシリーズ全体で追跡する。
-
-状態は少なくとも次を区別する。
-
-```text
-open
-in_progress
-resolved
-retired
-```
-
-Scene action:
-
-```text
-introduce
-advance
-resolve
-retire
-```
-
-Required Major Threadはretireできず、最終Completionまでにresolvedでなければならない。
-
----
-
-## 40. Story clock
-
-Story clockは:
-
-```text
-採用Scene順
-物語上の時刻label
-parallel group
-最後のScene
-現在のVolume／Chapter／Scene
-```
-
-を持つ。
-
-Scene Commitだけが`current_order`を1増やす。
-
-Volume Handoff CommitはStory clockを変えない。
-
----
-
-## 41. GenerationとScene順
-
-Generationはすべての採用Commitで進む。
-
-```text
-initial_design
-Scene
-Volume Handoff
-```
-
-Scene順はScene Commitだけで進む。
-
-したがって:
-
-```text
-Generation ID = Scene順
-```
-
-とは限らない。
-
-Canonical fixtureでは:
-
-```text
-47 Scene commits
-4 Volume Handoff commits
-final Generation = 00000051
-final current_order = 47
-```
-
----
-
-## 42. continuity delta
-
-本文から抽出される候補deltaは、Scene Cardで許可された永続的変化だけを含む。
-
-代表的なbranch:
-
-```text
-既存項目更新
-新規項目提案
-Knowledge item提案
-Character／Reader Knowledge更新
-Thread更新
-Ending Evidence提案
-時間更新
-safe handoff summary
-```
-
-LLMは`before`値、永続ID、Evidence ID、offset、hashを生成しない。
-
----
-
-## 43. Evidence
-
-永続的な更新は、凍結本文に一度だけ現れる完全一致quoteで裏付ける。
-
-コードは次を計算する。
-
-```text
-Unicode code-point start/end offset
-quote SHA-256
-prose SHA-256
-Evidence ID
-```
-
-ParaphraseやPublicationで追加したheadingはEvidenceにならない。
-
----
-
-## 44. Scene Commit
-
-Scene Card、本文、candidate deltaはCheckpointであり、まだ採用済みではない。
-
-Scene Commitは次を一つのtransactionとして行う。
-
-```text
-更新許可とbefore値検証
-ID採番
-Evidence作成
-committed delta作成
-Canon／Knowledge／State／Evidence root作成
-Scene artifact作成
-Commit／Generation manifest作成
-全hash・差分検証
-最終pathへのmove
-canon/HEAD更新
-```
-
----
-
-## 45. 双方向差分保証
-
-Scene Commitは次を両方向に証明する。
-
-```text
-committed deltaの全変更がafter rootsに存在する
-parentからafter rootsへの全変更がcommitted deltaに存在する
-```
-
-隠れたState変更や適用されないdeltaを採用しない。
-
----
-
-## 46. HEAD
-
-現在の採用済みStory snapshotは:
-
-```text
-canon/HEAD
-```
-
-が選ぶ。
-
-Generation directoryが存在するだけでは採用済みではない。
-
-HEADは、Generationと必要なScene/Handoff artifactがdurableかつ再検証済みになった後、最後に更新する。
-
----
-
-# Part V: Volume Handoff
-
-## 47. Handoffの目的
-
-各巻の最後に、実際に採用された巻末Stateから次を作る。
-
-```text
-人物・Relationshipのcarry-over
-Threadの巻末判断
-Knowledge／Reader status
-重要World項目
-次巻制約
-risk
-safe summary
-```
-
-全本文を再要約するartifactではない。
-
----
-
-## 48. Handoffの採用
-
-Volume Handoffも独立したCommit／Generationとして採用する。
-
-変更できるStory Stateは:
-
-```text
-thread_states[].volume_disposition
-```
-
-だけである。
-
-次は親Generationと同一でなければならない。
-
-```text
-Canon
-Knowledge item
-Evidence index
-Story clock
-Scene order
-```
-
----
-
-## 49. Volume disposition
-
-巻境界のThread判断:
-
-```text
-resolve
-carry_over
-retire
-```
-
-これはThread statusとは別である。
-
-Required Major Threadを`retire`できない。
-
-最終巻のRequired Major Threadは`resolve`でなければならない。
-
----
-
-## 50. 次巻開始
-
-非最終巻のHandoff採用後、次巻のVolume designを作る。
-
-次巻は:
-
-```text
-Series mapだけ
-```
-
-ではなく:
-
-```text
-現在のHandoff HEAD
-前巻Handoff
-採用済みSeries map
-```
-
-から開始する。
-
----
-
-# Part VI: Completion
-
-## 51. Completion開始条件
-
-Completionは最終Scene直後ではなく、最終Volume HandoffがHEADに採用された後に開始する。
-
----
-
-## 52. COMP-PRE
-
-LLMを呼ぶ前にコードが機械的完了条件を検証する。
-
-代表例:
-
-```text
-最終HEAD graph
-最終Commit typeがvolume_handoff
-全Volume／Chapter plan
-全計画Sceneと非空本文
-Scene／Evidence／hash整合
-Story clockとScene commit数
-全Required Major Thread
-全Required Ending criterion
-全Handoff
-残存Issue audit
-active Candidate／Checkpoint／stagingがない
-Completion Contextがtoken上限内
-```
-
-一つでも失敗すればCompletion LLMを呼ばず、mechanical failureとする。
-
----
-
-## 53. Completion audit
-
-COMP-PRE成功後、LLMが意味的完結性を監査する。
-
-結果:
-
-```text
-complete
-complete_with_residual_issues
-incomplete
-```
-
-各Required criterionとRequired Major Threadを個別に評価する。
-
----
-
-## 54. Completion attempt
-
-Completionは通常のReview／Revision loopを使わない。
-
-構造不正だけがbounded attemptの理由である。
-
-最初の構造正常な結果を採用する。
-
----
-
-## 55. Meaningful incomplete
-
-構造正常な`incomplete`は正当な監査結果である。
-
-Storycraftは:
-
-```text
-completeへ変えるために再試行しない
-本文・Canon・Stateを自動修正しない
-Completion auditをそのまま保存する
-diagnostic publication stagingとValidationを作る
-Publication Gateをfailにする
-CURRENTを更新しない
-manual interventionとして停止する
-```
-
----
-
-## 56. Residual completion
-
-`complete_with_residual_issues`は、Required条件は満たすが、非致命的な残存Issueを持つ状態である。
-
-機械的Publication検証が通れば公開採用できる。
-
-残存Issueはreader-facing manuscriptへ混入させない。
-
----
-
-## 57. Completionの非変更性
-
-Completion Stageは次を変更しない。
-
-```text
-本文
-Canon
+人物の位置
+所有物
 Knowledge
-Story State
-Evidence
-plan
-Scene artifact
-Handoff
-canon/HEAD
+Relationship
+負傷
+約束
+未解決Thread
+時間経過
+世界状態
 ```
 
-Completionは評価とaudit保存だけを行う。
+---
+
+## 31. 本文優先
+
+継続性更新は、Scene Cardの予定ではなく、確定した本文に基づく。
+
+本文に書かれていない変化を、予定されていたという理由だけで作品状態へ追加してはならない。
 
 ---
 
-# Part VII: Publication
+## 32. 許可された更新
 
-## 58. Publicationの意味
+各Sceneで変更できる範囲は、Scene Cardと現在の作品状態によって制限する。
 
-Publicationは、現在の採用済みStory snapshotとCompletion auditから作る、reader-facingなimmutable出力一式である。
-
-Publication directoryが存在するだけでは採用済みではない。
-
----
-
-## 59. Publication ID
-
-Publicationごとにコードが:
+通常のSceneが、許可なく次を作成または変更してはならない。
 
 ```text
-pub-NNNNNN
+シリーズ全体を左右する新しい主要Thread
+Ending条件
+世界の基本法則
+重要人物の過去の真相
+大規模な時間規則
 ```
 
-形式のIDを採番する。
-
-失敗したPublication IDは再利用しない。
+大きな変更が必要な場合は、計画または作品設計の明示的なRevisionとして扱う。
 
 ---
 
-## 60. Default publication layout
+## 33. Evidence
 
-Default local KDP publication:
+継続性更新には、可能な限り本文中の根拠を関連付ける。
+
+Evidenceは、利用者が次を確認できるための情報である。
 
 ```text
-manuscript/
-  series.md
-  v01.md
-  v02.md
-  ...
-
-metadata/
-  series.json
-  volumes/
-    v01.json
-    v02.json
-    ...
-
-reports/
-  completion-audit.json
-
-publication-validation.json
-publication-manifest.json
+どのSceneで
+本文のどの表現に基づき
+何を
+どのように変更したか
 ```
+
+Evidenceは改ざん証明ではなく、人間による確認を助けるためのものである。
 
 ---
 
-## 61. 全巻Markdown
+## 34. 未確定情報
 
-`manuscript/series.md`は全巻をCanonical順で含む。
+本文が曖昧で、状態変化を一意に判断できない場合は、断定的な更新を避ける。
 
-順序は:
+必要に応じて次のいずれかを行う。
 
 ```text
-Series mapのVolume順
-Volume designのChapter順
-Chapter designのScene順
+変更なしとする
+不確定状態として記録する
+Review対象とする
+人間確認を求める
 ```
 
-で決まり、filesystemのmtimeや列挙順には依存しない。
+---
+
+# Part VIII: 巻間処理
+
+## 35. 巻Handoff
+
+各巻の終了時に、その巻の実際の結果を次の処理へ引き渡す。
+
+Handoffは少なくとも次を要約する。
+
+```text
+主要人物の現在状態
+主要Relationshipの現在状態
+解決したThread
+未解決Thread
+新しく生じた制約
+次巻で無視できない結果
+Endingへの進捗
+```
+
+Handoffは、新しい出来事を追加する文章生成ではない。
 
 ---
 
-## 62. 巻別Markdown
+## 36. 次巻への反映
 
-`manuscript/vNN.md`は対象巻の全ChapterとSceneを順序通りに含む。
+次巻計画は、シリーズ計画だけでなくHandoffを参照する。
 
-コードは採用済みplan titleから決定的なVolume／Chapter headingを追加できる。
-
-HeadingはScene proseやEvidenceの一部ではない。
+前巻本文が当初計画から変化した場合、次巻は当初の想定を機械的に繰り返さず、実際の巻末状態へ適応する。
 
 ---
 
-## 63. Reader-facing除外
+# Part IX: 完結判定
+
+## 37. 完結判定の目的
+
+完結判定は、作品が読者向けPublicationを作成できる状態かを評価する。
+
+単に最終巻の予定Sceneが終了しただけでは、必ずしも完結とはみなさない。
+
+---
+
+## 38. 完結判定の開始条件
+
+完結判定は、少なくとも次を確認した後に行う。
+
+```text
+全巻の処理が終了している
+予定されたSceneが確定している
+未完了の執筆処理がない
+主要Threadを評価できる
+Ending条件を評価できる
+```
+
+開始条件を満たさない場合は、完結判定を行わない。
+
+---
+
+## 39. 完結判定の結果
+
+完結判定は次のいずれかを返す。
+
+### `complete`
+
+主要な物語要件を満たし、Publication作成へ進める。
+
+### `complete_with_issues`
+
+Publication作成は可能だが、軽微な未解決事項や品質上の注意が残る。
+
+### `incomplete`
+
+重要なThread、人物変化、Ending条件などが不足し、Publication作成へ進めない。
+
+---
+
+## 40. `incomplete`の扱い
+
+`incomplete`は、通信失敗や形式不正ではない。
+
+意味的に未完結であるという正当な結果である。
+
+Storycraftは、`complete`が返るまで同じ判定を繰り返してはならない。
+
+不足内容を利用者へ示し、計画または執筆の修正が必要な状態として停止する。
+
+---
+
+## 41. 完結上の注意
+
+Storycraftの完結判定は、作品の意味的な評価を支援する。
+
+次を保証するものではない。
+
+```text
+すべての読者が満足する
+文学的に優れている
+商業出版に適している
+伏線が一つも漏れていない
+外部編集者の確認が不要である
+```
+
+---
+
+# Part X: Publication
+
+## 42. Publicationとは
+
+Publicationは、採用済みの計画とScene本文から作る読者向け成果物である。
+
+少なくとも次を含む。
+
+```text
+シリーズ全体原稿
+各巻の原稿
+作品metadata
+完結判定結果
+```
+
+---
+
+## 43. Publicationの内容
+
+Publicationへ含める本文は、採用済みScene本文から組み立てる。
+
+Publication作成時に、新しいScene、設定、人物の内面、結末を追加してはならない。
+
+---
+
+## 44. Publicationから除外するもの
 
 Publicationへ次を含めない。
 
 ```text
-Persistent record ID
-Scene ID
-Commit／Generation／Evidence ID
-workspace内部path
-Candidate／Checkpoint／staging path
-Review／residual Issueのprivate text
-private Completion audit
-provider/runtime metadata
-author truth
-credential
+内部Review
+Revision指示
+作者用の秘密情報
+非公開のThread回答
+Provider情報
+利用量記録
+内部Context
+障害調査情報
 ```
 
 ---
 
-## 64. Publication metadata
+## 45. Publicationの作成条件
 
-Series metadataは読者・配布向けに必要な情報だけを持つ。
-
-代表例:
+原則として、完結判定が次の場合だけPublicationを作成する。
 
 ```text
-title
-genre
-target reader
-volume count
-profile ID
-source Generation
-Completion overall assessment
-created timestamp
+complete
+complete_with_issues
 ```
 
-Volume metadataは:
-
-```text
-Volume番号・title
-Chapter／Scene数
-本文文字数
-source plan／Handoff hash
-manuscript相対path／hash
-```
-
-を持つ。
+`incomplete`の場合はPublicationを確定しない。
 
 ---
 
-## 65. Publishing profile
+## 46. `complete_with_issues`の表示
 
-Default publishing profileはローカルKDP向けMarkdownを作る。
+`complete_with_issues`でPublicationを作る場合は、残っている注意事項を利用者が確認できるようにする。
 
-Profileは次を表せる。
-
-```text
-platform
-manuscript format
-巻数範囲
-第1巻と後続巻のaccess方針
-巻内局所解決要件
-非最終巻reader question要件
-追加の登録済みpayload role
-```
-
-StorycraftはProfileを外部ストアへ送信しない。
+読者向け本文へ内部的な警告文を自動挿入してはならない。
 
 ---
 
-## 66. Publication Validation
+## 47. 再作成
 
-OUT-02はPublication payloadの存在、path、size、hash、内容規則を検証する。
+同じ採用済み作品状態からPublicationを再作成した場合、本文の順序と内容は同じであることを基本とする。
 
-Validationはpayload setをhashする。
-
-Final ManifestはpayloadとValidationを含むcontent setをhashする。
-
-Manifestは自身をhashしない。
+生成モデルを使ってPublication本文を再執筆してはならない。
 
 ---
 
-## 67. Publication Gate
+# Part XI: 中断・失敗・再開
 
-COMP-PUBLISHは外部Gateを作る。
+## 48. 通信失敗
 
-Gate passに必要:
+外部Providerとの通信に失敗した場合は、設定された範囲で再試行できる。
 
-```text
-Completion = completeまたはcomplete_with_residual_issues
-全Completion mechanical check成功
-Publication Validation成功
-Manifest・payload/content/snapshot hash成功
-```
-
-COMP-PUBLISHはPublicationをrenameせず、`output/CURRENT`も変更しない。
+再試行上限に達した場合は、現在の安全な状態を保持して停止する。
 
 ---
 
-## 68. Publication adoption
+## 49. 応答形式不正
 
-OUT-03だけがPublicationを採用する。
+外部Providerの応答が必要な形式を満たさない場合は、設定された範囲で再取得できる。
 
-順序:
+形式不正な応答を推測で補完して採用してはならない。
+
+---
+
+## 50. 意味的失敗
+
+Reviewで解消できない矛盾や品質問題が残る場合は、無理に採用せず停止する。
+
+利用者へ少なくとも次を示す。
 
 ```text
-staging root検証
-同一Gate snapshot検証
-publications/<id>/へrename
-final rootで再検証
-output/CURRENTを最後に更新
-Run Stateをcompletedへ更新
+問題が発生した処理
+対象となる巻・章・Scene
+残っている問題
+再開または修正に必要な行動
 ```
 
 ---
 
-## 69. CURRENT
+## 51. Crash後の再開
 
-現在の採用済みPublicationは:
+予期しない終了後、Storycraftは次を区別する。
 
 ```text
-output/CURRENT
+そのまま再開できる
+途中作業を再生成すべき
+人間の確認が必要
 ```
 
-が選ぶ。
-
-`publications/<id>/`が存在してもCURRENTが指していなければ未採用である。
+不完全な途中成果物を、完成した成果物として推測採用しない。
 
 ---
 
-## 70. Completed
+## 52. 人間確認が必要な状態
 
-Runがcompletedとなる条件:
+次のように安全な自動判断ができない場合は停止する。
 
 ```text
-OUT-03完了
-valid output/CURRENT
-Run State current_publication_idがCURRENTと一致
-next_stage = null
-stop reason = completed
+現在状態を読み取れない
+必要な確定済み成果物が見つからない
+同じ識別子の成果物が競合している
+完結判定がincomplete
 ```
 
-Gate passやPublication directory renameだけではcompletedではない。
+Storycraftは、データを隠れて作り直したり、過去へ巻き戻したりして問題を隠さない。
 
 ---
 
-# Part VIII: Workspaceと監査
+# Part XII: 設定と制限
 
-## 71. Workspace
+## 53. Provider設定
 
-Workspaceは次を分離して保存する。
+利用者は、operationごとに利用するProviderやmodelを設定できる。
+
+設定可能な対象例:
 
 ```text
-input
-Runtime authority
-Candidate history
-Context snapshots
-Scene Checkpoint
-Canon Generations
-plans
-Scene／Handoff artifacts
-Completion／LLM／operation audit
-staging transactions
-adopted Publications
-CURRENT
-quarantine
-redacted logs
-```
-
-正確なpathは[Workspace layout](../design/workspace_layout.md)を正本とする。
-
----
-
-## 72. Artifact class
-
-Canonical artifact class:
-
-```text
-candidate
-checkpoint
-staged_internal
-staged_internal_validation
-adopted
-audit
-```
-
-複合表記やlegacy classは使用しない。
-
----
-
-## 73. Candidate history
-
-候補は`v0001`、`v0002`のようにversioned保存する。
-
-選択される候補はRun Stateが指すCandidate manifestだけである。
-
-最大versionや更新日時からactive候補を推測しない。
-
----
-
-## 74. Checkpoint
-
-一つのScene lifecycleでは次のCheckpoint phaseを持つ。
-
-```text
-CARD_ACCEPTED
-PROSE_FROZEN
-DELTA_ACCEPTED
-COMMIT_PREPARED
-```
-
-Checkpoint manifestのphaseが正本であり、ファイルの存在だけではphaseを進めない。
-
----
-
-## 75. Audit
-
-Auditには次を保存する。
-
-```text
-LLM call
+初期設計
+計画
+Scene Card
+本文
 Review
-code operation
-residual issue
-Completion
-Publication Gate
-recovery／quarantine
+Revision
+継続性更新
+完結判定
 ```
 
-Auditは「何が起きたか」の証拠であり、Candidateやresume sourceの代用ではない。
+利用できるProviderとmodelは、実装と導入環境に依存する。
 
 ---
 
-## 76. LLM call audit
+## 54. Retryとtimeout
 
-各provider HTTP attemptは一意のCall IDとauditを持つ。
+利用者は、通信失敗、形式不正、Revisionについて上限を設定できる。
 
-記録対象:
+外部応答待ちにはtimeoutを設定できる。
+
+Storycraftは、無制限に待機または再試行してはならない。
+
+---
+
+## 55. 利用量の制御
+
+利用者は、次の利用上限を設定できる。
 
 ```text
-Stage／target／role
-Context／prompt／Schema／config identity
-redacted request／response
-usage
-timing
-outcome
-error
+Call数
+token量
+推定費用
+経過時間
 ```
 
-Credentialは保存しない。
+上限へ達した場合は、新しい外部Callを開始せず、安全な位置で停止する。
 
 ---
 
-## 77. Log
+## 56. Credential
 
-通常logは人間向けのredacted operational logである。
+Credentialは、利用者の環境から取得する。
 
-Logはresume authorityではない。
-
----
-
-## 78. Retention
-
-Audit retentionと容量上限は設定可能である。
-
-Retention処理は:
-
-```text
-採用済み正本
-active Candidate
-active Checkpoint
-resumeに必要なtransaction
-```
-
-を削除してはならない。
+作品データ、Publication、通常の進捗表示へCredential値を含めない。
 
 ---
 
-# Part IX: Crash、再開、停止
+## 57. 外部情報
 
-## 79. Crash耐性
+Version 1は、作品生成中に自動的なWeb検索や外部資料取得を行わない。
 
-各durable boundaryはCrash後に次の一つへ分類できなければならない。
-
-```text
-reconcile
-resume
-regenerate
-quarantine
-explicit recovery
-manual intervention
-```
-
-意味内容を推測する分類は認めない。
+外部事実が必要な作品では、利用者がBriefまたは資料として必要情報を与える。
 
 ---
 
-## 80. Candidate Crash
+# Part XIII: 秘密情報と視点
 
-代表的な挙動:
+## 58. 作者用情報
 
-| durable状態 | 製品挙動 |
-|---|---|
-| Candidateとvalid selected manifest | その候補から再開 |
-| Candidate fileだけ | quarantineして再生成 |
-| Manifestだけ | quarantineして再生成 |
-| raw audit成功だけ | 新Call IDでprovider callを再実行 |
-| referenced valid Review | Reviewを繰り返さずroute |
-| stale source Generation | Scene／候補chainを無効化して再生成 |
-
----
-
-## 81. Scene Commit Crash
-
-HEAD変更前のfinal-looking Generation／Sceneは未採用である。
-
-通常startupは、それらを見つけてもHEADを書き換えない。
-
-HEAD変更後にRun Stateだけが遅れている場合:
-
-```text
-HEAD graphを検証
-次のScene／Chapter／Handoff routeを再構成
-provider call・ID採番を繰り返さない
-Run Stateをreconcile
-```
-
----
-
-## 82. Handoff Crash
-
-Handoff artifactまたはGenerationが存在しても、HEADから参照されなければ未採用である。
-
-HEAD変更後は、Commit typeから次巻またはCompletionへreconcileする。
-
----
-
-## 83. Publication Crash
-
-代表的な境界:
-
-| durable状態 | 製品挙動 |
-|---|---|
-| payload部分作成 | transaction identityからOUT-01再開または再生成 |
-| Validation／Manifest不足 | OUT-02再開 |
-| Gate不足 | COMP-PUBLISH再開 |
-| Gate pass＋staging root | OUT-03通常再開 |
-| final publicationへrename済み、CURRENT旧 | 元のGateを使う明示的OUT-03 recovery |
-| CURRENT新、Run State旧 | completedへreconcile |
-| stagingとfinalの両方 | manual intervention |
-
----
-
-## 84. Orphan
-
-次から到達できないartifactはorphan候補である。
-
-```text
-valid HEAD
-valid CURRENT
-Run-selected Candidate
-Run-selected Checkpoint
-referenced transaction
-```
-
-Orphanは証拠付きでquarantineする。
-
-Quarantineから自動採用しない。
-
----
-
-## 85. Counter recovery
-
-Counterは観測された全IDより大きくなければならない。
-
-Counterが先行しているgapは正常である。
-
-Counterが観測IDより小さい場合、Storycraftは黙って修正せずmanual interventionとする。
-
----
-
-## 86. User stop
-
-利用者の停止要求は安全なdurable boundaryで反映する。
-
-停止要求により次の途中で強制終了しない。
-
-```text
-ID persist-before-use
-atomic file replace
-directory rename
-HEAD／CURRENT transaction
-```
-
----
-
-## 87. Budget stop
-
-次のLLM call前に予算を再計算する。
-
-上限を超えるcallは送信せず、安全なstopとして保存する。
-
-使用済みCall・token・cost・timeは減算しない。
-
----
-
-## 88. Resume compatibility
-
-Resumeは少なくとも次を比較する。
-
-```text
-workspace/state/code version
-prompt bundle
-Schema bundle
-immutable config fingerprint
-provider/modelの固定条件
-active Candidate／Context identity
-```
-
-非互換の場合、candidateを自動migrationせず停止する。
-
----
-
-## 89. Manual intervention
-
-自動続行しない代表例:
-
-```text
-invalid HEAD／CURRENT graph
-counter regression
-競合するimmutable plan
-stagingとfinal Publicationが両方存在
-unsupported config／workspace migration
-意味的にincompleteなCompletion
-```
-
----
-
-# Part X: 品質、Privacy、Security
-
-## 90. 品質の定義
-
-Storycraftの品質は次の組合せで評価する。
-
-```text
-Brief忠実性
-計画の長期整合性
-Scene目的・beatの充足
-POV・Knowledge・開示境界
-Canon／State／Evidence整合
-Required Thread／Ending完結
-自然な日本語
-巻内局所解決
-publicationのdeterministic再現性
-```
-
-単一のLLM自己評価だけで品質を決定しない。
-
----
-
-## 91. 機械的品質と意味的品質
-
-### 機械的品質
-
-```text
-Schema
-path
-ID
-hash
-参照
-transition
-offset
-manifest
-pointer
-```
-
-コードが判定する。
-
-### 意味的品質
-
-```text
-物語の説得力
-Sceneの自然さ
-計画への忠実性
-矛盾・開示・未達条件
-```
-
-LLM ReviewとCompletion auditが補助する。
-
-Reviewは機械的契約を上書きできない。
-
----
-
-## 92. Privacy
-
-Private artifactに含み得るもの:
-
-```text
-author truth
-Endingの非公開設計
-Thread resolution condition
-Knowledge author truth
-private Review
-private Completion audit
-Context snapshot
-```
-
-Publicationはこれらを除外する。
-
----
-
-## 93. Prompt injection
-
-Brief、prose、Review text、notes内の命令風文字列は、prompt上で作業dataとして扱う。
+作品設計には、読者や登場人物へまだ公開されていない情報が含まれることがある。
 
 例:
 
 ```text
-以前の指示を無視する
-JSONではなくMarkdownを返す
-hidden endingを開示する
-API keyを出力する
+事件の真相
+黒幕
+人物の隠された目的
+Endingの詳細
+後の巻で明かす情報
 ```
 
-これらがStage・Schema・response形式を変更してはならない。
+Storycraftは、これらを本文生成へ無条件に渡さない。
 
 ---
 
-## 94. Filesystem security
+## 59. POV制約
 
-Workspace pathは:
+一つのSceneでは、指定されたPOVから自然に知覚または推測できる情報だけを本文へ出す。
+
+非POV人物の内面を、Scene Cardで明示的に許可されていない限り断定しない。
+
+---
+
+## 60. 開示制御
+
+情報は、計画とScene Cardで許可された段階に従って開示する。
+
+未公開情報を知っていることと、本文で公開してよいことを区別する。
+
+---
+
+# Part XIV: 成果物の利用
+
+## 61. 人間による確認
+
+Storycraftの成果物は、人間が通常のeditorで読んで確認できることを前提とする。
+
+利用者は、少なくとも次を確認できる。
 
 ```text
-相対path規則
-case
-symlink／junction escape
-traversal
-絶対path混入
-pointer bytes
+入力
+初期設計
+計画
+Scene Card
+Scene本文
+Review
+継続性
+Handoff
+完結判定
+Publication
 ```
-
-を検証する。
-
-Workspace contentをPython objectとしてdeserialize・実行しない。
 
 ---
 
-## 95. Network
+## 62. 手動編集
 
-Provider call以外の外部retrievalを行わない。
+Version 1では、確定済み成果物を外部editorで直接変更した後の自動整合性保証を行わない。
 
-Promptはmodelへ次を要求しない。
+手動編集を行う場合は、新しい候補または新しいversionとしてStorycraftへ取り込む設計が必要である。
+
+直接変更した成果物を、Storycraftが常に正しく理解できるとは限らない。
+
+---
+
+## 63. バックアップ
+
+Storycraftは、利用者のstorage障害、誤削除、端末紛失に対する完全なバックアップサービスではない。
+
+利用者は、通常のバックアップまたはVersion管理を利用することが推奨される。
+
+---
+
+# Part XV: 製品としての保証
+
+## 64. Version 1で保証すること
+
+正しく設定された対応環境で、Storycraftは次を保証対象とする。
 
 ```text
-Web検索
-filesystem path読取
-別会話の記憶利用
-外部tool利用
+一つの入力方式から作品を開始できる
+4〜10巻の計画を作成できる
+段階的にScene本文を生成できる
+ReviewとRevisionを分離する
+本文に基づいて継続性を更新する
+停止後に再開可能な状態を保持する
+未完結作品を自動的に完結扱いしない
+採用済み本文からPublicationを作る
+作者用秘密情報を本文から分離する
 ```
+
+ここでいう保証は、仕様に従った振る舞いを意味し、文学的品質の絶対保証ではない。
 
 ---
 
-## 96. Determinism
+## 65. Version 1で保証しないこと
 
-同じ採用済みartifactと同じcode/profile versionから作る次は、byte-for-byte再現可能でなければならない。
+Storycraftは次を保証しない。
 
 ```text
-Canonical JSON
-pointer
-Context snapshot
-generated heading
-publication manuscript assembly
-metadata
-Validation／Manifest hash set
+生成内容が常に面白い
+事実関係が常に正確
+差別的・不快な表現が完全に存在しない
+利用者の意図を一度で完全に理解する
+Providerが常に利用可能
+同じPromptからProviderが同じ文面を返す
+第三者が手動変更した成果物との整合性
+複数processからの同時操作
 ```
-
-LLM本文自体の再生成一致はprovider特性に依存するが、一度採用された本文と派生publicationは決定的である。
 
 ---
 
-# Part XI: Performanceと運用
+## 66. 利用者の責任
 
-## 97. 長時間実行
-
-Storycraftは複数巻を順次生成するため、長時間実行を前提とする。
-
-製品は:
+利用者は、次を確認する責任を持つ。
 
 ```text
-各Stage境界でdurable progress
-timeout
-safe stop
-resume
-budget
-usage audit
+入力条件
+生成本文
+事実関係
+著作権・商標・名誉・privacy
+公開可否
+費用
+Provider利用規約
+バックアップ
 ```
 
-を提供する。
+Storycraftは制作支援toolであり、最終的な作者・編集者・発行者ではない。
 
 ---
 
-## 98. Memory
+# Part XVI: Version 1の完成条件
 
-シリーズ全体を一つの巨大なmutable objectとして常駐させない。
+## 67. 製品完成の基準
 
-現在Stageに必要な:
+Storycraft Version 1は、少なくとも次を一つの自動試験可能な流れとして実行できる必要がある。
 
 ```text
-HEAD snapshot
-対象plan chain
-選択されたContext／Candidate／Checkpoint
-必要なprose／Evidence
+BriefまたはKeywordsを受け取る
+初期設計を作る
+シリーズ・巻・章を計画する
+Scene Cardを作る
+Scene本文を作る
+継続性を更新する
+複数Sceneと複数巻を進める
+巻Handoffを作る
+完結判定を行う
+Publicationを作る
+停止後に再開する
 ```
-
-を読み込む。
 
 ---
 
-## 99. Context budget
+## 68. Release前に確認する利用者体験
 
-各LLM callはmodel context window内でなければならない。
-
-Storycraftは:
+Release前には、少なくとも次を確認する。
 
 ```text
-operation別reserved output
-protocol overhead
-静的prompt
-Context payload
-Schema送信量
+新規利用者が開始方法を理解できる
+途中停止後に再開できる
+失敗理由が理解できる
+作品本文を容易に読める
+進捗が分かる
+未完結時にPublicationされない
+秘密情報が本文へ漏れない
+完成原稿を取得できる
 ```
-
-を含む最終request全体をpreflightする。
-
-上限超過時はCall ID採番前に停止する。
 
 ---
 
-## 100. Timeout
+## 69. 将来拡張
 
-Timeoutは少なくとも次を区別する。
+次は将来候補であり、Version 1の必須範囲ではない。
 
 ```text
-connect
-first event
-idle
-total call
+複数利用者の共同編集
+remote storage
+GUI
+外部資料検索
+引用管理
+電子書籍出力
+出版社向けworkflow
+手動編集の正式な取込
+複数言語対応
+外部監査や署名
 ```
 
-Testではfake clockを使い、実時間待機を要求しない。
+将来拡張は、Version 1の単純性と信頼性を損なう形で先行実装しない。
 
 ---
 
-## 101. Progress表示
+## 70. 最終的な製品原則
 
-進捗は採用済みplanとRun Stateから表示する。
+Storycraftは、次の製品でなければならない。
 
-代表例:
-
-```text
-現在Stage
-対象Volume／Chapter／Scene
-全巻数
-HEAD Generation
-Publication ID
-Run status
-```
-
-Directory数や最新fileから進捗を推測しない。
-
----
-
-## 102. Inspection
-
-利用者・開発者はworkspaceから次を確認できる。
-
-```text
-現在のRun State
-現在HEADとCURRENT
-採用済みplans
-採用済みScene／Handoff
-LLM／operation audit
-Completion result
-Publication Validation／Manifest
-quarantine理由
-```
-
-Inspectionは正本を変更しない。
-
----
-
-# Part XII: Product result states
-
-## 103. Running
-
-`running`:
-
-```text
-次のCanonical Stageがある
-terminal stop reasonがない
-authoritative sourceがvalid
-```
-
----
-
-## 104. Paused／Stopped
-
-安全に一時停止し、互換性検証後にresume可能な状態。
-
-原因例:
-
-```text
-user stop
-budget stop
-運用上の一時停止
-```
-
----
-
-## 105. Failed
-
-機械的契約違反、provider exhaustion、無効な正本などにより自動実行できない状態。
-
-Failed時も、既にdurableなcandidate、audit、counter、採用済みartifactを保持する。
-
----
-
-## 106. Manual intervention
-
-意味的incompleteや正本競合など、自動推測を避けるため人間判断を要求する状態。
-
-CURRENTは更新されない。
-
----
-
-## 107. Completed
-
-有効なPublicationがCURRENTに採用され、Run Stateが一致する状態。
-
----
-
-# Part XIII: 受入基準
-
-## 108. Happy path
-
-受入試験は、少なくとも次を一つの公開API／CLI runで証明する。
-
-```text
-KeywordsまたはBrief
-Genesis
-Series／Volume／Chapter plans
-複数Scene Commit
-複数Volume Handoff
-最終Completion
-Publication Validation／Gate
-OUT-03
-CURRENT
-completed
-```
-
----
-
-## 109. 代表fixture
-
-Canonical fixtureは次を証明する。
-
-- [Initial and planning fixture](../design/examples/initial_and_planning_fixture.md)
-- [Scene commit fixture](../design/examples/scene_commit_fixture.md)
-- [Completion and publication fixture](../design/examples/completion_publication_fixture.md)
-
-FixtureはSchemaの代替ではなく、全契約が同時に成立する証拠である。
-
----
-
-## 110. Required failure paths
-
-少なくとも次を受入試験する。
-
-```text
-invalid input
-config error
-lock conflict
-transport retry/exhaustion
-response-structure retry/exhaustion
-Review Revision/exhaustion
-stale Candidate
-Candidate/Manifest片側Crash
-Checkpoint phase Crash
-Scene Commit各境界Crash
-Handoff各境界Crash
-Completion incomplete
-Publication Gate failure
-Publication rename/CURRENT Crash
-counter regression
-invalid HEAD/CURRENT
-prompt injection
-private data leakage
-wheel asset欠落
-```
-
----
-
-## 111. Reproducibility gate
-
-同じ採用snapshotからPublicationを再構築し、次が一致する。
-
-```text
-manuscript bytes
-metadata bytes
-payload_set_sha256
-content_set_sha256
-publication_snapshot_sha256
-```
-
----
-
-## 112. Privacy gate
-
-Writer Context、Continuity Context、publicationをbyte-searchし、登録したprivate sentinelが存在しないことを要求する。
-
----
-
-## 113. Crash gate
-
-登録したすべてのfailpointで再起動し、期待される一つのaction:
-
-```text
-reconcile
-resume
-regenerate
-quarantine
-explicit recovery
-manual intervention
-```
-
-と一致することを要求する。
-
----
-
-## 114. Packaging gate
-
-Source tree外へwheelをinstallし、次を要求する。
-
-```text
-全prompt／Schema assetが読める
-structured Stageをrenderできる
-prose Stageをrenderできる
-CLI helpがcredentialなしで動く
-source-tree fallbackなし
-```
-
----
-
-## 115. No-network gate
-
-Mandatory test suiteはunmocked socketを開かない。
-
-実provider integration testは任意の別suiteとする。
-
----
-
-## 116. Implementation status
-
-本仕様の機能が文書化されていても、現行コードが実装済みとは限らない。
-
-実装済みと主張する条件は[Implementation acceptance](../design/implementation_acceptance.md)の必須gateを満たすことである。
-
-差分は[実装状況](IMPLEMENTATION_STATUS.md)へ記録する。
-
----
-
-# Part XIV: 用語
-
-## 117. Candidate
-
-構造正常で、まだ採用されていない生成・抽出・Revision成果物。
-
----
-
-## 118. Review
-
-候補に対する意味監査を保存する`audit` artifact。
-
-候補そのものではない。
-
----
-
-## 119. Checkpoint
-
-一つのScene transaction内で、後続Stageへ渡す凍結artifactとphase authority。
-
-後続Sceneの正本ではない。
-
----
-
-## 120. Adopted artifact
-
-正規のadoption pointまたはimmutable final path契約により、後続工程の正式入力となったartifact。
-
----
-
-## 121. Generation
-
-一つのCommitが作るimmutable Story snapshot。
-
-Canon、Knowledge、Story State、Evidence index、Commit／Generation manifestを含む。
-
----
-
-## 122. Commit
-
-Genesis、Scene、Volume Handoffのいずれかにより、親Generationから子Generationを作る採用操作。
-
----
-
-## 123. HEAD
-
-現在の採用済みStory Generationを選ぶpointer。
-
----
-
-## 124. Handoff
-
-一つのVolume終了Stateを次巻またはCompletionへ渡すprivate adopted artifact。
-
----
-
-## 125. Completion audit
-
-最終Story snapshotがRequired ThreadとEnding criterionを満たすかを評価するprivate audit。
-
----
-
-## 126. Publication
-
-Reader-facing manuscript、metadata、safe report、Validation、Manifestからなるimmutable出力directory。
-
----
-
-## 127. Gate
-
-Publicationを採用してよいかを判定したrename-stableな外部audit。
-
-Gate自体は採用を行わない。
-
----
-
-## 128. CURRENT
-
-現在の採用済みPublicationを選ぶpointer。
-
----
-
-## 129. Residual issue
-
-Revision上限後も残る、機械的契約違反ではない意味的Issue。
-
----
-
-## 130. Orphan
-
-正本pointer、Run-selected Candidate／Checkpoint、参照transactionから到達できないartifact。
-
----
-
-## 131. Durable boundary
-
-Crash後に、重複・推測なしで次の動作を決められる完全保存点。
-
----
-
-## 132. Manual intervention
-
-正本を推測して自動修復せず、人間判断を要求するterminal状態。
-
----
-
-# Part XV: 製品不変条件
-
-## 133. 最終不変条件
-
-Storycraftは、任意の観測可能な時点でdurable dataから次へ答えられなければならない。
-
-```text
-どのRunか
-現在のStageとtargetは何か
-どのinput／source Generationを使ったか
-どのCandidate／Checkpoint／transactionが選択されているか
-どのID・usageが消費済みか
-どのStory GenerationがHEADか
-どのPublicationがCURRENTか
-次に合法なStageは何か
-ここでCrashした場合に何をするか
-```
-
-この答えが次へ依存する場合、製品仕様を満たさない。
-
-```text
-最新mtime
-最大番号の未参照directory
-一つの巨大なin-memory state
-normal log
-LLMの自己申告
-unreferenced staging
-```
-
----
-
-## 134. 製品受入条件
-
-本製品仕様は、実装が次を同時に満たしたときにのみ受入可能である。
-
-```text
-4〜10巻の日本語シリーズ
-Brief／Keywordsの排他的入力
-run／resume／step
-50 Stageの正確な進行
-Review／Revision／residual issue
-Writer-safe本文
-Evidence付きScene Commit
-HEAD-last Story adoption
-Volume Handoff
-正直なCompletion audit
-incompleteの非再試行・非公開
-deterministic Publication
-GateとOUT-03の分離
-CURRENT-last Publication adoption
-Crash recovery
-ID／usage非再利用
-private/public分離
-package-only prompt／Schema
-必須acceptance gate
-```
+> 利用者が作品の現在状態を理解でき、長編シリーズを段階的に生成でき、途中で止めても再開でき、本文に基づいて継続性を保ち、未完結作品を無理に公開しない、日本語長編制作CLI。
