@@ -1,0 +1,50 @@
+# initial_knowledge の批評
+
+候補を採用済みConcept、Characters、Relationships、World、
+出力スキーマに照らし、修正可能で候補内に根拠のある問題だけを
+issuesへ出す。問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. **Factの分離**
+   - 一件に複数の独立した主張を混在させていない
+   - 同じ意味のFactが重複していない
+2. **真実とbelief**
+   - 客観的なtruth_statusと人物のstateが分離されている
+   - false、uncertain、belief_onlyをknowsとしていない
+3. **読者公開状態**
+   - revealedとhiddenが開始時点の状態として明確
+   - reader_visibilityと人物のKnowledgeを混同していない
+4. **人物ごとの状態**
+   - 全Characterと全Factの組合せが一件ずつ存在する
+   - 未知のCharacter IDや範囲外のknowledge_indexがない
+   - 人物が開始時点で知り得ない秘密を知っていない
+5. **重要な秘密**
+   - Concept、Relationships、Worldを動かす秘密が識別可能
+   - 将来Scene専用の証拠や解決手順を新設していない
+6. **工程の所有範囲**
+   - Thread、Ending、巻別構成、Sceneを確定していない
+   - knowledge_idや未知の永続IDを出力していない
+7. **日本語品質**
+   - 不自然な翻訳調、曖昧な指示語、意味不明な表現がない
+
+`issues: []` を返す前に候補の全string fieldを一つずつ確認する。
+
+各issueは次を満たすこと。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する文字列を引用して具体的に説明する
+- `suggestion` は削除、入力事実での書き直し、日本語修正などの操作だけを示す
+- 候補にない事実や表現を追加しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

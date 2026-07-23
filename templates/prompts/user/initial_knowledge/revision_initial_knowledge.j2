@@ -1,0 +1,35 @@
+# initial_knowledge の修正
+
+採用済み批評issuesに従って候補を修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- truth_statusと人物のstateを混同しない
+- reader_visibilityと人物のKnowledgeを混同しない
+- CharacterとFactの全組合せを保持する
+- character_id、knowledge_index、配列順を理由なく変更しない
+- 入力にない事件、証拠、実行者、解決手順を追加しない
+- Thread、Ending、巻別構成、Sceneを追加しない
+- knowledge_idや未知の永続IDを追加しない
+- 指摘されていないFactや人物状態を変更しない
+- 自然な日本語へ修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

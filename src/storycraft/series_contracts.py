@@ -612,6 +612,254 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_knowledge_prerequisites(
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+    ) -> None:
+        """Initial Knowledgeの採用済み入力を検証する。"""
+        ContractValidator._validate_initial_world_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+        )
+        ContractValidator._validate_initial_world(
+            world,
+            brief,
+            concept,
+            characters,
+            relationships,
+            adopted=True,
+        )
+
+    @staticmethod
+    def _validate_initial_knowledge(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Knowledge Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial KnowledgeはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_initial_knowledge_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+        )
+
+        candidate = deepcopy(value)
+        facts = candidate.get("knowledge_facts")
+        states = candidate.get("character_knowledge")
+        if not isinstance(facts, list):
+            raise ContractError(
+                "knowledge_factsは配列でなければなりません"
+            )
+        if not isinstance(states, list):
+            raise ContractError(
+                "character_knowledgeは配列でなければなりません"
+            )
+
+        knowledge_ids: list[str] = []
+        if adopted:
+            id_to_index: dict[str, int] = {}
+
+            for index, fact in enumerate(facts):
+                if not isinstance(fact, dict):
+                    raise ContractError(
+                        "Knowledge Fact recordはobjectでなければなりません"
+                    )
+
+                identifier = fact.get("knowledge_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("know-")
+                ):
+                    raise ContractError(
+                        "採用済みKnowledge Factには"
+                        "knowledge_idが必要です"
+                    )
+
+                knowledge_ids.append(identifier)
+                id_to_index[identifier] = index
+                fact.pop("knowledge_id")
+
+            if len(id_to_index) != len(facts):
+                raise ContractError(
+                    "採用済みKnowledge IDが重複しています"
+                )
+
+            for state in states:
+                if not isinstance(state, dict):
+                    raise ContractError(
+                        "Character Knowledge recordは"
+                        "objectでなければなりません"
+                    )
+                if "knowledge_index" in state:
+                    raise ContractError(
+                        "採用済みCharacter Knowledgeへ"
+                        "knowledge_indexを含められません"
+                    )
+
+                identifier = state.pop("knowledge_id", None)
+                if identifier not in id_to_index:
+                    raise ContractError(
+                        "Character Knowledgeが未知の"
+                        "Knowledgeを参照しています"
+                    )
+                state["knowledge_index"] = id_to_index[identifier]
+        else:
+            for fact in facts:
+                if not isinstance(fact, dict):
+                    raise ContractError(
+                        "Knowledge Fact recordはobjectでなければなりません"
+                    )
+                if "knowledge_id" in fact:
+                    raise ContractError(
+                        "Knowledge Candidateへ"
+                        "knowledge_idを含められません"
+                    )
+
+            for state in states:
+                if not isinstance(state, dict):
+                    raise ContractError(
+                        "Character Knowledge recordは"
+                        "objectでなければなりません"
+                    )
+                if "knowledge_id" in state:
+                    raise ContractError(
+                        "Knowledge Candidateへ"
+                        "knowledge_idを含められません"
+                    )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_knowledge",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Knowledge契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        statements = [
+            fact["statement"]
+            for fact in candidate["knowledge_facts"]
+        ]
+        if len(statements) != len(set(statements)):
+            raise ContractError(
+                "Knowledge Factのstatementが重複しています"
+            )
+
+        character_ids = [
+            record["character_id"]
+            for record in characters["characters"]
+        ]
+        known_character_ids = set(character_ids)
+        fact_count = len(candidate["knowledge_facts"])
+        seen_pairs: set[tuple[str, int]] = set()
+
+        for record in candidate["character_knowledge"]:
+            character_id = record["character_id"]
+            knowledge_index = record["knowledge_index"]
+
+            if character_id not in known_character_ids:
+                raise ContractError(
+                    "Character Knowledgeが未知の人物を参照しています"
+                )
+            if (
+                isinstance(knowledge_index, bool)
+                or knowledge_index < 0
+                or knowledge_index >= fact_count
+            ):
+                raise ContractError(
+                    "Character Knowledgeの"
+                    "knowledge_indexが範囲外です"
+                )
+
+            pair = (character_id, knowledge_index)
+            if pair in seen_pairs:
+                raise ContractError(
+                    "Character Knowledgeの組合せが重複しています"
+                )
+            seen_pairs.add(pair)
+
+            fact = candidate["knowledge_facts"][
+                knowledge_index
+            ]
+            if (
+                record["state"] == "knows"
+                and fact["truth_status"] != "true"
+            ):
+                raise ContractError(
+                    "真実でないKnowledge Factを"
+                    "knowsとして設定できません"
+                )
+
+        expected_pairs = {
+            (character_id, knowledge_index)
+            for character_id in character_ids
+            for knowledge_index in range(fact_count)
+        }
+        if seen_pairs != expected_pairs:
+            raise ContractError(
+                "全Characterと全Knowledge Factの"
+                "状態を明示しなければなりません"
+            )
+
+        for index, fact in enumerate(
+            candidate["knowledge_facts"]
+        ):
+            if fact["truth_status"] != "belief_only":
+                continue
+
+            relevant_states = [
+                record["state"]
+                for record in candidate["character_knowledge"]
+                if record["knowledge_index"] == index
+            ]
+            if all(
+                state == "unknown"
+                for state in relevant_states
+            ):
+                raise ContractError(
+                    "belief_onlyのFactには"
+                    "人物の認識状態が必要です"
+                )
+
+        if adopted and len(knowledge_ids) != len(
+            set(knowledge_ids)
+        ):
+            raise ContractError(
+                "採用済みKnowledge IDが重複しています"
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:
