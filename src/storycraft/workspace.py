@@ -486,27 +486,40 @@ def _validate_workspace_input(root: Path) -> None:
         )
 
     selected = root / expected_path
-    other_name = (
-        "keywords.json"
-        if source_type == "brief"
-        else "brief.json"
-    )
-    other = root / "input" / other_name
 
     if not selected.is_file():
         raise ContractError(
             f"workspace入力fileがありません: {expected_path}"
         )
-    if other.exists():
-        raise ContractError(
-            "workspaceにはBriefとKeywordsの両方を保存できません"
-        )
 
     payload = _read_json(selected)
+    brief_path = root / "input/brief.json"
+    keywords_path = root / "input/keywords.json"
+
     if source_type == "brief":
+        if keywords_path.exists():
+            raise ContractError(
+                "Brief起点workspaceにkeywords.jsonを置けません"
+            )
         _validate_brief(payload)
-    else:
-        _validate_keywords(payload)
+        return
+
+    _validate_keywords(payload)
+
+    if brief_path.exists():
+        adopted_brief = _read_json(brief_path)
+        _validate_brief(adopted_brief)
+        if adopted_brief.get("source_type") != "keywords":
+            raise ContractError(
+                "Keywords起点の採用済みBriefはsource_type=keywordsが必要です"
+            )
+        if (
+            adopted_brief.get("source_reference")
+            != "input/keywords.json"
+        ):
+            raise ContractError(
+                "Keywords起点の採用済みBriefは元入力を参照しなければなりません"
+            )
 
 
 def _validate_workspace_destination(root: Path) -> None:

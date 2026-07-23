@@ -161,6 +161,62 @@ class WorkspaceV1Tests(unittest.TestCase):
             state = RunStateStore(workspace).load()
             self.assertEqual(state["current_stage"], "input")
 
+    def test_keywords_workspace_accepts_adopted_brief(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+            create_workspace_from_keywords(
+                workspace,
+                workspace_id="ws-test-0001",
+                keywords=self.keywords,
+                config=self.config,
+                created_at=CREATED_AT,
+            )
+
+            adopted = dict(self.brief)
+            adopted["source_type"] = "keywords"
+            adopted["source_reference"] = "input/keywords.json"
+            (
+                workspace / "input/brief.json"
+            ).write_text(
+                json.dumps(
+                    adopted,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            validate_workspace_layout(workspace)
+
+    def test_keywords_workspace_rejects_unrelated_brief(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+            create_workspace_from_keywords(
+                workspace,
+                workspace_id="ws-test-0001",
+                keywords=self.keywords,
+                config=self.config,
+                created_at=CREATED_AT,
+            )
+            (
+                workspace / "input/brief.json"
+            ).write_text(
+                json.dumps(
+                    self.brief,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "source_type=keywords",
+            ):
+                validate_workspace_layout(workspace)
+
     def test_brief_and_keywords_conflict_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary) / "novel"
