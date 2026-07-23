@@ -76,6 +76,7 @@ class StageModelV1Tests(unittest.TestCase):
                 "initial_knowledge",
                 "initial_threads",
                 "initial_ending",
+                "initial_integrate",
             ),
         )
         self.assertEqual(

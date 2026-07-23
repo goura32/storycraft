@@ -1,0 +1,47 @@
+# initial_integrate の批評
+
+統合CandidateをBriefとすべての採用済みcomponentへ照合し、
+候補内に根拠があり修正可能な問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. すべてのcomponentが存在し、record数と順序が保持されている
+2. 既存の永続IDが変更、追加、削除されていない
+3. Character、Relationship、Location、Knowledge、Thread、
+   Ending、Arcの全参照が解決する
+4. 同名Characterや重複IDがない
+5. Location階層が循環せず、World Rule同士が直接矛盾しない
+6. Knowledge FactのtruthとCharacter Knowledgeのbeliefが整合する
+7. hidden Knowledgeが読者公開情報へ漏れていない
+8. Threadのquestion、planned_resolution、Ending要件が整合する
+9. 完結必須ThreadがEndingとLong-term Arcで評価可能である
+10. protagonistとco_protagonistの初期状態、Long-term Arc、
+    character_end_statesが接続する
+11. Briefのrequired_elements、ending_preference、tone、avoidを保持する
+12. Turning Pointやplanned_resolutionを確定済み事実として扱っていない
+13. 入力にない人物、場所、真実、犯人、証拠、制度、事件原因、
+    Scene、巻別配分を追加していない
+14. design_id、version、created_atなど後続工程のmetadataを含めていない
+15. 不自然な日本語、意味の重複、直接矛盾がない
+
+`issues: []` を返す前に全componentと全string fieldを再点検する。
+
+各issueは次を満たす。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する値を引用して具体的に説明する
+- `suggestion` は削除、入力事実での書き直し、値の整合、日本語修正などの操作だけを示す
+- 候補外の新事実を追加しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

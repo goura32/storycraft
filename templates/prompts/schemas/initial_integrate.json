@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Integrated Initial Design Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "concept",
+    "characters",
+    "relationships",
+    "world",
+    "locations",
+    "world_rules",
+    "knowledge_facts",
+    "character_knowledge",
+    "threads",
+    "ending",
+    "long_term_arcs"
+  ],
+  "properties": {
+    "concept": {
+      "type": "object"
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1
+    },
+    "relationships": {
+      "type": "array",
+      "minItems": 1
+    },
+    "world": {
+      "type": "object"
+    },
+    "locations": {
+      "type": "array",
+      "minItems": 1
+    },
+    "world_rules": {
+      "type": "array",
+      "minItems": 1
+    },
+    "knowledge_facts": {
+      "type": "array",
+      "minItems": 1
+    },
+    "character_knowledge": {
+      "type": "array",
+      "minItems": 1
+    },
+    "threads": {
+      "type": "array",
+      "minItems": 1
+    },
+    "ending": {
+      "type": "object"
+    },
+    "long_term_arcs": {
+      "type": "array",
+      "minItems": 1
+    }
+  }
+}
