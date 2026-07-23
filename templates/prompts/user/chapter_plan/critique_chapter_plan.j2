@@ -1,0 +1,41 @@
+# chapter_plan の批評
+
+Chapter Plan CandidateをVolume Planとcurrent Generationへ照合し、
+候補内で修正可能な問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. 対象VolumeとChapterが正しい
+2. Chapter目的がVolume Planの対象summaryを具体化している
+3. starting_conditionsがcurrent Generationと矛盾しない
+4. 未発生の予定を開始時点の確定事実にしていない
+5. ending_changesがChapter終了時の意味ある変化である
+6. Scene番号が1からの連番である
+7. Scene順が因果的で、各Sceneに固有目的がある
+8. Scene数が過剰でない
+9. Chapter内に主要な対立の進行がある
+10. required_revelationsがVolume Planの許容範囲内である
+11. 必要な開示がScene目的へ実行可能に配置されている
+12. constraintsが上位PlanとBriefを保持している
+13. 最終ChapterではVolume終点へ収束する
+14. 最終Chapter以外では次Chapterへ接続する
+15. 入力にない事実、ID、採用metadataを追加していない
+16. 不自然な日本語、意味の重複、直接矛盾がない
+
+`issues: []` の前に全Scene、全array、全string fieldを再点検する。
+
+各issueの `field` はCandidate内に実在するJSON pathを指定し、
+候補外の新事実をsuggestionとして追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

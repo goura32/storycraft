@@ -1,0 +1,36 @@
+# chapter_plan の修正
+
+採用済み批評issuesに従いChapter Plan Candidateを修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- 対象VolumeとChapterを変更しない
+- current Generationの開始Stateを改変しない
+- Volume Planの対象Chapter目的を保持する
+- Scene番号の連番を維持する
+- Scene目的の因果順を壊さない
+- Volume Plan外の開示を追加しない
+- 上位PlanとBriefの制約を削除しない
+- 未発生の予定を確定済みCanonへ変えない
+- 入力にない新事実やIDを追加しない
+- 採用metadataを追加しない
+- 自然な日本語へ必要最小限で修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
