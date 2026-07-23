@@ -385,7 +385,7 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("将来の対処・直面・克服・関係発展", revision)
         self.assertIn("動詞と目的語の結び付き", critique)
 
-    def test_brief_templates_treat_keywords_as_reference_and_require_structured_people(self) -> None:
+    def test_brief_templates_treat_keywords_as_reference_and_require_v1_schema(self) -> None:
         generate = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["2巻構成"]})
         critique = OpenAIStoryModel._render("critique", "brief", candidate={}, context={"keywords": ["2巻構成"]})
         revision = OpenAIStoryModel._render("revision", "brief", candidate={}, critique={"issues": []}, context={"keywords": ["2巻構成"]})
@@ -396,16 +396,16 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertIn("巻数・章数はkeywordsの文言から機械的に決めず", generate)
         self.assertIn("不一致だけではissueにしない", critique)
         self.assertIn("keywordsへの一致を目的として巻数", revision)
-        self.assertEqual(schema["properties"]["key_people"]["type"], "array")
-        self.assertEqual(
-            schema["properties"]["key_people"]["items"]["required"],
-            ["name", "present_position", "initial_relation_to_protagonist"],
-        )
-        self.assertEqual(schema["properties"]["protagonist"]["type"], "object")
-        self.assertEqual(
-            schema["properties"]["protagonist"]["required"],
-            ["name", "present_position", "core_trait", "current_pressure", "initial_wish"],
-        )
+        self.assertEqual(schema["properties"]["source_type"]["enum"], ["brief", "keywords"])
+        self.assertEqual(schema["properties"]["source_reference"]["type"], "string")
+        self.assertEqual(schema["properties"]["genre"]["type"], "array")
+        self.assertTrue(schema["properties"]["genre"]["uniqueItems"])
+        self.assertEqual(schema["properties"]["required_elements"]["type"], "array")
+        self.assertTrue(schema["properties"]["required_elements"]["uniqueItems"])
+        self.assertEqual(schema["properties"]["premise"]["minLength"], 1)
+        self.assertEqual(schema["properties"]["volume_count"]["minimum"], 4)
+        self.assertEqual(schema["properties"]["volume_count"]["maximum"], 10)
+        self.assertFalse(schema["additionalProperties"])
         self.assertIn("包括的に禁止しない", generate)
         self.assertIn("未設定の秘密", generate)
         self.assertIn("必要な表現手法", critique)

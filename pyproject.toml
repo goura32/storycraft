@@ -46,6 +46,7 @@ packages = [
 [tool.hatch.build.targets.sdist]
 include = [
     "/src/storycraft",
+    "/templates/prompts",
     "/tests",
     "/scripts/wheel_smoke.sh",
     "/docs",
