@@ -73,6 +73,7 @@ class StageModelV1Tests(unittest.TestCase):
                 "initial_characters",
                 "initial_relationships",
                 "initial_world",
+                "initial_knowledge",
             ),
         )
         self.assertEqual(

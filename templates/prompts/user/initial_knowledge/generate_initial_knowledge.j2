@@ -1,0 +1,70 @@
+# initial_knowledge の生成
+
+## 実行指示
+
+採用済みConcept、Characters、Relationships、Worldを根拠として、
+シリーズで継続追跡するKnowledge Factと、物語開始時点における
+各人物のKnowledge状態を設計する。
+
+この工程では次だけを作る。
+
+- 作品世界で追跡する真実、虚偽、不確定情報、人物固有のbelief
+- 各人物が各Factをどう認識しているか
+
+Thread、Ending、巻別構成、Scene、証拠、将来の開示手順、
+永続IDは作らない。
+
+## Knowledge Fact
+
+- `statement`: 一つの検証可能な内容だけを書く
+- `truth_status`:
+  - `true`: 作品世界で真実
+  - `false`: 作品世界で虚偽
+  - `uncertain`: 作者設計上も現時点で未確定
+  - `belief_only`: 客観的事実ではなく人物の信念としてのみ追跡
+- `reader_visibility`:
+  - `revealed`: 開始時点で読者へ開示済み
+  - `hidden`: 開始時点では読者へ未開示
+- `source_type`: concept、character、relationship、worldなど由来を簡潔に示す
+- `private_notes`: 作者用補足。不要なら `null`
+- `knowledge_id` を出力しない
+
+同じ意味のFactを言い換えて重複させない。
+秘密は、公開情報と区別できる粒度でFact化する。
+
+## Character Knowledge
+
+全Characterと全Knowledge Factの組合せを一件ずつ出力する。
+省略によって `unknown` を表現してはならない。
+
+- `character_id`: 入力Charactersに存在する永続ID
+- `knowledge_index`: `knowledge_facts` 配列の0始まりindex
+- `state`:
+  - `knows`: 真実として知っている
+  - `believes`: 真偽にかかわらず信じている
+  - `suspects`: 疑っている
+  - `disbelieves`: 否定している
+  - `unknown`: 知らない
+
+`truth_status` が `false`、`uncertain`、`belief_only` のFactを
+`knows` にしてはならない。
+
+人物のpublic/private profile、関係のprivate truth、Worldの秘密から、
+その人物が開始時点で知り得る範囲だけを設定する。
+作者が知っていることを人物へ自動的に与えない。
+
+## 共通制約
+
+- 真実と人物のbeliefを混同しない
+- 読者への開示と人物のKnowledgeを混同しない
+- 入力にない新事件、証拠、実行者、解決方法を追加しない
+- Character ID以外の永続IDを出力しない
+- 自然な日本語だけで書く
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

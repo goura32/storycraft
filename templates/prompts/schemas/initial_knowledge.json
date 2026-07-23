@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Initial Knowledge Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "knowledge_facts",
+    "character_knowledge"
+  ],
+  "properties": {
+    "knowledge_facts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "statement",
+          "truth_status",
+          "reader_visibility",
+          "source_type",
+          "private_notes"
+        ],
+        "properties": {
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "truth_status": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false",
+              "uncertain",
+              "belief_only"
+            ]
+          },
+          "reader_visibility": {
+            "type": "string",
+            "enum": [
+              "revealed",
+              "hidden"
+            ]
+          },
+          "source_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "private_notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1200
+          }
+        }
+      }
+    },
+    "character_knowledge": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 600,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "character_id",
+          "knowledge_index",
+          "state"
+        ],
+        "properties": {
+          "character_id": {
+            "type": "string",
+            "pattern": "^char-[A-Za-z0-9_-]+$"
+          },
+          "knowledge_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "knows",
+              "believes",
+              "suspects",
+              "disbelieves",
+              "unknown"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
