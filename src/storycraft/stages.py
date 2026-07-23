@@ -60,6 +60,7 @@ V1_TEMPLATE_STAGES = (
     Stage.INITIAL_RELATIONSHIPS.value,
     Stage.INITIAL_WORLD.value,
     Stage.INITIAL_KNOWLEDGE.value,
+    Stage.INITIAL_THREADS.value,
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。

@@ -860,6 +860,173 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_threads_prerequisites(
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+        knowledge: dict[str, Any],
+    ) -> None:
+        """Initial Threadsの採用済み入力を検証する。"""
+        ContractValidator._validate_initial_knowledge_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+        )
+        ContractValidator._validate_initial_knowledge(
+            knowledge,
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+            adopted=True,
+        )
+
+    @staticmethod
+    def _validate_initial_threads(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+        knowledge: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Thread Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial ThreadsはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_initial_threads_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+            knowledge,
+        )
+
+        candidate = deepcopy(value)
+        records = candidate.get("threads")
+        if not isinstance(records, list):
+            raise ContractError(
+                "Initial Threads.threadsは"
+                "配列でなければなりません"
+            )
+
+        identifiers: list[str] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise ContractError(
+                    "Thread recordはobjectでなければなりません"
+                )
+
+            if adopted:
+                identifier = record.get("thread_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("thread-")
+                ):
+                    raise ContractError(
+                        "採用済みThreadにはthread_idが必要です"
+                    )
+                identifiers.append(identifier)
+                record.pop("thread_id")
+            elif "thread_id" in record:
+                raise ContractError(
+                    "Thread Candidateへ"
+                    "thread_idを含められません"
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_threads",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Threads契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if adopted and len(identifiers) != len(
+            set(identifiers)
+        ):
+            raise ContractError(
+                "採用済みThreadのIDが重複しています"
+            )
+
+        titles = [record["title"] for record in records]
+        if len(titles) != len(set(titles)):
+            raise ContractError(
+                "Threadのtitleが重複しています"
+            )
+
+        questions = [record["question"] for record in records]
+        if len(questions) != len(set(questions)):
+            raise ContractError(
+                "Threadのquestionが重複しています"
+            )
+
+        major_count = 0
+        required_count = 0
+
+        for record in records:
+            if record["required_for_completion"]:
+                required_count += 1
+
+            if record["importance"] == "major":
+                major_count += 1
+                if not record["required_for_completion"]:
+                    raise ContractError(
+                        "major Threadは"
+                        "完結必須でなければなりません"
+                    )
+                if record["initial_status"] != "open":
+                    raise ContractError(
+                        "major Threadはopenから"
+                        "開始しなければなりません"
+                    )
+
+            if (
+                record["initial_status"] == "planned"
+                and record["reader_visibility"] != "hidden"
+            ):
+                raise ContractError(
+                    "planned Threadは"
+                    "reader_visibleにできません"
+                )
+
+        if major_count == 0:
+            raise ContractError(
+                "Initial Threadsにはmajorが必要です"
+            )
+        if required_count == 0:
+            raise ContractError(
+                "Initial Threadsには"
+                "完結必須Threadが必要です"
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:

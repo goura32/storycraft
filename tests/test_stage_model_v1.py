@@ -74,6 +74,7 @@ class StageModelV1Tests(unittest.TestCase):
                 "initial_relationships",
                 "initial_world",
                 "initial_knowledge",
+                "initial_threads",
             ),
         )
         self.assertEqual(

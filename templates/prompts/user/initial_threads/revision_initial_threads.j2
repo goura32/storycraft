@@ -1,0 +1,35 @@
+# initial_threads の修正
+
+採用済み批評issuesに従って候補を修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- major Threadの完結必須性とopen状態を保つ
+- planned Threadを読者公開しない
+- Knowledgeの真実、人物のbelief、読者公開状態を混同しない
+- Character ArcやRelationship Arcとの接続を失わせない
+- 入力にない犯人、証拠、原因、結末を追加しない
+- Ending、巻別配分、章、Scene、開示順を追加しない
+- thread_idや未知の永続IDを追加しない
+- 指摘されていないThreadや配列順を変更しない
+- 自然な日本語へ修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

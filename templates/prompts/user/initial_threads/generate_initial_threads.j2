@@ -1,0 +1,58 @@
+# initial_threads の生成
+
+## 実行指示
+
+採用済みConcept、Characters、Relationships、World、Knowledgeを根拠として、
+シリーズ全体で継続追跡する主要な問い、約束、対立、謎を設計する。
+
+この工程ではThreadだけを作る。
+Ending Design、Long-term Arc、巻別配分、章、Scene、証拠、
+具体的な開示順、永続IDは作らない。
+
+## Thread
+
+- `title`: 短く識別可能な名称
+- `question`: 何が未解決なのかを疑問文または判定可能な問いとして書く
+- `importance`:
+  - `major`: シリーズの主軸で、完結までに必ず処理する
+  - `supporting`: 主軸を補強する副次Thread
+- `kind`: mystery、relationship、goal、threat、promiseなど
+- `introduced_by`: concept、character、relationship、world、knowledge、initial_design
+- `required_for_completion`: 完結に必須ならtrue
+- `planned_resolution`: 作者用の解決方向。具体的な巻番号、章番号、Scene、完成文章は書かない
+- `reader_visibility`:
+  - `reader_visible`: 開始時点で問いの存在が読者に認識可能
+  - `hidden`: 開始時点では問い自体が非公開
+- `initial_status`:
+  - `open`: 開始時点で既に物語上の問いとして存在する
+  - `planned`: 後続計画で導入する予定だが、開始時点では未導入
+
+`thread_id` を出力しない。
+
+## 必須条件
+
+- 少なくとも一件のmajor Threadを作る
+- majorは `required_for_completion: true`
+- majorは `initial_status: open`
+- `planned` Threadは `reader_visibility: hidden`
+- 同じ問いを表現だけ変えて重複させない
+- Thread数を増やしすぎない
+- major ThreadはConceptのcentral_questionまたはdramatic_engineへ接続する
+- Character ArcまたはRelationship Arcと無関係な主要Threadを作らない
+- planned_resolutionは後続Ending Stageが評価可能な方向性に留める
+
+## 情報境界
+
+- Knowledge Factの真実と人物のbeliefを混同しない
+- hidden Knowledgeをreader_visibleな問いへ不用意に漏らさない
+- 入力にない犯人、証拠、診断、制度、事件原因、結末を追加しない
+- 将来Scene ID、巻番号、章番号を先行確定しない
+- 自然な日本語だけで書く
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
