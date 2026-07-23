@@ -1,12 +1,1 @@
-{
-  "genre": "ファンタジー",
-  "target_audience": "成人女性",
-  "tone": "叙情的で静かな緊張",
-  "themes": ["記憶", "帰属", "選択"],
-  "setting": "海と霧に閉ざされた島々からなる国。潮の香りと灯りが暮らしの中心。",
-  "logline": "記憶を失った灯台守の娘が、父の残した暗号を手がかりに、島の秘密と自分の出自をたどる。",
-  "must_include": ["島の祭礼", "灯台の光", "古い手紙"],
-  "must_avoid": ["現代兵器", "科学技術による超常"],
-  "length_target": "5巻",
-  "ending": "娘が父の真実を知り、島に残るか去るかを自らの意志で選ぶ。"
-}
+{"avoid":["主人公だけが全責任を負う結末","説明だけで謎を解決する場面"],"ending":"町が灯を守る意思を持ち、澪と凪が再点灯を見届ける","genre":"海洋幻想譚","key_people":[{"initial_relation_to_protagonist":"疎遠になった幼なじみ","name":"凪","present_position":"港の修理工"}],"protagonist":{"core_trait":"粘り強い","current_pressure":"日没までに停止原因を特定する必要がある","initial_wish":"家業としてではなく自分の意思で灯を守りたい","name":"澪","present_position":"岬の灯台守見習い"},"target_reader":"成人読者","title":"岬の灯","volumes":4,"want":"停止した灯台の原因を追い、町全体が灯を守る仕組みを作る"}

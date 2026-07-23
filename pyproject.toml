@@ -1,24 +1,64 @@
+[build-system]
+requires = [
+    "hatchling>=1.25,<2",
+]
+build-backend = "hatchling.build"
+
 [project]
 name = "storycraft"
-version = "0.1.0"
-description = "LLMで日本語小説シリーズを最後まで書き切る道具"
-readme = "README.md"
+version = "1.0.0.dev0"
+description = "検証可能な日本語長編シリーズ生成・継続性管理CLI"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 dependencies = [
-    "jinja2>=3.1",
-    "openai>=1.50",
-    "pyyaml>=6.0",
+    "jinja2>=3.1,<4",
+    "jsonschema>=4.23,<5",
+    "openai>=1.50,<3",
+    "pyyaml>=6,<7",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Natural Language :: Japanese",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Text Processing",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2,<2",
 ]
 
 [project.scripts]
 storycraft = "storycraft.cli:main"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [tool.hatch.build.targets.wheel]
-packages = ["src/storycraft"]
+packages = [
+    "src/storycraft",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "templates/prompts" = "storycraft/templates/prompts"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/storycraft",
+    "/tests",
+    "/scripts/wheel_smoke.sh",
+    "/docs",
+    "/README.md",
+    "/example_brief.json",
+    "/pyproject.toml",
+]
+
+[tool.storycraft.release]
+stable_version = "1.0.0"
+development_version = "1.0.0.dev0"
+minimum_python = "3.11"
+canonical_test_command = 'python -m unittest discover -s tests -p "test_*.py"'
+canonical_wheel_smoke_command = "bash scripts/wheel_smoke.sh"
+prompt_asset_root = "templates/prompts"
+legacy_prompt_fallback = false
