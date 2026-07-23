@@ -270,6 +270,7 @@ def validate_workspace_layout(
             )
 
     _validate_workspace_input(root)
+    _validate_initial_design_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -520,6 +521,33 @@ def _validate_workspace_input(root: Path) -> None:
             raise ContractError(
                 "Keywords起点の採用済みBriefは元入力を参照しなければなりません"
             )
+
+
+def _validate_initial_design_artifacts(root: Path) -> None:
+    """存在する採用済みInitial Design部品だけを検証する。"""
+    version_root = root / "design/initial/v0001"
+    if not version_root.exists():
+        return
+    if not version_root.is_dir():
+        raise ContractError(
+            "design/initial/v0001はdirectoryでなければなりません"
+        )
+
+    concept_path = version_root / "concept.json"
+    if concept_path.exists():
+        if not concept_path.is_file():
+            raise ContractError(
+                "採用済みConceptはfileでなければなりません"
+            )
+
+        from .series_contracts import ContractValidator
+
+        concept = _read_json(concept_path)
+        brief = _read_json(root / "input/brief.json")
+        ContractValidator._validate_initial_concept(
+            concept,
+            brief,
+        )
 
 
 def _validate_workspace_destination(root: Path) -> None:

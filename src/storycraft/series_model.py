@@ -8,7 +8,7 @@ from .log import logger
 from .llm import LLMClient
 from .series_contracts import ContractError, LLMCallError
 from .prompt_template import get_template_loader
-from .stages import LEGACY_TEMPLATE_STAGES
+from .stages import ACTIVE_TEMPLATE_STAGES
 
 
 class OpenAIStoryModel:
@@ -37,7 +37,7 @@ class OpenAIStoryModel:
 
     @staticmethod
     def _render(kind: str, stage: str, **kwargs: Any) -> str:
-        if stage not in LEGACY_TEMPLATE_STAGES:
+        if stage not in ACTIVE_TEMPLATE_STAGES:
             raise ContractError(f"未知の生成工程です: {stage}")
         loader = get_template_loader()
         output_schema = loader.load_schema_text(kind, stage)

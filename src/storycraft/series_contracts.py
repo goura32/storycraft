@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -81,6 +82,61 @@ class ContractValidator:
             target = location or "<root>"
             raise ContractError(
                 f"Brief契約違反: {target}: {error.message}"
+            )
+
+    @staticmethod
+    def _validate_initial_concept(
+        concept: dict[str, Any],
+        brief: dict[str, Any] | None = None,
+    ) -> None:
+        """Initial Conceptをproduction JSON Schemaで検証する。"""
+        if not isinstance(concept, dict):
+            raise ContractError(
+                "Initial ConceptはJSON objectでなければなりません"
+            )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_concept",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(concept),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Concept契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if brief is None:
+            return
+
+        ContractValidator._validate_brief(brief)
+
+        serialized = json.dumps(
+            concept,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        violated = [
+            item
+            for item in brief["avoid"]
+            if item and item in serialized
+        ]
+        if violated:
+            raise ContractError(
+                "Initial ConceptがBriefのavoidを含みます: "
+                + ", ".join(violated)
             )
 
     @staticmethod

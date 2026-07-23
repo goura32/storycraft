@@ -1,0 +1,47 @@
+# initial_concept の批評
+
+候補を採用済みBriefと出力スキーマに照らし、
+修正可能で候補内に根拠のある問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. **スキーマ適合**
+2. **Brief保持**
+   - premise、required_elements、genre、toneを失っていない
+   - ending_preferenceと整合する
+   - avoid違反がない
+3. **中心的な問い**
+   - 最終巻まで答えを保てる
+   - 単純な事実確認だけで終わらない
+4. **シリーズ継続性**
+   - Briefのvolume_countに耐える
+   - dramatic_engineが各巻で進展と変化を生める
+5. **読者への約束**
+   - genreとtoneに対応する体験が明確
+6. **工程の所有範囲**
+   - 人物詳細、関係詳細、世界詳細、秘密の真相、巻別構成を確定していない
+   - 入力に根拠のない固有の事実を追加していない
+7. **日本語品質**
+   - 不自然な翻訳調、意味の曖昧な造語、助詞欠落がない
+
+`issues: []` を返す前に候補の全string fieldを一つずつ確認する。
+
+各issueは次を満たすこと。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する文字列を引用して具体的に説明する
+- `suggestion` は削除、Briefに基づく書き直し、日本語修正などの操作だけを示す
+- 候補にない事実や表現を新設しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 採用済みBrief
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

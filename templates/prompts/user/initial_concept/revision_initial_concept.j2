@@ -1,0 +1,32 @@
+# initial_concept の修正
+
+採用済み批評issuesに従って候補を修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- Briefに存在しない固有の事実を追加しない
+- premise、required_elements、genre、toneを保持する
+- volume_countに耐えるシリーズ構造を維持する
+- ending_preferenceとavoidを守る
+- 人物詳細、関係詳細、世界詳細、秘密の真相、巻別構成を追加しない
+- 自然な日本語に直す
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 採用済みBrief
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
