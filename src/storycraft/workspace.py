@@ -540,6 +540,7 @@ def _validate_initial_design_artifacts(root: Path) -> None:
     knowledge_path = version_root / "knowledge.json"
     threads_path = version_root / "threads.json"
     ending_path = version_root / "ending.json"
+    integrated_path = version_root / "integrated.json"
 
     if characters_path.exists() and not concept_path.is_file():
         raise ContractError(
@@ -574,6 +575,12 @@ def _validate_initial_design_artifacts(root: Path) -> None:
         raise ContractError(
             "採用済みEndingには"
             "採用済みThreadsが必要です"
+        )
+
+    if integrated_path.exists() and not ending_path.is_file():
+        raise ContractError(
+            "統合Initial Designには"
+            "採用済みEndingが必要です"
         )
 
     if concept_path.exists():
@@ -693,6 +700,27 @@ def _validate_initial_design_artifacts(root: Path) -> None:
                                     threads,
                                     adopted=True,
                                 )
+
+                                if integrated_path.exists():
+                                    if not integrated_path.is_file():
+                                        raise ContractError(
+                                            "統合Initial Designは"
+                                            "fileでなければなりません"
+                                        )
+                                    integrated = _read_json(
+                                        integrated_path
+                                    )
+                                    ContractValidator._validate_initial_integrate(
+                                        integrated,
+                                        brief,
+                                        concept,
+                                        characters,
+                                        relationships,
+                                        world,
+                                        knowledge,
+                                        threads,
+                                        ending,
+                                    )
 
 
 def _validate_workspace_destination(root: Path) -> None:

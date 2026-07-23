@@ -1,0 +1,37 @@
+# initial_integrate の修正
+
+採用済み批評issuesに従って統合Candidateを修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- 永続IDを変更、追加、削除しない
+- recordの件数と配列順を変更しない
+- Character Knowledgeの参照組合せを変更しない
+- すべての参照を解決可能に保つ
+- Briefのrequired_elements、ending_preference、tone、avoidを保持する
+- Knowledge、Thread、Ending、Arcの意味境界を保つ
+- planned_resolutionとTurning PointをCanon事実へ変えない
+- 入力にない人物、場所、真実、犯人、証拠、制度、事件原因を追加しない
+- Generation、Plan、Scene、Evidence、Publication情報を追加しない
+- design_id、version、created_atを追加しない
+- 自然な日本語へ必要最小限で修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

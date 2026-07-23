@@ -1,0 +1,68 @@
+# initial_integrate の生成
+
+## 目的
+
+採用済みConcept、Characters、Relationships、World、Knowledge、
+Threads、Ending Design、Long-term Arcsを、一つの整合した
+Initial Design Candidateへ統合する。
+
+## 出力構造
+
+各入力componentのroot wrapperを外し、次の単一構造にまとめる。
+
+- `concept`
+- `characters`
+- `relationships`
+- `world`
+- `locations`
+- `world_rules`
+- `knowledge_facts`
+- `character_knowledge`
+- `threads`
+- `ending`
+- `long_term_arcs`
+
+## 必須条件
+
+- 既存の永続IDを一文字も変更しない
+- recordの件数と配列順を変更しない
+- Character、Relationship、Location、World Rule、Knowledge、
+  Thread、Ending、Arcを追加または削除しない
+- Character KnowledgeのCharacterとKnowledgeの組合せを変更しない
+- すべての参照IDを解決可能にする
+- 同名Characterを作らない
+- World Rule同士を直接矛盾させない
+- KnowledgeのtruthとCharacter beliefを混同しない
+- Threadの問い、予定解決、Ending要件を整合させる
+- Briefのrequired_elements、ending_preference、avoidを保持する
+- protagonistとco_protagonistの開始状態、Arc、終着点を接続する
+- Turning Pointを確定済みCanonとして扱わない
+
+## 修正可能範囲
+
+入力component間に明確な矛盾がある場合だけ、既存fieldの文章や値を
+必要最小限で調整できる。
+
+ID、record数、record順、参照対象は変更してはならない。
+入力にない人物、場所、真実、犯人、証拠、制度、出来事、結末を追加しない。
+
+## 禁止metadata
+
+次は出力しない。
+
+- `schema_version`
+- `design_id`
+- `version`
+- `brief_id`
+- `created_at`
+- Generation、Plan、Scene、Evidence、Publicationの情報
+
+これらは後続のcode-only `initial_accept` が扱う。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

@@ -1335,6 +1335,304 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_integrate_prerequisites(
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+        knowledge: dict[str, Any],
+        threads: dict[str, Any],
+        ending: dict[str, Any],
+    ) -> None:
+        """Initial Integrateの採用済み入力を検証する。"""
+        ContractValidator._validate_brief(brief)
+        ContractValidator._validate_initial_concept(
+            concept,
+            brief,
+        )
+        ContractValidator._validate_initial_characters(
+            characters,
+            brief,
+            concept,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_relationships(
+            relationships,
+            concept,
+            characters,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_world(
+            world,
+            brief,
+            concept,
+            characters,
+            relationships,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_knowledge(
+            knowledge,
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_threads(
+            threads,
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+            knowledge,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_ending(
+            ending,
+            brief,
+            concept,
+            characters,
+            relationships,
+            threads,
+            adopted=True,
+        )
+
+    @staticmethod
+    def _validate_initial_integrate(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        world: dict[str, Any],
+        knowledge: dict[str, Any],
+        threads: dict[str, Any],
+        ending: dict[str, Any],
+    ) -> None:
+        """V1統合Initial Design Candidateを検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial IntegrateはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_initial_integrate_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+            world,
+            knowledge,
+            threads,
+            ending,
+        )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_integrate",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(value),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Integrate契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        integrated_concept = value["concept"]
+        integrated_characters = {
+            "characters": value["characters"],
+        }
+        integrated_relationships = {
+            "relationships": value["relationships"],
+        }
+        integrated_world = {
+            "world": value["world"],
+            "locations": value["locations"],
+            "world_rules": value["world_rules"],
+        }
+        integrated_knowledge = {
+            "knowledge_facts": value["knowledge_facts"],
+            "character_knowledge": value[
+                "character_knowledge"
+            ],
+        }
+        integrated_threads = {
+            "threads": value["threads"],
+        }
+        integrated_ending = {
+            "ending": value["ending"],
+            "long_term_arcs": value["long_term_arcs"],
+        }
+
+        ContractValidator._validate_initial_concept(
+            integrated_concept,
+            brief,
+        )
+        ContractValidator._validate_initial_characters(
+            integrated_characters,
+            brief,
+            integrated_concept,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_relationships(
+            integrated_relationships,
+            integrated_concept,
+            integrated_characters,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_world(
+            integrated_world,
+            brief,
+            integrated_concept,
+            integrated_characters,
+            integrated_relationships,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_knowledge(
+            integrated_knowledge,
+            brief,
+            integrated_concept,
+            integrated_characters,
+            integrated_relationships,
+            integrated_world,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_threads(
+            integrated_threads,
+            brief,
+            integrated_concept,
+            integrated_characters,
+            integrated_relationships,
+            integrated_world,
+            integrated_knowledge,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_ending(
+            integrated_ending,
+            brief,
+            integrated_concept,
+            integrated_characters,
+            integrated_relationships,
+            integrated_threads,
+            adopted=True,
+        )
+
+        source_sequences = {
+            "characters": tuple(
+                record["character_id"]
+                for record in characters["characters"]
+            ),
+            "relationships": tuple(
+                record["relationship_id"]
+                for record in relationships[
+                    "relationships"
+                ]
+            ),
+            "locations": tuple(
+                record["location_id"]
+                for record in world["locations"]
+            ),
+            "world_rules": tuple(
+                record["rule_id"]
+                for record in world["world_rules"]
+            ),
+            "knowledge_facts": tuple(
+                record["knowledge_id"]
+                for record in knowledge[
+                    "knowledge_facts"
+                ]
+            ),
+            "character_knowledge": tuple(
+                (
+                    record["character_id"],
+                    record["knowledge_id"],
+                )
+                for record in knowledge[
+                    "character_knowledge"
+                ]
+            ),
+            "threads": tuple(
+                record["thread_id"]
+                for record in threads["threads"]
+            ),
+            "long_term_arcs": tuple(
+                record["arc_id"]
+                for record in ending[
+                    "long_term_arcs"
+                ]
+            ),
+        }
+        integrated_sequences = {
+            "characters": tuple(
+                record["character_id"]
+                for record in value["characters"]
+            ),
+            "relationships": tuple(
+                record["relationship_id"]
+                for record in value["relationships"]
+            ),
+            "locations": tuple(
+                record["location_id"]
+                for record in value["locations"]
+            ),
+            "world_rules": tuple(
+                record["rule_id"]
+                for record in value["world_rules"]
+            ),
+            "knowledge_facts": tuple(
+                record["knowledge_id"]
+                for record in value["knowledge_facts"]
+            ),
+            "character_knowledge": tuple(
+                (
+                    record["character_id"],
+                    record["knowledge_id"],
+                )
+                for record in value["character_knowledge"]
+            ),
+            "threads": tuple(
+                record["thread_id"]
+                for record in value["threads"]
+            ),
+            "long_term_arcs": tuple(
+                record["arc_id"]
+                for record in value["long_term_arcs"]
+            ),
+        }
+
+        for component, source_sequence in (
+            source_sequences.items()
+        ):
+            if integrated_sequences[component] != source_sequence:
+                raise ContractError(
+                    "Initial Integrateは"
+                    f"{component}のID、件数、順序を"
+                    "変更できません"
+                )
+
+        if (
+            value["ending"]["ending_id"]
+            != ending["ending"]["ending_id"]
+        ):
+            raise ContractError(
+                "Initial Integrateはending_idを変更できません"
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:
