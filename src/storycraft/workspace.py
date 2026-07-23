@@ -272,6 +272,7 @@ def validate_workspace_layout(
     _validate_workspace_input(root)
     _validate_initial_design_artifacts(root)
     _validate_initial_generation_artifacts(root)
+    _validate_series_plan_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -835,6 +836,78 @@ def _validate_initial_generation_artifacts(
             "current_generation_idが有効な"
             "Initial Generationを参照していません"
         )
+
+
+def _validate_series_plan_artifacts(
+    root: Path,
+) -> None:
+    """存在する採用済みSeries Planを検証する。"""
+    version_root = (
+        root / "design/series-plans/series-plan-v0001"
+    )
+    if not version_root.exists():
+        return
+    if not version_root.is_dir():
+        raise ContractError(
+            "Series Plan version pathはdirectoryが必要です"
+        )
+
+    plan_path = version_root / "series-plan.json"
+    if not plan_path.is_file():
+        raise ContractError(
+            "Series Plan version directoryに"
+            "series-plan.jsonがありません"
+        )
+
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "採用済みSeries Planには"
+            "採用済みInitial Designが必要です"
+        )
+
+    plan = _read_json(plan_path)
+    initial_design = _read_json(initial_design_path)
+    brief = _read_json(root / "input/brief.json")
+
+    basis_generation_id = plan.get(
+        "basis_generation_id"
+    )
+    if not isinstance(basis_generation_id, str):
+        raise ContractError(
+            "Series Planのbasis_generation_idが不正です"
+        )
+
+    generation_root = (
+        root / "generations" / basis_generation_id
+    )
+    if not generation_root.is_dir():
+        raise ContractError(
+            "Series Planのbasis Generationが存在しません"
+        )
+    for name in (
+        "canon.json",
+        "state.json",
+        "evidence.json",
+        "commit.json",
+    ):
+        if not (generation_root / name).is_file():
+            raise ContractError(
+                "Series Planのbasis Generationが"
+                f"不完全です: {name}"
+            )
+
+    from .series_contracts import ContractValidator
+
+    ContractValidator._validate_series_plan(
+        plan,
+        brief,
+        initial_design,
+        basis_generation_id,
+        adopted=True,
+    )
 
 
 def _validate_workspace_destination(root: Path) -> None:

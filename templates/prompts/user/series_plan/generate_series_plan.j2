@@ -1,0 +1,49 @@
+# series_plan の生成
+
+## 目的
+
+Brief、採用済みInitial Design、Initial Generationを基準に、
+全Volumeを通したSeries Plan Candidateを作成する。
+
+## 必須条件
+
+- `volume_count` はBriefと完全に一致させる
+- `volume_summaries` は1巻から最終巻まで連番で一件ずつ作る
+- 各巻へ固有の役割と巻末変化を与える
+- 主要人物のArcを段階的に進行させる
+- Relationship変化を段階的に配分する
+- 全Threadの導入、進行、解決への巻配分を示す
+- 完結必須Threadは最終巻までに到達可能にする
+- Knowledgeの重要開示を適切な順序へ配分する
+- 危機と選択の重みを巻ごとに拡大する
+- 最終巻を採用済みEnding Designへ接続する
+- Briefのrequired_elements、tone、avoidを保持する
+- Initial Designにない人物、関係、場所、真実、犯人、制度、
+  事件原因、秘密、結末条件を追加しない
+- Turning Pointや予定された出来事を確定済みCanonとして扱わない
+- IDは入力に存在するCharacter、Relationship、Thread、
+  Knowledge IDだけを使用する
+- `character_arc_map`、`relationship_arc_map`、
+  `thread_progression` の巻番号は昇順で重複させない
+
+## 禁止metadata
+
+Candidateへ次を含めない。
+
+- `schema_version`
+- `series_plan_id`
+- `version`
+- `status`
+- `basis_generation_id`
+- `parent_plan_id`
+- `created_at`
+
+これらは採用処理が付与する。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

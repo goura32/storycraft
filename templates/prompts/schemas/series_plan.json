@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Series Plan Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "volume_count",
+    "series_objectives",
+    "volume_summaries",
+    "character_arc_map",
+    "relationship_arc_map",
+    "thread_progression",
+    "revelation_schedule",
+    "ending_path",
+    "global_constraints"
+  ],
+  "properties": {
+    "volume_count": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 10
+    },
+    "series_objectives": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "volume_summaries": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "volume_number",
+          "purpose",
+          "ending_change"
+        ],
+        "properties": {
+          "volume_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 800
+          },
+          "ending_change": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 800
+          }
+        }
+      }
+    },
+    "character_arc_map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^char-[A-Za-z0-9_-]+$": {
+          "$ref": "#/$defs/volumeNumbers"
+        }
+      }
+    },
+    "relationship_arc_map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^rel-[A-Za-z0-9_-]+$": {
+          "$ref": "#/$defs/volumeNumbers"
+        }
+      }
+    },
+    "thread_progression": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^thread-[A-Za-z0-9_-]+$": {
+          "$ref": "#/$defs/volumeNumbers"
+        }
+      }
+    },
+    "revelation_schedule": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "volume_number",
+          "knowledge_id"
+        ],
+        "properties": {
+          "volume_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "knowledge_id": {
+            "type": "string",
+            "pattern": "^know-[A-Za-z0-9_-]+$"
+          }
+        }
+      }
+    },
+    "ending_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1600
+    },
+    "global_constraints": {
+      "type": "array",
+      "maxItems": 48,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+      }
+    }
+  },
+  "$defs": {
+    "volumeNumbers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10
+      }
+    }
+  }
+}

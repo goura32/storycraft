@@ -1,0 +1,42 @@
+# series_plan の批評
+
+Series Plan CandidateをBrief、Initial Design、Initial Generationへ
+照合し、候補内に根拠があり修正可能な問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. 巻数がBriefの4〜10巻指定と一致する
+2. Volume番号が1から最終巻まで連番である
+3. 各巻のpurposeとending_changeが固有である
+4. 人物Arcが急変せず段階的に進行する
+5. Relationship変化が開始状態とEnding条件を接続する
+6. 全Threadが適切な巻へ配分され、完結必須Threadを回収できる
+7. Knowledge開示がCharacter Knowledgeとreader_visibilityを壊さない
+8. 危機、選択、結果が巻を追って拡大する
+9. 最終巻がEnding DesignとLong-term Arcへ接続する
+10. Briefのrequired_elements、tone、avoidを保持する
+11. 入力にない人物、関係、場所、真実、秘密、事件原因、
+    犯人、制度、結末条件を追加していない
+12. 存在しないIDや範囲外の巻番号を参照していない
+13. 予定を確定済みCanonまたは現在Stateとして記述していない
+14. 採用処理用metadataをCandidateへ含めていない
+15. 不自然な日本語、意味の重複、直接矛盾がない
+
+`issues: []` を返す前に全巻、全map、全schedule、
+全string fieldを再点検する。
+
+各issueの `field` はCandidate内に実在するJSON pathを指定し、
+候補外の新事実をsuggestionとして追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
