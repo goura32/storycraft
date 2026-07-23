@@ -16,10 +16,10 @@ from storycraft.llm import CallRecord, LLMClient
 from storycraft.prompt_template import get_template_loader
 from storycraft.series_contracts import LLMCallError
 from storycraft.series_model import OpenAIStoryModel
-from storycraft.stages import LEGACY_TEMPLATE_STAGES
+from storycraft.stages import ACTIVE_TEMPLATE_STAGES
 
 
-STAGES = list(LEGACY_TEMPLATE_STAGES)
+STAGES = list(ACTIVE_TEMPLATE_STAGES)
 
 
 class _CapturingClient:

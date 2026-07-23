@@ -1,0 +1,47 @@
+# initial_concept の生成
+
+## 実行指示
+
+採用済みBriefだけを根拠として、シリーズ全体のStory Conceptを作る。
+
+この工程が所有するのは次だけである。
+
+- 作品の中心設定
+- 中心的な問い
+- テーマ
+- 読者への約束
+- 複数巻を動かし続けるdramatic engine
+- Endingの方向
+
+人物の詳細プロフィール、人物間関係、世界設定の詳細、秘密の真相、
+伏線台帳、巻別構成、章・Scene内容は作らない。
+
+## 必須条件
+
+- Briefのpremise、required_elements、genre、toneを保持する
+- Briefのvolume_countで継続可能な構造にする
+- Briefのending_preferenceと矛盾しない
+- Briefのavoidに該当する内容を導入しない
+- 一巻だけで完結する仕組みにしない
+- 未入力の固有名詞、制度、診断名、場所、事件の具体的事実を補わない
+- 自然な日本語で書く
+- 各fieldの役割を重複させない
+
+## field責任
+
+- `logline`: 主体、中心対立、シリーズ規模の方向を一文で示す
+- `premise`: 物語開始条件とシリーズ全体の対立構造を示す
+- `central_question`: 最終巻まで答えを保てる中心的な問い
+- `themes`: 作品が繰り返し扱う概念
+- `dramatic_engine`: 各巻で新しい進展と対立を生む反復可能な仕組み
+- `tone`: Briefと整合する語調・読後感
+- `reader_promise`: 読者が各巻で期待できる体験
+- `ending_direction`: 結末の価値判断と到達方向。具体的な最終Sceneは書かない
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

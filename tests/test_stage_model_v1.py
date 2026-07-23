@@ -4,9 +4,11 @@ from __future__ import annotations
 import unittest
 
 from storycraft.stages import (
+    ACTIVE_TEMPLATE_STAGES,
     FINALIZATION_STAGES,
     INITIAL_DESIGN_STAGES,
     LEGACY_TEMPLATE_STAGES,
+    V1_TEMPLATE_STAGES,
     INPUT_STAGES,
     PLANNING_STAGES,
     SCENE_STAGES,
@@ -60,6 +62,22 @@ class StageModelV1Tests(unittest.TestCase):
         self.assertEqual(len(set(LEGACY_TEMPLATE_STAGES)), 13)
         self.assertIn("brief", LEGACY_TEMPLATE_STAGES)
         self.assertIn("closure", LEGACY_TEMPLATE_STAGES)
+
+    def test_template_stage_sets_remain_separated_during_migration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            V1_TEMPLATE_STAGES,
+            ("initial_concept",),
+        )
+        self.assertEqual(
+            ACTIVE_TEMPLATE_STAGES,
+            LEGACY_TEMPLATE_STAGES + V1_TEMPLATE_STAGES,
+        )
+        self.assertEqual(
+            len(ACTIVE_TEMPLATE_STAGES),
+            len(set(ACTIVE_TEMPLATE_STAGES)),
+        )
 
     def test_stage_groups_preserve_phase_boundaries(self) -> None:
         self.assertEqual(INPUT_STAGES, (Stage.INPUT,))
