@@ -273,6 +273,7 @@ def validate_workspace_layout(
     _validate_initial_design_artifacts(root)
     _validate_initial_generation_artifacts(root)
     _validate_series_plan_artifacts(root)
+    _validate_volume_plan_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -754,13 +755,18 @@ def _validate_initial_design_artifacts(root: Path) -> None:
 def _validate_initial_generation_artifacts(
     root: Path,
 ) -> None:
-    """存在するInitial Generationとrun-state参照を検証する。"""
+    """存在するGenerationとrun-state参照を検証する。"""
     version_root = root / "design/initial/v0001"
     accepted_path = version_root / "initial-design.json"
     state = RunStateStore(root).load()
     current_generation_id = state[
         "current_generation_id"
     ]
+    generation_root = root / "generations"
+
+    generation_directories = sorted(
+        generation_root.glob("gen-*")
+    )
 
     if not accepted_path.exists():
         if current_generation_id is not None:
@@ -768,73 +774,173 @@ def _validate_initial_generation_artifacts(
                 "current_generation_idには採用済み"
                 "Initial Designが必要です"
             )
+        if generation_directories:
+            raise ContractError(
+                "Generationには採用済みInitial Designが必要です"
+            )
         return
 
     accepted = _read_json(accepted_path)
-    generation_root = root / "generations"
 
     from .initial_generation import (
         validate_initial_generation,
     )
 
+    generation_ids: set[str] = set()
     initial_generation_ids: list[str] = []
-    for directory in sorted(generation_root.glob("gen-*")):
+    parents: dict[str, str] = {}
+
+    for directory in generation_directories:
         if not directory.is_dir():
             raise ContractError(
                 "Generation pathはdirectoryが必要です"
             )
 
-        commit_path = directory / "commit.json"
-        if not commit_path.is_file():
-            continue
-        commit = _read_json(commit_path)
-
-        if (
-            commit.get("parent_generation_id") is not None
-            or commit.get("commit_type") != "initial_design"
-            or commit.get("source_artifact_id")
-            != accepted["design_id"]
-        ):
-            continue
-
-        files = {}
+        generation_id = directory.name
+        files: dict[str, Any] = {}
         for name in (
             "canon.json",
             "state.json",
             "evidence.json",
             "commit.json",
         ):
-            path = directory / name
-            if not path.is_file():
+            file_path = directory / name
+            if not file_path.is_file():
                 raise ContractError(
-                    "Initial Generationの必須fileが"
-                    f"ありません: {name}"
+                    "Generationの必須fileが"
+                    f"ありません: {generation_id}/{name}"
                 )
-            files[name] = _read_json(path)
+            value = _read_json(file_path)
+            if not isinstance(value, dict):
+                raise ContractError(
+                    "Generation fileはobjectが必要です: "
+                    f"{generation_id}/{name}"
+                )
+            if value.get("schema_version") != 1:
+                raise ContractError(
+                    "Generation fileのschema_versionは"
+                    f"1が必要です: {generation_id}/{name}"
+                )
+            if value.get("generation_id") != generation_id:
+                raise ContractError(
+                    "Generation fileのgeneration_idが"
+                    f"directory名と一致しません: "
+                    f"{generation_id}/{name}"
+                )
+            files[name] = value
 
-        validate_initial_generation(files, accepted)
-        initial_generation_ids.append(directory.name)
+        commit = files["commit.json"]
+        created_at = commit.get("created_at")
+        if not isinstance(created_at, str):
+            raise ContractError(
+                "Generation commitにはcreated_atが必要です"
+            )
+        try:
+            parsed = datetime.fromisoformat(
+                created_at.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ContractError(
+                "Generation commitのcreated_atが不正です"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ContractError(
+                "Generation commitのcreated_atには"
+                "timezoneが必要です"
+            )
+
+        commit_type = commit.get("commit_type")
+        source_type = commit.get("source_artifact_type")
+        source_id = commit.get("source_artifact_id")
+        changed_targets = commit.get("changed_targets")
+        if not isinstance(commit_type, str) or not commit_type:
+            raise ContractError(
+                "Generation commit_typeが不正です"
+            )
+        if not isinstance(source_type, str) or not source_type:
+            raise ContractError(
+                "Generation source_artifact_typeが不正です"
+            )
+        if not isinstance(source_id, str) or not source_id:
+            raise ContractError(
+                "Generation source_artifact_idが不正です"
+            )
+        if (
+            not isinstance(changed_targets, list)
+            or not changed_targets
+            or any(
+                not isinstance(target, str) or not target
+                for target in changed_targets
+            )
+        ):
+            raise ContractError(
+                "Generation changed_targetsが不正です"
+            )
+
+        parent_generation_id = commit.get(
+            "parent_generation_id"
+        )
+        if parent_generation_id is None:
+            if (
+                commit_type != "initial_design"
+                or source_type != "initial_design"
+                or source_id != accepted["design_id"]
+            ):
+                raise ContractError(
+                    "親を持たないGenerationは"
+                    "Initial Design由来でなければなりません"
+                )
+            validate_initial_generation(files, accepted)
+            initial_generation_ids.append(generation_id)
+        else:
+            if (
+                not isinstance(parent_generation_id, str)
+                or not parent_generation_id.startswith("gen-")
+                or parent_generation_id == generation_id
+            ):
+                raise ContractError(
+                    "Generation parent_generation_idが不正です"
+                )
+            if commit_type == "initial_design":
+                raise ContractError(
+                    "後続Generationのcommit_typeを"
+                    "initial_designにできません"
+                )
+            parents[generation_id] = parent_generation_id
+
+        generation_ids.add(generation_id)
 
     if len(initial_generation_ids) > 1:
         raise ContractError(
             "Initial Generationが複数存在します"
         )
+    if generation_ids and not initial_generation_ids:
+        raise ContractError(
+            "Generation系列にInitial Generationがありません"
+        )
+
+    for generation_id, parent_generation_id in parents.items():
+        if parent_generation_id not in generation_ids:
+            raise ContractError(
+                "Generationのparent Generationが"
+                f"存在しません: {generation_id}"
+            )
 
     if current_generation_id is None:
         if (
             state["current_stage"] != Stage.INITIAL_ACCEPT.value
-            and initial_generation_ids
+            and generation_ids
         ):
             raise ContractError(
-                "Initial Generationがある場合は"
+                "Generationがある場合は"
                 "current_generation_idが必要です"
             )
         return
 
-    if current_generation_id not in initial_generation_ids:
+    if current_generation_id not in generation_ids:
         raise ContractError(
             "current_generation_idが有効な"
-            "Initial Generationを参照していません"
+            "Generationを参照していません"
         )
 
 
@@ -908,6 +1014,119 @@ def _validate_series_plan_artifacts(
         basis_generation_id,
         adopted=True,
     )
+
+
+def _validate_volume_plan_artifacts(
+    root: Path,
+) -> None:
+    """存在する採用済みVolume Planを検証する。"""
+    plans_root = root / "design/volume-plans"
+    entries = sorted(plans_root.iterdir())
+    if not entries:
+        return
+
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "採用済みVolume Planには"
+            "採用済みSeries Planが必要です"
+        )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "採用済みVolume Planには"
+            "採用済みInitial Designが必要です"
+        )
+
+    brief = _read_json(root / "input/brief.json")
+    initial_design = _read_json(initial_design_path)
+    series_plan = _read_json(series_plan_path)
+
+    seen_numbers: set[int] = set()
+    for directory in entries:
+        if not directory.is_dir():
+            raise ContractError(
+                "Volume Plan version pathは"
+                "directoryが必要です"
+            )
+
+        plan_path = directory / "volume-plan.json"
+        if not plan_path.is_file():
+            raise ContractError(
+                "Volume Plan version directoryに"
+                "volume-plan.jsonがありません"
+            )
+
+        plan = _read_json(plan_path)
+        volume_number = plan.get("volume_number")
+        if (
+            not isinstance(volume_number, int)
+            or isinstance(volume_number, bool)
+            or volume_number < 1
+        ):
+            raise ContractError(
+                "Volume Planのvolume_numberが不正です"
+            )
+
+        expected_directory = (
+            f"v{volume_number:02d}-v0001"
+        )
+        if directory.name != expected_directory:
+            raise ContractError(
+                "Volume Plan directory名が"
+                "volume_numberと一致しません"
+            )
+        if volume_number in seen_numbers:
+            raise ContractError(
+                "同じVolumeの採用済みPlanが複数あります"
+            )
+        seen_numbers.add(volume_number)
+
+        basis_generation_id = plan.get(
+            "basis_generation_id"
+        )
+        if not isinstance(basis_generation_id, str):
+            raise ContractError(
+                "Volume Planのbasis_generation_idが不正です"
+            )
+
+        generation_root = (
+            root / "generations" / basis_generation_id
+        )
+        if not generation_root.is_dir():
+            raise ContractError(
+                "Volume Planのbasis Generationが存在しません"
+            )
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            if not (generation_root / name).is_file():
+                raise ContractError(
+                    "Volume Planのbasis Generationが"
+                    f"不完全です: {name}"
+                )
+
+        from .series_contracts import ContractValidator
+
+        ContractValidator._validate_volume_plan(
+            plan,
+            brief,
+            initial_design,
+            series_plan,
+            volume_number,
+            basis_generation_id,
+            adopted=True,
+        )
 
 
 def _validate_workspace_destination(root: Path) -> None:

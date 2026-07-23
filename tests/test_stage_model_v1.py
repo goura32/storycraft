@@ -78,6 +78,7 @@ class StageModelV1Tests(unittest.TestCase):
                 "initial_ending",
                 "initial_integrate",
                 "series_plan",
+                "volume_plan",
             ),
         )
         self.assertEqual(

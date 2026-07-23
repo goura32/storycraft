@@ -1,0 +1,59 @@
+# volume_plan の生成
+
+## 目的
+
+採用済みSeries Plan、current Generation、前巻Handoffを基準に、
+対象Volume一巻のVolume Plan Candidateを作成する。
+
+## 必須条件
+
+- `target_volume_number` の一巻だけを計画する
+- `starting_state_summary` はcurrent Generationの実際のStateを反映する
+- 第二巻以降では `previous_handoff` の結果、制約、
+  `next_volume_requirements` を保持する
+- 対象巻のSeries Plan `volume_summaries` にあるpurposeと
+  ending_changeを具体化する
+- `character_changes` は対象巻へ割り当てられたCharacter IDだけを、
+  省略せず一度ずつ使用する
+- `relationship_changes` は対象巻へ割り当てられたRelationship IDだけを、
+  省略せず一度ずつ使用する
+- `thread_goals` は対象巻へ割り当てられたThread IDだけを、
+  省略せず一度ずつ使用する
+- `revelations` は対象巻の `revelation_schedule` に割り当てられた
+  Knowledgeだけを具体化し、件数も一致させる
+- `chapter_summaries` は1から始まる連番にする
+- 各Chapterへ固有の目的を与え、順序を因果的にする
+- `required_end_state` はSeries Planの巻末変化へ到達させる
+- 最終巻以外では `handoff_expectations` を空にせず、
+  次巻へ必要な結果と制約を示す
+- 最終巻ではEndingへの到達を優先し、
+  不要な次巻前提を作らない
+- current Stateにない出来事を既に起きた事実として書かない
+- Planは将来方針であり、CanonやStateではない
+- Initial DesignやSeries Planにない人物、関係、場所、真実、
+  秘密、犯人、制度、事件原因、結末条件を追加しない
+- Briefのrequired_elements、tone、avoidを保持する
+
+## 禁止metadata
+
+Candidateへ次を含めない。
+
+- `schema_version`
+- `volume_plan_id`
+- `volume_number`
+- `version`
+- `status`
+- `basis_generation_id`
+- `series_plan_id`
+- `parent_plan_id`
+- `created_at`
+
+これらは採用処理が付与する。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
