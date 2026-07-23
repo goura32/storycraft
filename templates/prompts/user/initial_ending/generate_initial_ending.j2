@@ -1,0 +1,66 @@
+# initial_ending の生成
+
+## 目的
+
+採用済みBrief、Concept、Characters、Relationships、Threadsから、
+シリーズ完結条件、望ましい読後感、Long-term Arcを設計する。
+
+この工程ではEnding DesignとLong-term Arcだけを作る。
+巻別配分、章、Scene、完成文章、証拠、Canon更新、永続IDは作らない。
+
+## Ending Design
+
+- `desired_effect`: 読後感。Briefのending_preference、tone、Conceptのending_directionに整合させる
+- `required_outcomes`: 完結時に必ず成立している結果
+- `forbidden_outcomes`: Briefのavoidを含む、採用してはならない結果
+- `character_end_states`: 主要人物IDごとの到達状態
+- `relationship_end_states`: 主要Relationship IDごとの到達状態
+- `thread_requirements`: 完結必須Thread IDを漏れなく列挙する
+- `final_revelations`: 終盤まで保護する最終開示。不要なら空配列
+- `private_notes`: 作者用補足。不要ならnull
+
+`ending_id` を出力しない。
+
+## Long-term Arc
+
+各Arcは次を持つ。
+
+- `target_type`: character、relationship、thread
+- `target_id`: 採用済みID
+- `start_state`: 入力で確定している開始状態
+- `turning_points`: 将来起こり得る意味的な転換。巻番号、章番号、Sceneは指定しない
+- `desired_end_state`: Ending Designと整合する到達状態
+- `failure_modes`: Arcを壊す展開や避けるべき失敗
+
+`arc_id` を出力しない。
+
+Turning Pointは予定であり、本文で発生するまでCanonではない。
+
+## 必須条件
+
+- protagonistとco_protagonist全員にcharacter_end_statesを定義する
+- protagonistとco_protagonist全員にLong-term Arcを定義する
+- required_for_completionがtrueのThreadをthread_requirementsへ一度ずつ含める
+- required_for_completionがtrueのThreadすべてにLong-term Arcを定義する
+- Threadのplanned_resolutionと矛盾しない
+- Briefのending_preferenceへ接続する
+- Briefのavoidを破る結末を禁止する
+- Conceptのcentral_questionを評価可能な結末にする
+- 同じ対象へ複数のLong-term Arcを作らない
+
+## 情報境界
+
+- Ending Designを読者向け文章として書かない
+- final_revelationsを開始時点の公開情報として扱わない
+- 入力にない犯人、証拠、事件原因、死亡、制度、超常設定を追加しない
+- 将来の巻番号、章番号、Scene IDを確定しない
+- Endingを本文へ早期漏洩させる提示手順を作らない
+- 自然な日本語だけで書く
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
