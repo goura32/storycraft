@@ -2822,6 +2822,281 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_scene_card_v1(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        initial_design: dict[str, Any],
+        series_plan: dict[str, Any],
+        volume_plan: dict[str, Any],
+        chapter_plan: dict[str, Any],
+        scene_plan: dict[str, Any],
+        current_generation: dict[str, Any],
+        volume_number: int,
+        chapter_number: int,
+        scene_number: int,
+        basis_generation_id: str,
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Scene Card Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Scene CardはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_scene_plan(
+            scene_plan,
+            brief,
+            initial_design,
+            series_plan,
+            volume_plan,
+            chapter_plan,
+            current_generation,
+            volume_number,
+            chapter_number,
+            scene_number,
+            basis_generation_id,
+            adopted=True,
+        )
+
+        candidate = deepcopy(value)
+        metadata_fields = {
+            "schema_version",
+            "scene_id",
+            "version",
+            "basis_generation_id",
+            "scene_plan_id",
+            "created_at",
+        }
+
+        expected_scene_id = (
+            f"scene-v{volume_number:02d}"
+            f"-c{chapter_number:03d}"
+            f"-s{scene_number:03d}"
+        )
+        if adopted:
+            if candidate.get("schema_version") != 1:
+                raise ContractError(
+                    "採用済みScene Cardのschema_versionは"
+                    "1でなければなりません"
+                )
+            if candidate.get("scene_id") != expected_scene_id:
+                raise ContractError(
+                    "採用済みScene Cardのscene_idが不正です"
+                )
+            if candidate.get("version") != 1:
+                raise ContractError(
+                    "採用済みScene Cardのversionは"
+                    "1でなければなりません"
+                )
+            if (
+                candidate.get("basis_generation_id")
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Scene Cardのbasis_generation_idが"
+                    "current Generationと一致しません"
+                )
+            if (
+                candidate.get("scene_plan_id")
+                != scene_plan["scene_plan_id"]
+            ):
+                raise ContractError(
+                    "Scene Cardのscene_plan_idが不正です"
+                )
+
+            created_at = candidate.get("created_at")
+            if not isinstance(created_at, str):
+                raise ContractError(
+                    "採用済みScene Cardにはcreated_atが必要です"
+                )
+            try:
+                parsed = datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ContractError(
+                    "採用済みScene Cardのcreated_atが不正です"
+                ) from exc
+            if parsed.tzinfo is None:
+                raise ContractError(
+                    "採用済みScene Cardのcreated_atには"
+                    "timezoneが必要です"
+                )
+
+            for field in metadata_fields:
+                candidate.pop(field, None)
+        else:
+            unexpected = metadata_fields & set(candidate)
+            if unexpected:
+                raise ContractError(
+                    "Scene Card Candidateへ採用metadataを"
+                    "含められません: "
+                    + ", ".join(sorted(unexpected))
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "scene_card_v1",
+        )
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Scene Card契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if (
+            candidate["pov_character_id"]
+            != scene_plan["pov_character_id"]
+        ):
+            raise ContractError(
+                "Scene CardのPOVがScene Planと一致しません"
+            )
+        if (
+            candidate["participant_ids"]
+            != scene_plan["participant_ids"]
+        ):
+            raise ContractError(
+                "Scene Cardの参加人物がScene Planと一致しません"
+            )
+        if candidate["location_id"] != scene_plan["location_id"]:
+            raise ContractError(
+                "Scene Cardの場所がScene Planと一致しません"
+            )
+        if (
+            candidate["pov_character_id"]
+            not in candidate["participant_ids"]
+        ):
+            raise ContractError(
+                "Scene CardのPOVは参加人物に含める必要があります"
+            )
+
+        beats = candidate["required_beats"]
+        if len(beats) < len(scene_plan["intended_beats"]):
+            raise ContractError(
+                "Scene Cardのrequired_beatsが"
+                "Scene Planの予定beatを具体化できていません"
+            )
+        beat_ids = [beat["beat_id"] for beat in beats]
+        if len(beat_ids) != len(set(beat_ids)):
+            raise ContractError(
+                "Scene Cardのbeat_idが重複しています"
+            )
+        order_hints = [beat["order_hint"] for beat in beats]
+        if order_hints != list(range(1, len(beats) + 1)):
+            raise ContractError(
+                "Scene Cardのorder_hintは1からの連番が必要です"
+            )
+        if any(not beat["required"] for beat in beats):
+            raise ContractError(
+                "required_beatsのrequiredはtrueが必要です"
+            )
+
+        knowledge_ids = {
+            record["knowledge_id"]
+            for record in initial_design["knowledge_facts"]
+        }
+        thread_ids = {
+            record["thread_id"]
+            for record in initial_design["threads"]
+        }
+        disclosure_ids = knowledge_ids | thread_ids
+        for field in (
+            "allowed_revelations",
+            "required_revelations",
+            "forbidden_revelations",
+        ):
+            unknown = set(candidate[field]) - disclosure_ids
+            if unknown:
+                raise ContractError(
+                    f"Scene Cardの{field}が未知の開示IDを"
+                    "参照しています: "
+                    + ", ".join(sorted(unknown))
+                )
+
+        allowed = set(candidate["allowed_revelations"])
+        required = set(candidate["required_revelations"])
+        forbidden = set(candidate["forbidden_revelations"])
+        if not required <= allowed:
+            raise ContractError(
+                "required_revelationsはallowed_revelationsの"
+                "部分集合でなければなりません"
+            )
+        overlap = forbidden & (allowed | required)
+        if overlap:
+            raise ContractError(
+                "禁止開示を許可または必須開示へ"
+                "重複指定できません: "
+                + ", ".join(sorted(overlap))
+            )
+
+        state = current_generation["state.json"]
+        update_sources = {
+            "character_state": state["characters"],
+            "relationship_state": state["relationships"],
+            "thread_state": state["threads"],
+            "inventory_state": state["inventory"],
+            "commitment_state": state["commitments"],
+        }
+        seen_updates: set[tuple[str, str]] = set()
+        participants = set(candidate["participant_ids"])
+
+        for update in candidate["allowed_updates"]:
+            target_type = update["target_type"]
+            target_id = update["target_id"]
+            key = (target_type, target_id)
+            if key in seen_updates:
+                raise ContractError(
+                    "Scene Cardのallowed_updatesが重複しています"
+                )
+            seen_updates.add(key)
+
+            if target_type == "timeline_state":
+                if target_id != "timeline":
+                    raise ContractError(
+                        "timeline_stateのtarget_idはtimelineが必要です"
+                    )
+                record = state["timeline"]
+            else:
+                source = update_sources[target_type]
+                if target_id not in source:
+                    raise ContractError(
+                        "Scene Cardのallowed_updatesが"
+                        "存在しないcurrent Stateを参照しています"
+                    )
+                record = source[target_id]
+
+            unknown_fields = (
+                set(update["allowed_fields"]) - set(record)
+            )
+            if unknown_fields:
+                raise ContractError(
+                    "Scene Cardのallowed_updatesが"
+                    "存在しないfieldを許可しています: "
+                    + ", ".join(sorted(unknown_fields))
+                )
+            if (
+                target_type == "character_state"
+                and target_id not in participants
+            ):
+                raise ContractError(
+                    "参加していないCharacterの更新を"
+                    "Scene Cardで許可できません"
+                )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:

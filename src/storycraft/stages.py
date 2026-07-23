@@ -67,6 +67,7 @@ V1_TEMPLATE_STAGES = (
     Stage.VOLUME_PLAN.value,
     Stage.CHAPTER_PLAN.value,
     Stage.SCENE_PLAN.value,
+    "scene_card_v1",
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。

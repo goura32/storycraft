@@ -1,0 +1,35 @@
+# V1 Scene Card Candidateの批評
+
+候補を入力と出力契約へ照合し、修正可能で具体的な問題だけをissuesへ出す。問題がなければ空配列を返す。
+
+## Review観点
+
+- POV人物が参加人物に含まれる
+- POV、参加人物、場所がScene Planと一致する
+- 開始状態がcurrent Generationと一致する
+- purposeがScene Planの固有目的を具体化している
+- required_beatsが具体的で因果順を持つ
+- 必須beatがScene Planの予定beatを失っていない
+- required_revelationsがallowed_revelationsの部分集合である
+- forbidden_revelationsと許可・必須開示が重複しない
+- 開示IDがInitial Designに存在するKnowledgeまたはThreadを参照する
+- allowed_updatesが存在するcurrent Stateだけを対象とする
+- allowed_updatesのfieldが対象Stateに存在し、過剰でない
+- ending_state_targetsを確定事実として扱っていない
+- 非POV人物の非公開内面や将来の秘密を不必要に複製していない
+- 入力にない固有事実を追加していない
+- 日本語が明確で自然である
+
+各issueのfieldは候補内に実在するJSON pathとし、descriptionは候補中の確認可能な問題を示す。候補を書き換えず、称賛や点数を出さない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
