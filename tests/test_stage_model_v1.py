@@ -68,7 +68,10 @@ class StageModelV1Tests(unittest.TestCase):
     ) -> None:
         self.assertEqual(
             V1_TEMPLATE_STAGES,
-            ("initial_concept",),
+            (
+                "initial_concept",
+                "initial_characters",
+            ),
         )
         self.assertEqual(
             ACTIVE_TEMPLATE_STAGES,

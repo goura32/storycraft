@@ -56,6 +56,7 @@ LEGACY_TEMPLATE_STAGES = (
 # Version 1 Pipelineで専用prompt／schemaを実装済みの工程。
 V1_TEMPLATE_STAGES = (
     Stage.INITIAL_CONCEPT.value,
+    Stage.INITIAL_CHARACTERS.value,
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。
