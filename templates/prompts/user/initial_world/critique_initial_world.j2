@@ -1,0 +1,51 @@
+# initial_world の批評
+
+候補を採用済みBrief、Story Concept、Characters、Relationships、
+出力スキーマに照らし、修正可能で候補内に根拠のある問題だけを
+issuesへ出す。問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. **BriefとGenre**
+   - genre、tone、avoidと整合する
+2. **世界全体**
+   - setting、歴史、社会構造、技術または魔法が理解可能
+   - major_conflictsが物語を継続的に動かせる
+3. **Location階層**
+   - parent_location_indexが既存の先行Locationを指す
+   - 階層が循環せず、包含関係が理解可能
+   - 同名または機能重複のLocationが過剰でない
+4. **World Rule**
+   - Rule同士が矛盾しない
+   - 物語を制約する意味がある
+   - 後付けで何でも解決できる万能Ruleがない
+   - exceptionsがRuleを事実上無効化していない
+5. **公開／秘密の分離**
+   - public_knowledgeへ作者用秘密が混入していない
+   - Locationのpublic_factsとprivate_factsが分離されている
+6. **工程の所有範囲**
+   - Knowledge状態、Thread、Ending、巻別構成、Sceneを確定していない
+   - location_id、rule_id、未知の永続IDを出力していない
+7. **日本語品質**
+   - 不自然な翻訳調、助詞欠落、意味不明な造語がない
+
+`issues: []` を返す前に候補の全string fieldを一つずつ確認する。
+
+各issueは次を満たすこと。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する文字列を引用して具体的に説明する
+- `suggestion` は削除、入力事実での書き直し、日本語修正などの操作だけを示す
+- 候補にない事実や表現を新設しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

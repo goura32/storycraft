@@ -536,6 +536,7 @@ def _validate_initial_design_artifacts(root: Path) -> None:
     concept_path = version_root / "concept.json"
     characters_path = version_root / "characters.json"
     relationships_path = version_root / "relationships.json"
+    world_path = version_root / "world.json"
 
     if characters_path.exists() and not concept_path.is_file():
         raise ContractError(
@@ -546,6 +547,12 @@ def _validate_initial_design_artifacts(root: Path) -> None:
         raise ContractError(
             "採用済みRelationshipsには"
             "採用済みCharactersが必要です"
+        )
+
+    if world_path.exists() and not relationships_path.is_file():
+        raise ContractError(
+            "採用済みWorldには"
+            "採用済みRelationshipsが必要です"
         )
 
     if concept_path.exists():
@@ -591,6 +598,22 @@ def _validate_initial_design_artifacts(root: Path) -> None:
                     characters,
                     adopted=True,
                 )
+
+                if world_path.exists():
+                    if not world_path.is_file():
+                        raise ContractError(
+                            "採用済みWorldは"
+                            "fileでなければなりません"
+                        )
+                    world = _read_json(world_path)
+                    ContractValidator._validate_initial_world(
+                        world,
+                        brief,
+                        concept,
+                        characters,
+                        relationships,
+                        adopted=True,
+                    )
 
 
 def _validate_workspace_destination(root: Path) -> None:

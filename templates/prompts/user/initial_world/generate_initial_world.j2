@@ -1,0 +1,66 @@
+# initial_world の生成
+
+## 実行指示
+
+採用済みBrief、Story Concept、Characters、Relationshipsを根拠として、
+シリーズ全体の舞台、Location階層、World Rule、社会構造を設計する。
+
+この工程では次だけを作る。
+
+- 世界全体の前提
+- 継続的に参照するLocation
+- 一貫性を制約するWorld Rule
+
+Knowledge Fact、人物ごとのbelief、Thread、Ending、巻別構成、
+Scene内容、永続IDは作らない。
+
+## World
+
+- `setting_summary`: 舞台全体を簡潔にまとめる
+- `historical_background`: 現在へ影響する確定済みの歴史
+- `social_structure`: 権力、共同体、制度、階層の基本構造
+- `technology_or_magic`: 技術水準または魔法体系の前提
+- `cultural_norms`: 行動を制約する慣習
+- `major_conflicts`: 世界や社会に継続して存在する対立
+- `public_knowledge`: 社会一般へ公開されている事実
+- `private_truths`: 作者だけが管理する世界レベルの真相
+
+人物個別の秘密や知識状態は書かない。
+
+## Locations
+
+- 配列順を維持する
+- `parent_location_index` は親Locationの配列index
+- 最上位Locationは `null`
+- 親は必ず子より前のindexに置く
+- 同名Locationを作らない
+- `public_facts` と `private_facts` を混同しない
+- 将来Scene専用の都合のよいLocationを作らない
+- `location_id` を出力しない
+
+## World Rules
+
+- 物語へ実際の制約を与えるRuleだけを作る
+- Rule同士を矛盾させない
+- 問題を後から万能に解決するRuleを作らない
+- 例外がない場合は `exceptions: []`
+- `rule_id` を出力しない
+
+現代劇でも「超常現象を使わず、人間の行動と物理的因果で説明する」
+などの一貫性Ruleを明示してよい。
+
+## 共通制約
+
+- Briefのgenre、tone、avoidを保持する
+- Story Conceptのdramatic_engineを支える
+- CharactersとRelationshipsにない固有事実を無制限に追加しない
+- 入力に根拠のない万能制度、証拠、事件解決装置を作らない
+- 自然な日本語だけで書く
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

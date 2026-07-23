@@ -1,0 +1,34 @@
+# initial_world の修正
+
+採用済み批評issuesに従って候補を修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- Brief、Concept、Characters、Relationshipsにない万能設定を追加しない
+- parent_location_indexと配列順を理由なく変更しない
+- public情報とprivate情報を混同しない
+- Ruleの制約性を保ち、例外で無効化しない
+- Knowledge、Thread、Ending、巻別構成、Sceneを追加しない
+- location_id、rule_id、他の永続IDを追加しない
+- 指摘されていないWorld、Location、Ruleを変更しない
+- 自然な日本語へ修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
