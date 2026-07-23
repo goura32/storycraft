@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
-from storycraft.run_state import validate_run_state
+from storycraft.run_state import RunStateStore, validate_run_state
 from storycraft.series_contracts import ContractError
 
 
@@ -82,6 +83,63 @@ class RunStateV1Tests(unittest.TestCase):
         state["pending_commit"]["phase"] = "state_updated"
         with self.assertRaisesRegex(ContractError, "phase"):
             validate_run_state(state)
+
+    def test_store_saves_and_loads_runtime_run_state(self) -> None:
+        state = load_fixture("workspace/run-state-running.json")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+            store.save(state)
+
+            self.assertTrue(store.exists())
+            self.assertEqual(store.load(), state)
+            self.assertFalse(
+                store.path.with_suffix(".json.tmp").exists()
+            )
+
+    def test_store_atomically_replaces_previous_state(self) -> None:
+        running = load_fixture("workspace/run-state-running.json")
+        stopped = load_fixture("workspace/run-state-stopped.json")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+            store.save(running)
+            store.save(stopped)
+
+            self.assertEqual(store.load()["status"], "stopped")
+
+    def test_store_rejects_invalid_state_before_writing(self) -> None:
+        state = load_fixture("workspace/run-state-running.json")
+        state["current_stage"] = "scene"
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+            with self.assertRaisesRegex(ContractError, "V1工程"):
+                store.save(state)
+
+            self.assertFalse(store.exists())
+
+    def test_store_rejects_malformed_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+            store.runtime_root.mkdir(parents=True)
+            store.path.write_text("{", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "JSONとして読めません",
+            ):
+                store.load()
+
+    def test_store_requires_existing_run_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "run-stateがありません",
+            ):
+                store.load()
 
     def test_active_scene_requires_scene_coordinates(self) -> None:
         state = copy.deepcopy(

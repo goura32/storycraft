@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+import os
+from pathlib import Path
 from typing import Any
 
 from .series_contracts import ContractError
@@ -342,3 +345,76 @@ def _parse_timestamp(value: object, field: str) -> datetime:
         raise ContractError(
             f"run-state.{field}がISO 8601形式ではありません"
         ) from exc
+
+
+
+class RunStateStore:
+    """V1 runtime/run-state.json の原子的な永続化。"""
+
+    def __init__(self, workspace_root: Path) -> None:
+        self.workspace_root = workspace_root
+        self.runtime_root = workspace_root / "runtime"
+        self.path = self.runtime_root / "run-state.json"
+
+    def exists(self) -> bool:
+        return self.path.is_file()
+
+    def load(self) -> dict[str, Any]:
+        if not self.exists():
+            raise ContractError("V1 run-stateがありません")
+
+        try:
+            state = json.loads(
+                self.path.read_text(encoding="utf-8")
+            )
+        except json.JSONDecodeError as exc:
+            raise ContractError(
+                "V1 run-stateがJSONとして読めません"
+            ) from exc
+        except OSError as exc:
+            raise ContractError(
+                "V1 run-stateを読み込めません"
+            ) from exc
+
+        return validate_run_state(state)
+
+    def save(self, state: dict[str, Any]) -> None:
+        validate_run_state(state)
+        self.runtime_root.mkdir(parents=True, exist_ok=True)
+
+        temporary = self.path.with_suffix(".json.tmp")
+
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                json.dump(
+                    state,
+                    handle,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            written = json.loads(
+                temporary.read_text(encoding="utf-8")
+            )
+            validate_run_state(written)
+
+            os.replace(temporary, self.path)
+            self._fsync_directory()
+        except (OSError, json.JSONDecodeError) as exc:
+            temporary.unlink(missing_ok=True)
+            raise ContractError(
+                "V1 run-stateを原子的に保存できません"
+            ) from exc
+
+    def _fsync_directory(self) -> None:
+        if os.name != "posix":
+            return
+
+        descriptor = os.open(self.runtime_root, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
