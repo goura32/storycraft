@@ -1,0 +1,42 @@
+# volume_plan の批評
+
+Volume Plan CandidateをSeries Plan、current Generation、
+前巻Handoffへ照合し、候補内で修正可能な問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. 対象VolumeのSeries Plan summaryと一致する
+2. starting_state_summaryがcurrent Generationを正確に反映する
+3. 第二巻以降では前巻Handoffの状態、制約、要求を保持する
+4. 巻固有の中心対立があり、各Chapterがそれを段階的に進める
+5. Character変化が対象巻の割当と現在Stateに整合する
+6. Relationship変化が対象巻の割当と現在Stateに整合する
+7. Thread goalが対象巻の割当と現在進捗に整合する
+8. revelationsが対象巻に予定されたKnowledgeだけを扱う
+9. Chapter番号が1からの連番で、目的が重複しない
+10. required_end_stateが巻末変化として意味を持つ
+11. 最終巻以外では次巻への接続が具体的である
+12. 最終巻ではEndingへ接続し、不要な次巻前提を作らない
+13. 未発生の予定を確定済みCanonや現在Stateとして書かない
+14. 入力にない人物、関係、場所、秘密、真実、事件原因、
+    犯人、制度、結末条件を追加していない
+15. 存在しないID、対象巻外のID、採用metadataを含めていない
+16. 不自然な日本語、意味の重複、直接矛盾がない
+
+`issues: []` の前に全map、全Chapter、全string fieldを再点検する。
+
+各issueの `field` はCandidate内に実在するJSON pathを指定し、
+候補外の新事実をsuggestionとして追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

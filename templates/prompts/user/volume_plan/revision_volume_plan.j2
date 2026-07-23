@@ -1,0 +1,37 @@
+# volume_plan の修正
+
+採用済み批評issuesに従いVolume Plan Candidateを修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- 対象Volumeを変更しない
+- current Generationの開始Stateを改変しない
+- 前巻Handoffの結果や制約を削除しない
+- Character、Relationship、Threadの割当IDを変更しない
+- 対象巻外のKnowledge開示を追加しない
+- Chapter番号の連番を維持する
+- Series Planのpurposeとending_changeを保持する
+- 未発生の予定を確定済みCanonへ変えない
+- 入力にない新事実やIDを追加しない
+- Briefのrequired_elements、tone、avoidを保持する
+- 採用metadataを追加しない
+- 自然な日本語へ必要最小限で修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

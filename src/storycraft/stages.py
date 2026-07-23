@@ -64,6 +64,7 @@ V1_TEMPLATE_STAGES = (
     Stage.INITIAL_ENDING.value,
     Stage.INITIAL_INTEGRATE.value,
     Stage.SERIES_PLAN.value,
+    Stage.VOLUME_PLAN.value,
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。
