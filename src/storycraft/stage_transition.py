@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
+from datetime import datetime
+from typing import Any
 
+from .run_state import validate_run_state
 from .series_contracts import ContractError
-from .stages import Stage
+from .stages import SCENE_STAGES, Stage
 
 
 ALLOWED_STAGE_TRANSITIONS: Mapping[Stage, frozenset[Stage]] = {
@@ -121,4 +125,121 @@ def _normalize_stage(stage: str | Stage) -> Stage:
     except (TypeError, ValueError) as exc:
         raise ContractError(
             f"未知のV1 Stageです: {stage!r}"
+        ) from exc
+
+
+
+_PRESERVE_ACTIVE_SCENE = object()
+
+
+def advance_run_state(
+    state: dict[str, Any],
+    *,
+    next_stage: str | Stage,
+    next_target: dict[str, Any],
+    updated_at: str,
+    active_scene_id: str | None | object = _PRESERVE_ACTIVE_SCENE,
+) -> dict[str, Any]:
+    """完了済みStageから次Stageへrun-stateを非破壊更新する。"""
+    current_state = validate_run_state(state)
+
+    if current_state["status"] not in {"initializing", "running"}:
+        raise ContractError(
+            "Stage遷移できるrun statusではありません: "
+            f"{current_state['status']!r}"
+        )
+
+    if current_state["active_candidate"] is not None:
+        raise ContractError(
+            "未採用active_candidateがあるため次Stageへ進めません"
+        )
+
+    if current_state["pending_commit"] is not None:
+        raise ContractError(
+            "pending_commitがあるため次Stageへ進めません"
+        )
+
+    _, following = validate_stage_transition(
+        current_state["current_stage"],
+        next_stage,
+    )
+
+    if not isinstance(next_target, dict) or not next_target:
+        raise ContractError(
+            "次Stageのcurrent_targetは空でないオブジェクトが必要です"
+        )
+
+    _validate_updated_at_progress(
+        current_state["updated_at"],
+        updated_at,
+    )
+
+    advanced = deepcopy(current_state)
+    advanced["status"] = "running"
+    advanced["current_stage"] = following.value
+    advanced["current_target"] = deepcopy(next_target)
+    advanced["active_candidate"] = None
+    advanced["pending_commit"] = None
+    advanced["stop_reason"] = None
+    advanced["last_error"] = None
+    advanced["updated_at"] = updated_at
+
+    if following in SCENE_STAGES:
+        resolved_scene_id = (
+            current_state["active_scene_id"]
+            if active_scene_id is _PRESERVE_ACTIVE_SCENE
+            else active_scene_id
+        )
+        if resolved_scene_id is None:
+            raise ContractError(
+                f"{following.value}へ進むにはactive_scene_idが必要です"
+            )
+        advanced["active_scene_id"] = resolved_scene_id
+    else:
+        if (
+            active_scene_id is not _PRESERVE_ACTIVE_SCENE
+            and active_scene_id is not None
+        ):
+            raise ContractError(
+                "Scene工程以外へactive_scene_idを設定できません"
+            )
+        advanced["active_scene_id"] = None
+
+    return validate_run_state(advanced)
+
+
+def _validate_updated_at_progress(
+    previous: object,
+    following: object,
+) -> None:
+    previous_time = _parse_transition_timestamp(
+        previous,
+        "現在のupdated_at",
+    )
+    following_time = _parse_transition_timestamp(
+        following,
+        "次のupdated_at",
+    )
+
+    if following_time < previous_time:
+        raise ContractError(
+            "Stage遷移でupdated_atを後退できません"
+        )
+
+
+def _parse_transition_timestamp(
+    value: object,
+    label: str,
+) -> datetime:
+    if not isinstance(value, str):
+        raise ContractError(
+            f"{label}はISO 8601文字列でなければなりません"
+        )
+    try:
+        return datetime.fromisoformat(
+            value.replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise ContractError(
+            f"{label}がISO 8601形式ではありません"
         ) from exc
