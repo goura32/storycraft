@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Initial Threads Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "threads"
+  ],
+  "properties": {
+    "threads": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "question",
+          "importance",
+          "kind",
+          "introduced_by",
+          "required_for_completion",
+          "planned_resolution",
+          "reader_visibility",
+          "initial_status"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          },
+          "importance": {
+            "type": "string",
+            "enum": [
+              "major",
+              "supporting"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "introduced_by": {
+            "type": "string",
+            "enum": [
+              "concept",
+              "character",
+              "relationship",
+              "world",
+              "knowledge",
+              "initial_design"
+            ]
+          },
+          "required_for_completion": {
+            "type": "boolean"
+          },
+          "planned_resolution": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1200
+          },
+          "reader_visibility": {
+            "type": "string",
+            "enum": [
+              "reader_visible",
+              "hidden"
+            ]
+          },
+          "initial_status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "open"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

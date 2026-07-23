@@ -1,0 +1,52 @@
+# initial_threads の批評
+
+候補を採用済みConcept、Characters、Relationships、World、Knowledge、
+出力スキーマに照らし、修正可能で候補内に根拠のある問題だけを
+issuesへ出す。問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. **主要な問い**
+   - 少なくとも一件のmajorがある
+   - questionが未解決事項として明確で、判定可能
+2. **完結条件**
+   - majorがrequired_for_completionである
+   - planned_resolutionが後続Ending Stageで評価可能
+3. **導入可能性**
+   - majorは開始時点でopen
+   - plannedはhiddenであり、未導入情報を読者へ見せていない
+4. **人物と関係**
+   - majorがCharacter ArcまたはRelationship Arcへ接続する
+   - 人物と無関係な抽象的謎だけになっていない
+5. **Knowledge整合性**
+   - 客観的な真実、人物のbelief、読者公開状態を混同していない
+   - hidden Knowledgeの内容をreader_visibleなquestionへ漏らしていない
+6. **重複と量**
+   - 同じ問いの言い換えが重複していない
+   - supporting Threadが過剰でない
+7. **工程の所有範囲**
+   - Ending、巻別配分、章、Scene、証拠、開示順を確定していない
+   - thread_idや未知の永続IDを出力していない
+8. **日本語品質**
+   - 不自然な翻訳調、曖昧な指示語、意味不明な表現がない
+
+`issues: []` を返す前に候補の全string fieldを一つずつ確認する。
+
+各issueは次を満たすこと。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する文字列を引用して具体的に説明する
+- `suggestion` は削除、入力事実での書き直し、日本語修正などの操作だけを示す
+- 候補にない事実や表現を追加しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
