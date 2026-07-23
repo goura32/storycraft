@@ -274,6 +274,7 @@ def validate_workspace_layout(
     _validate_initial_generation_artifacts(root)
     _validate_series_plan_artifacts(root)
     _validate_volume_plan_artifacts(root)
+    _validate_chapter_plan_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -1127,6 +1128,180 @@ def _validate_volume_plan_artifacts(
             basis_generation_id,
             adopted=True,
         )
+
+
+
+def _validate_chapter_plan_artifacts(
+    root: Path,
+) -> None:
+    """存在する採用済みChapter Planを検証する。"""
+    plans_root = root / "design/chapter-plans"
+    entries = sorted(plans_root.iterdir())
+    if not entries:
+        return
+
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "採用済みChapter Planには"
+            "採用済みSeries Planが必要です"
+        )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "採用済みChapter Planには"
+            "採用済みInitial Designが必要です"
+        )
+
+    brief = _read_json(root / "input/brief.json")
+    initial_design = _read_json(initial_design_path)
+    series_plan = _read_json(series_plan_path)
+
+    seen_targets: set[tuple[int, int]] = set()
+    chapter_numbers_by_volume: dict[int, set[int]] = {}
+    revelation_usage: dict[int, int] = {}
+    revelation_limits: dict[int, int] = {}
+
+    for directory in entries:
+        if not directory.is_dir():
+            raise ContractError(
+                "Chapter Plan version pathは"
+                "directoryが必要です"
+            )
+
+        plan_path = directory / "chapter-plan.json"
+        if not plan_path.is_file():
+            raise ContractError(
+                "Chapter Plan version directoryに"
+                "chapter-plan.jsonがありません"
+            )
+
+        plan = _read_json(plan_path)
+        volume_number = plan.get("volume_number")
+        chapter_number = plan.get("chapter_number")
+        for number, label in (
+            (volume_number, "volume_number"),
+            (chapter_number, "chapter_number"),
+        ):
+            if (
+                not isinstance(number, int)
+                or isinstance(number, bool)
+                or number < 1
+            ):
+                raise ContractError(
+                    f"Chapter Planの{label}が不正です"
+                )
+
+        expected_directory = (
+            f"v{volume_number:02d}"
+            f"-c{chapter_number:03d}-v0001"
+        )
+        if directory.name != expected_directory:
+            raise ContractError(
+                "Chapter Plan directory名が"
+                "対象巻章と一致しません"
+            )
+
+        target = (volume_number, chapter_number)
+        if target in seen_targets:
+            raise ContractError(
+                "同じChapterの採用済みPlanが複数あります"
+            )
+        seen_targets.add(target)
+        chapter_numbers_by_volume.setdefault(
+            volume_number,
+            set(),
+        ).add(chapter_number)
+
+        volume_plan_path = (
+            root
+            / "design/volume-plans"
+            / f"v{volume_number:02d}-v0001"
+            / "volume-plan.json"
+        )
+        if not volume_plan_path.is_file():
+            raise ContractError(
+                "採用済みChapter Planには"
+                "親Volume Planが必要です"
+            )
+        volume_plan = _read_json(volume_plan_path)
+
+        basis_generation_id = plan.get(
+            "basis_generation_id"
+        )
+        if not isinstance(basis_generation_id, str):
+            raise ContractError(
+                "Chapter Planのbasis_generation_idが不正です"
+            )
+
+        generation_root = (
+            root / "generations" / basis_generation_id
+        )
+        if not generation_root.is_dir():
+            raise ContractError(
+                "Chapter Planのbasis Generationが存在しません"
+            )
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            if not (generation_root / name).is_file():
+                raise ContractError(
+                    "Chapter Planのbasis Generationが"
+                    f"不完全です: {name}"
+                )
+
+        from .series_contracts import ContractValidator
+
+        ContractValidator._validate_chapter_plan(
+            plan,
+            brief,
+            initial_design,
+            series_plan,
+            volume_plan,
+            volume_number,
+            chapter_number,
+            basis_generation_id,
+            adopted=True,
+        )
+
+        revelation_limits[volume_number] = len(
+            volume_plan["revelations"]
+        )
+        revelation_usage[volume_number] = (
+            revelation_usage.get(volume_number, 0)
+            + len(plan["required_revelations"])
+        )
+
+    for volume_number, chapter_numbers in (
+        chapter_numbers_by_volume.items()
+    ):
+        expected = set(
+            range(1, max(chapter_numbers) + 1)
+        )
+        if chapter_numbers != expected:
+            raise ContractError(
+                "採用済みChapter Planは"
+                "第一章から連続して存在しなければなりません"
+            )
+        if (
+            revelation_usage.get(volume_number, 0)
+            > revelation_limits[volume_number]
+        ):
+            raise ContractError(
+                "採用済みChapter Plan全体の"
+                "required_revelationsがVolume Planの"
+                "開示予定を超えています"
+            )
 
 
 def _validate_workspace_destination(root: Path) -> None:

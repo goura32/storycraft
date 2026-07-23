@@ -2197,6 +2197,280 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_chapter_plan(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        initial_design: dict[str, Any],
+        series_plan: dict[str, Any],
+        volume_plan: dict[str, Any],
+        volume_number: int,
+        chapter_number: int,
+        basis_generation_id: str,
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Chapter Plan Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Chapter PlanはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_brief(brief)
+
+        if not isinstance(initial_design, dict):
+            raise ContractError(
+                "採用済みInitial Designが必要です"
+            )
+        if not isinstance(series_plan, dict):
+            raise ContractError(
+                "採用済みSeries Planが必要です"
+            )
+        if not isinstance(volume_plan, dict):
+            raise ContractError(
+                "採用済みVolume Planが必要です"
+            )
+
+        for number, label in (
+            (volume_number, "巻番号"),
+            (chapter_number, "章番号"),
+        ):
+            if (
+                not isinstance(number, int)
+                or isinstance(number, bool)
+                or number < 1
+            ):
+                raise ContractError(
+                    f"Chapter Planの対象{label}が不正です"
+                )
+
+        if (
+            not isinstance(basis_generation_id, str)
+            or not basis_generation_id.startswith("gen-")
+        ):
+            raise ContractError(
+                "Chapter Planのbasis_generation_idが不正です"
+            )
+
+        series_basis = series_plan.get(
+            "basis_generation_id"
+        )
+        if (
+            not isinstance(series_basis, str)
+            or not series_basis.startswith("gen-")
+        ):
+            raise ContractError(
+                "Series Planのbasis_generation_idが不正です"
+            )
+        ContractValidator._validate_series_plan(
+            series_plan,
+            brief,
+            initial_design,
+            series_basis,
+            adopted=True,
+        )
+
+        volume_basis = volume_plan.get(
+            "basis_generation_id"
+        )
+        parent_volume_number = volume_plan.get(
+            "volume_number"
+        )
+        if (
+            not isinstance(volume_basis, str)
+            or not volume_basis.startswith("gen-")
+        ):
+            raise ContractError(
+                "Volume Planのbasis_generation_idが不正です"
+            )
+        if (
+            not isinstance(parent_volume_number, int)
+            or isinstance(parent_volume_number, bool)
+            or parent_volume_number < 1
+        ):
+            raise ContractError(
+                "Volume Planのvolume_numberが不正です"
+            )
+
+        ContractValidator._validate_volume_plan(
+            volume_plan,
+            brief,
+            initial_design,
+            series_plan,
+            parent_volume_number,
+            volume_basis,
+            adopted=True,
+        )
+
+        if parent_volume_number != volume_number:
+            raise ContractError(
+                "Chapter Planの対象巻がVolume Planと"
+                "一致しません"
+            )
+
+        summary = next(
+            (
+                record
+                for record in volume_plan["chapter_summaries"]
+                if record["chapter_number"] == chapter_number
+            ),
+            None,
+        )
+        if summary is None:
+            raise ContractError(
+                "Chapter Planの対象章がVolume Planに"
+                "存在しません"
+            )
+
+        candidate = deepcopy(value)
+        metadata_fields = {
+            "schema_version",
+            "chapter_plan_id",
+            "volume_number",
+            "chapter_number",
+            "version",
+            "status",
+            "basis_generation_id",
+            "volume_plan_id",
+            "parent_plan_id",
+            "created_at",
+        }
+
+        if adopted:
+            expected_plan_id = (
+                f"chapter-plan-v{volume_number:02d}"
+                f"-c{chapter_number:03d}"
+            )
+            if candidate.get("schema_version") != 1:
+                raise ContractError(
+                    "採用済みChapter Planのschema_versionは"
+                    "1でなければなりません"
+                )
+            if (
+                candidate.get("chapter_plan_id")
+                != expected_plan_id
+            ):
+                raise ContractError(
+                    "採用済みChapter PlanのIDが不正です"
+                )
+            if candidate.get("volume_number") != volume_number:
+                raise ContractError(
+                    "採用済みChapter Planの巻番号が不正です"
+                )
+            if candidate.get("chapter_number") != chapter_number:
+                raise ContractError(
+                    "採用済みChapter Planの章番号が不正です"
+                )
+            if candidate.get("version") != 1:
+                raise ContractError(
+                    "採用済みChapter Planのversionは"
+                    "1でなければなりません"
+                )
+            if candidate.get("status") != "accepted":
+                raise ContractError(
+                    "採用済みChapter Planのstatusは"
+                    "acceptedでなければなりません"
+                )
+            if (
+                candidate.get("basis_generation_id")
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Chapter Planのbasis_generation_idが"
+                    "現在Generationと一致しません"
+                )
+            if (
+                candidate.get("volume_plan_id")
+                != volume_plan["volume_plan_id"]
+            ):
+                raise ContractError(
+                    "Chapter Planのvolume_plan_idが不正です"
+                )
+            if candidate.get("parent_plan_id") is not None:
+                raise ContractError(
+                    "最初のChapter Planのparent_plan_idは"
+                    "nullでなければなりません"
+                )
+
+            created_at = candidate.get("created_at")
+            if not isinstance(created_at, str):
+                raise ContractError(
+                    "採用済みChapter Planにはcreated_atが必要です"
+                )
+            try:
+                parsed = datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ContractError(
+                    "採用済みChapter Planのcreated_atが不正です"
+                ) from exc
+            if parsed.tzinfo is None:
+                raise ContractError(
+                    "採用済みChapter Planのcreated_atには"
+                    "timezoneが必要です"
+                )
+
+            for field in metadata_fields:
+                candidate.pop(field, None)
+        else:
+            unexpected = metadata_fields & set(candidate)
+            if unexpected:
+                raise ContractError(
+                    "Chapter Plan Candidateへ採用metadataを"
+                    "含められません: "
+                    + ", ".join(sorted(unexpected))
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "chapter_plan",
+        )
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(
+                candidate
+            ),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Chapter Plan契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        scenes = candidate["scene_summaries"]
+        actual_numbers = [
+            record["scene_number"]
+            for record in scenes
+        ]
+        expected_numbers = list(
+            range(1, len(scenes) + 1)
+        )
+        if actual_numbers != expected_numbers:
+            raise ContractError(
+                "Scene番号は1からの連番でなければなりません"
+            )
+
+        revelation_count = len(
+            candidate["required_revelations"]
+        )
+        parent_revelation_count = len(
+            volume_plan["revelations"]
+        )
+        if revelation_count > parent_revelation_count:
+            raise ContractError(
+                "required_revelationsの件数が"
+                "Volume Planの開示予定を超えています"
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:

@@ -1,0 +1,55 @@
+# chapter_plan の生成
+
+## 目的
+
+採用済みVolume Planとcurrent Generationを基準に、
+対象Chapter一章のChapter Plan Candidateを作成する。
+
+## 必須条件
+
+- `target_volume_number` と `target_chapter_number` の一章だけを計画する
+- Volume Planの対象 `chapter_summaries` を具体化する
+- `chapter_purpose` は対象Chapterの役割を具体化する
+- `starting_conditions` はcurrent Generationの実際のStateと、
+  それ以前のChapterが存在する場合の確定済み結果を反映する
+- 未発生の予定を開始時点の確定事実として書かない
+- `ending_changes` はChapter終了時に意味のある変化を示す
+- `scene_summaries` は1から始まる連番にする
+- 各Sceneへ固有の目的を与え、因果的な順序にする
+- Scene数を必要以上に増やさない
+- `required_revelations` はVolume Planで許された開示だけを扱う
+- 開示を対象Chapterへ置く場合は、少なくとも一つのScene目的へ
+  実行可能な形で配置する
+- `constraints` はVolume Plan、Brief、current Stateの制約を保持する
+- 最終ChapterではVolume Planの `required_end_state` へ収束させる
+- 最終Chapter以外では次Chapterへ接続できる終了変化を作る
+- Planは将来方針であり、CanonやStateではない
+- 入力にない人物、関係、場所、Knowledge、秘密、犯人、
+  事件原因、制度、結末条件を追加しない
+- 存在しないIDや採用metadataを含めない
+- Briefのrequired_elements、tone、avoidを保持する
+
+## 禁止metadata
+
+Candidateへ次を含めない。
+
+- `schema_version`
+- `chapter_plan_id`
+- `volume_number`
+- `chapter_number`
+- `version`
+- `status`
+- `basis_generation_id`
+- `volume_plan_id`
+- `parent_plan_id`
+- `created_at`
+
+これらは採用処理が付与する。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
