@@ -532,7 +532,7 @@ class SeriesWorkflow(ContractValidator):
 
     def _writer_context(self, state: dict[str, Any], card: dict[str, Any], scene_id: str, is_final_scene: bool) -> dict[str, Any]:
         visible = {record["id"]: record for key in ("characters", "relationships", "world", "timeline", "threads") for record in state[key] or [] if record["id"] in card["visible_ids"]}
-        return {"scene_id": scene_id, "card": card, "writer_view": visible, "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "", "is_final_scene": is_final_scene, "ending": state["brief"]["ending"] if is_final_scene else ""}
+        return {"scene_id": scene_id, "card": card, "writer_view": visible, "previous_handoff": state["scenes"][-1]["handoff_summary"] if state["scenes"] else "", "is_final_scene": is_final_scene, "ending": state["brief"]["ending_preference"] if is_final_scene else ""}
 
     @staticmethod
     def _scene_id(volume: int, chapter: int, scene: int) -> str:

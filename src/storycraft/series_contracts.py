@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from jsonschema import Draft202012Validator
+
+from .prompt_template import get_template_loader
+
 
 class ContractError(ValueError):
     """利用者入力または生成結果が製品契約を満たさない。"""
@@ -49,31 +53,35 @@ class ContractValidator:
 
     @staticmethod
     def _validate_brief(brief: dict[str, Any]) -> None:
+        """Briefをproduction JSON Schemaで構造検証する。"""
         if not isinstance(brief, dict):
-            raise ContractError("企画はオブジェクトでなければなりません")
-        for key in ("title", "genre", "want", "avoid", "ending"):
-            if not isinstance(brief.get(key), str) or not brief[key].strip():
-                raise ContractError(f"企画の必須項目がありません: {key}")
-        protagonist = brief.get("protagonist")
-        if not isinstance(protagonist, dict):
-            raise ContractError("企画の主人公情報が不正です")
-        for key in ("name", "present_position", "core_trait", "current_pressure", "initial_wish"):
-            if not isinstance(protagonist.get(key), str) or not protagonist[key].strip():
-                raise ContractError(f"企画の主人公の必須項目がありません: {key}")
-        key_people = brief.get("key_people")
-        if not isinstance(key_people, list) or not key_people:
-            raise ContractError("企画の主要人物群が不正です")
-        for person in key_people:
-            if not isinstance(person, dict):
-                raise ContractError("企画の主要人物が不正です")
-            for key in ("name", "present_position", "initial_relation_to_protagonist"):
-                if not isinstance(person.get(key), str) or not person[key].strip():
-                    raise ContractError(f"企画の主要人物の必須項目がありません: {key}")
-        if brief.get("volumes") is not None and (not isinstance(brief["volumes"], int) or not 4 <= brief["volumes"] <= 10):
-            raise ContractError("volumes は 4〜10 の整数でなければなりません")
-        counts = brief.get("chapters_per_volume")
-        if counts is not None and (not isinstance(counts, list) or not all(isinstance(value, int) and 1 <= value <= 12 for value in counts) or (brief.get("volumes") and len(counts) != brief["volumes"])):
-            raise ContractError("chapters_per_volume は巻数と一致する1〜12の整数配列でなければなりません")
+            raise ContractError(
+                "BriefはJSON objectでなければなりません"
+            )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "brief",
+        )
+        validator = Draft202012Validator(schema)
+
+        errors = sorted(
+            validator.iter_errors(brief),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                f"Brief契約違反: {target}: {error.message}"
+            )
 
     @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
@@ -351,7 +359,7 @@ class ContractValidator:
                 raise ContractError("未回収の主要項目があります")
         evidence = value.get("ending_evidence")
         final_scene = state["scenes"][-1] if state["scenes"] else {}
-        if value.get("ending_authority") != state["brief"]["ending"] or not isinstance(evidence, str) or not evidence or evidence not in final_scene.get("content", ""):
+        if value.get("ending_authority") != state["brief"]["ending_preference"] or not isinstance(evidence, str) or not evidence or evidence not in final_scene.get("content", ""):
             raise ContractError("結末の本文根拠がありません")
 
     @staticmethod

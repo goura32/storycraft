@@ -26,16 +26,31 @@ class PromptTemplate:
             "indent": 2,
         }
 
-    def load_schema(self, category: str, stage: str) -> str:
-        """スキーマファイルを読み込み、整形済み文字列で返す"""
+    def load_schema_object(
+        self,
+        category: str,
+        stage: str,
+    ) -> dict[str, object]:
+        """Schema fileをJSON objectとして読み込む。"""
         if category == "critique":
             schema_path = self.template_dir / "schemas" / "critique.json"
         else:
-            # 生成・修正は工程別生成スキーマを共有する。
+            # GenerateとRevisionはStage別Schemaを共有する。
             schema_path = self.template_dir / "schemas" / f"{stage}.json"
 
-        with schema_path.open(encoding="utf-8") as f:
-            schema = json.load(f)
+        with schema_path.open(encoding="utf-8") as file:
+            schema = json.load(file)
+
+        if not isinstance(schema, dict):
+            raise ValueError(
+                f"Schema rootはobjectでなければなりません: {schema_path}"
+            )
+
+        return schema
+
+    def load_schema(self, category: str, stage: str) -> str:
+        """Schema fileを整形済みJSON文字列で返す。"""
+        schema = self.load_schema_object(category, stage)
         return json.dumps(schema, ensure_ascii=False, indent=2)
 
     def render_system(self) -> str:

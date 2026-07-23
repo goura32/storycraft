@@ -1,6 +1,7 @@
 """仕様どおりの次世代生成フロー受け入れテスト。"""
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,27 +9,14 @@ from pathlib import Path
 from storycraft.series_engine import ContractError, SeriesService
 
 
-BRIEF = {
-    "title": "霧の島の灯",
-    "genre": "海洋幻想譚",
-    "protagonist": {
-        "name": "澪",
-        "present_position": "灯台守の娘",
-        "core_trait": "責任感が強い",
-        "current_pressure": "父の失踪後も灯台を維持している",
-        "initial_wish": "父の行方を知りたい",
-    },
-    "key_people": [
-        {"name": "父", "present_position": "灯台守", "initial_relation_to_protagonist": "主人公の父"},
-        {"name": "航海士", "present_position": "島を訪れる航海士", "initial_relation_to_protagonist": "主人公の相談相手"},
-        {"name": "島医者", "present_position": "島の診療所を営む医師", "initial_relation_to_protagonist": "主人公の幼なじみ"},
-    ],
-    "want": "父の失踪と灯台の秘密を解く",
-    "avoid": "救いのない結末",
-    "ending": "澪が父の真実を受け入れ、島に残る",
-    "volumes": 4,
-    "chapters_per_volume": [1, 1, 1, 1],
-}
+ROOT = Path(__file__).parent.parent
+
+BRIEF = json.loads(
+    (
+        ROOT / "tests/fixtures/brief/valid.json"
+    ).read_text(encoding="utf-8")
+)
+
 
 
 class FlowModel:
@@ -119,7 +107,7 @@ class FlowModel:
             ]
             return {"volume_summary": f"第{context['volume']['number']}巻の要約", "unresolved_thread_ids": unresolved}
         if stage == "closure":
-            return {"resolved_ids": ["thread-0001"], "ending_evidence": "島に残る", "ending_authority": BRIEF["ending"]}
+            return {"resolved_ids": ["thread-0001"], "ending_evidence": "島に残る", "ending_authority": BRIEF["ending_preference"]}
         raise AssertionError(f"unexpected stage: {stage}")
 
     def critique(self, stage: str, candidate: dict, context: dict) -> dict:

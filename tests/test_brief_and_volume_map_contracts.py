@@ -1,6 +1,7 @@
 """keywords起点briefとCanon後volume_mapの公開契約。"""
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,22 +9,16 @@ from pathlib import Path
 from storycraft.series_engine import ContractError, SeriesService
 
 
-GENERATED_BRIEF = {
-    "title": "霧の島の灯",
-    "genre": "海洋幻想譚",
-    "protagonist": {
-        "name": "澪",
-        "present_position": "島の灯台守の娘",
-        "core_trait": "好奇心が強く粘り強い",
-        "current_pressure": "父の不在で灯台の仕事を支えなければならない",
-        "initial_wish": "父の残した手掛かりを理解したい",
-    },
-    "key_people": [{"name": "父", "present_position": "島の灯台守", "initial_relation_to_protagonist": "澪の父"}],
-    "want": "父の暗号と島の秘密をたどる",
-    "avoid": "救いのない結末",
-    "ending": "澪が自らの居場所を選ぶ",
-    "volumes": 4,
-}
+ROOT = Path(__file__).parent.parent
+
+GENERATED_BRIEF = json.loads(
+    (
+        ROOT / "tests/fixtures/brief/valid.json"
+    ).read_text(encoding="utf-8")
+)
+GENERATED_BRIEF["source_type"] = "keywords"
+GENERATED_BRIEF["source_reference"] = "input/keywords.json"
+
 
 
 class KeywordBriefModel:
@@ -59,12 +54,11 @@ class BriefAndVolumeMapContractTests(unittest.TestCase):
         self.assertEqual(state["keywords"], ["霧の島", "灯台", "女性向け幻想譚", "4巻"])
         self.assertEqual(model.calls, [("brief", {"keywords": state["keywords"]})])
 
-    def test_brief_rejects_missing_structured_protagonist_field(self) -> None:
+    def test_brief_rejects_missing_premise(self) -> None:
         invalid = dict(GENERATED_BRIEF)
-        invalid["protagonist"] = dict(GENERATED_BRIEF["protagonist"])
-        del invalid["protagonist"]["current_pressure"]
+        del invalid["premise"]
 
-        with self.assertRaisesRegex(ContractError, "主人公の必須項目"):
+        with self.assertRaisesRegex(ContractError, "premise"):
             SeriesService._validate_brief(invalid)
 
     def test_volume_map_requires_existing_thread_ids_and_a_complete_major_thread_arc(self) -> None:

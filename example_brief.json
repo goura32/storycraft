@@ -1,1 +1,33 @@
-{"avoid":["主人公だけが全責任を負う結末","説明だけで謎を解決する場面"],"ending":"町が灯を守る意思を持ち、澪と凪が再点灯を見届ける","genre":"海洋幻想譚","key_people":[{"initial_relation_to_protagonist":"疎遠になった幼なじみ","name":"凪","present_position":"港の修理工"}],"protagonist":{"core_trait":"粘り強い","current_pressure":"日没までに停止原因を特定する必要がある","initial_wish":"家業としてではなく自分の意思で灯を守りたい","name":"澪","present_position":"岬の灯台守見習い"},"target_reader":"成人読者","title":"岬の灯","volumes":4,"want":"停止した灯台の原因を追い、町全体が灯を守る仕組みを作る"}
+{
+  "schema_version": 1,
+  "source_type": "brief",
+  "title": "岬の灯",
+  "genre": [
+    "海洋幻想譚"
+  ],
+  "audience": "成人読者",
+  "tone": [
+    "静かな緊張",
+    "希望のある結末"
+  ],
+  "premise": "岬の灯台守見習いの澪が、疎遠になった幼なじみの凪とともに停止した灯台の原因を追い、町全体で灯を守る仕組みを作ろうとする。",
+  "central_question": "澪は家業としてではなく、自分の意思で灯を守る道を選べるか。",
+  "required_elements": [
+    "岬の灯台",
+    "停止原因の調査",
+    "疎遠になった幼なじみ",
+    "町全体で灯を守る仕組み"
+  ],
+  "avoid": [
+    "主人公だけが全責任を負う結末",
+    "説明だけで謎を解決する場面"
+  ],
+  "ending_preference": "町が灯を守る意思を持ち、澪と凪が再点灯を見届ける。",
+  "volume_count": 4,
+  "language": "ja",
+  "style_preferences": [
+    "情景描写は簡潔",
+    "説明過多を避ける"
+  ],
+  "user_notes": null
+}

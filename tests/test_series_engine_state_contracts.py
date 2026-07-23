@@ -142,7 +142,7 @@ class StateContractTests(unittest.TestCase):
         acceptance = {
             "stage": "brief", "unit": None, "reason": "max_critique_passes_exhausted",
             "max_critique_passes": 1, "final_review_pass": 2,
-            "issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}],
+            "issues": [{"severity": "major", "field": "premise", "description": "改善点", "suggestion": "修正"}],
         }
         state["quality_acceptances"] = [acceptance]
         service._write_output(state)
@@ -170,7 +170,7 @@ class StateContractTests(unittest.TestCase):
 
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
                 if stage == "brief":
-                    return {"issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}]}
+                    return {"issues": [{"severity": "major", "field": "premise", "description": "改善点", "suggestion": "修正"}]}
                 return {"issues": []}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
@@ -188,7 +188,7 @@ class StateContractTests(unittest.TestCase):
         self.assertEqual(state["quality_acceptances"], [{
             "stage": "brief", "unit": None, "reason": "max_critique_passes_exhausted",
             "max_critique_passes": 1, "final_review_pass": 2,
-            "issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}],
+            "issues": [{"severity": "major", "field": "premise", "description": "改善点", "suggestion": "修正"}],
         }])
         service._run_one(state, model)
         self.assertEqual(model.generated_stages, ["brief", "characters"])
@@ -329,7 +329,7 @@ class StateContractTests(unittest.TestCase):
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
                 self.critique_calls += 1
                 if self.critique_calls == 1:
-                    return {"issues": [{"severity": "minor", "field": "protagonist", "description": "修正対象", "suggestion": "削除"}]}
+                    return {"issues": [{"severity": "minor", "field": "premise", "description": "修正対象", "suggestion": "削除"}]}
                 return {"issues": []}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
@@ -377,7 +377,7 @@ class StateContractTests(unittest.TestCase):
                 return dict(BRIEF)
 
             def critique(self, stage: str, candidate: dict, context: dict) -> dict:
-                return {"issues": [{"severity": "major", "field": "protagonist", "description": "改善点", "suggestion": "修正"}]}
+                return {"issues": [{"severity": "major", "field": "premise", "description": "改善点", "suggestion": "修正"}]}
 
             def revision(self, stage: str, candidate: dict, critique: dict, context: dict) -> dict:
                 return {}
@@ -427,7 +427,7 @@ class StateContractTests(unittest.TestCase):
 
     def test_critique_rejects_field_outside_candidate(self) -> None:
         candidate = {"world": [{"stable_fact": "書店"}]}
-        critique = {"issues": [{"severity": "minor", "field": "brief.protagonist.current_pressure", "description": "手纸", "suggestion": "日本語表記を正す。"}]}
+        critique = {"issues": [{"severity": "minor", "field": "brief.premise", "description": "手纸", "suggestion": "日本語表記を正す。"}]}
         with self.assertRaisesRegex(ContractError, "候補を指しません"):
             SeriesService._validate_critique_fields(critique, candidate)
 

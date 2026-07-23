@@ -1,6 +1,7 @@
 """公開コマンド相当の最小再開・step受け入れ契約。"""
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,22 +9,14 @@ from pathlib import Path
 from storycraft.series_engine import ContractError, SeriesService
 
 
-BRIEF = {
-    "title": "霧の島の灯",
-    "genre": "海洋幻想譚",
-    "protagonist": {
-        "name": "澪",
-        "present_position": "島の灯台守の娘",
-        "core_trait": "好奇心が強い",
-        "current_pressure": "父の不在で灯台を守っている",
-        "initial_wish": "父の消息を知りたい",
-    },
-    "key_people": [{"name": "父", "present_position": "島の灯台守", "initial_relation_to_protagonist": "主人公の父"}],
-    "want": "父を探す",
-    "avoid": "救いのない結末",
-    "ending": "島に残る",
-    "volumes": 4,
-}
+ROOT = Path(__file__).parent.parent
+
+BRIEF = json.loads(
+    (
+        ROOT / "tests/fixtures/brief/valid.json"
+    ).read_text(encoding="utf-8")
+)
+
 
 
 class FirstLedgerModel:

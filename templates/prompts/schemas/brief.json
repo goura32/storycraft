@@ -1,65 +1,135 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "storycraft://schemas/brief.json",
+  "title": "Storycraft Brief",
   "type": "object",
-  "required": ["title", "genre", "protagonist", "key_people", "want", "avoid", "ending"],
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_type",
+    "title",
+    "genre",
+    "premise",
+    "required_elements",
+    "avoid",
+    "ending_preference",
+    "volume_count",
+    "language"
+  ],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "brief",
+        "keywords"
+      ]
+    },
+    "source_reference": {
+      "type": "string",
+      "minLength": 1
+    },
     "title": {
       "type": "string",
-      "description": "作品タイトル。ジャンル・雰囲気を反映し、読者の興味を惹くもの。"
+      "minLength": 1
     },
     "genre": {
-      "type": "string",
-      "description": "ジャンル名。市場分類として通じる標準的な名称（例：女性向けロマンスファンタジー、異世界転生、ミステリー等）。"
-    },
-    "protagonist": {
-      "type": "object",
-      "description": "主人公の開始時点の構造化情報。秘密、未来の展開、結末への到達、物語上の役割は書かない。",
-      "required": ["name", "present_position", "core_trait", "current_pressure", "initial_wish"],
-      "properties": {
-        "name": {"type": "string", "description": "主人公名。後続の人物台帳で維持する候補名。"},
-        "present_position": {"type": "string", "description": "物語開始時点の立場・所属・置かれた場所。将来の役割や秘密を書かない。"},
-        "core_trait": {"type": "string", "description": "開始時点で観察できる性格の核・信条・行動傾向。主語と対象が明確な自然な日本語で書く。将来の成長や克服を書かない。"},
-        "current_pressure": {"type": "string", "description": "開始時点で主人公にかかる現在の圧力・制約・未解決の課題。自然な完結表現で書き、将来の対処や解決方法を書かない。"},
-        "initial_wish": {"type": "string", "description": "開始時点で主人公が意識している直近の望み・目的。具体的な対象または得たい状態を自然な日本語で書き、物語全体の結末や将来の到達点を書かない。"}
-      }
-    },
-    "key_people": {
       "type": "array",
       "minItems": 1,
-      "description": "主人公以外の主要人物群。人物ごとの開始時点の情報だけを置く。詳細なプロフィール、秘密、将来の展開は characters 工程以後で確定する。",
+      "uniqueItems": true,
       "items": {
-        "type": "object",
-        "required": ["name", "present_position", "initial_relation_to_protagonist"],
-        "properties": {
-          "name": {"type": "string", "description": "人物名。後続の人物台帳で維持する候補名。"},
-          "present_position": {"type": "string", "description": "物語開始時点の立場・所属・主人公との接点。将来の役割や秘密を書かない。"},
-          "initial_relation_to_protagonist": {"type": "string", "description": "物語開始時点で既に成立している静的な主人公との関係。血縁、既存の職務関係、面識の有無、開始時点の対立だけを、その人物と主人公の間の直接的で簡潔な関係事実として書く。第三者との関係や単独の経歴で代用しない。理由・経緯・評価、共同作業・親密化・関係変化・関係の状態説明を予告しない。"}
-        }
+        "type": "string",
+        "minLength": 1
       }
     },
-    "want": {
+    "audience": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tone": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "premise": {
       "type": "string",
-      "description": "本作で描写したい核心的な魅力・読ませたい体験・テーマ的意図。ジャンル読者の期待と本作独自の切り口を両立させる記述。"
+      "minLength": 1
+    },
+    "central_question": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "required_elements": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "avoid": {
-      "type": "string",
-      "description": "読者体験を損なう表現・反復・安易な解決・望まない読後感。避ける対象だけを、読者が具体的に特定できる自然な名詞句または文で書く。肯定的な制作指示、維持すべき構成、実施すべき開示方法、対象のない評価語、意味が定まらない抽象名詞の連結は書かない。題材を成立させる必要な表現手法、情報の段階的開示、必要な伏線一般を理由なく包括的に禁止しない。"
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
-    "ending": {
+    "ending_preference": {
       "type": "string",
-      "description": "シリーズ完結時にすでに成立している最終状態・世界または共同体の変化・読後感。変化が始まる経緯、変化を起こす出来事、解決へ向かう途中の動作、未設定の秘密、因果史、敵対者、解決手段を新たな前提として導入しない。"
+      "minLength": 1
     },
-    "volumes": {
+    "volume_count": {
       "type": "integer",
       "minimum": 4,
-      "maximum": 10,
-      "description": "全巻数。4〜10の整数。未定なら省略可。"
+      "maximum": 10
     },
-    "chapters_per_volume": {
+    "language": {
+      "type": "string",
+      "const": "ja"
+    },
+    "style_preferences": {
       "type": "array",
-      "minItems": 4,
-      "maxItems": 10,
-      "items": { "type": "integer", "minimum": 1, "maximum": 12 },
-      "description": "各巻のチャプター数配列。volumes と同長で各要素 1〜12。未定なら省略可。配列長とvolumesの一致は実行時契約でも検証される。"
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "user_notes": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_type": {
+            "const": "keywords"
+          }
+        },
+        "required": [
+          "source_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "source_reference"
+        ]
+      }
+    }
+  ]
 }
