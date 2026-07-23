@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Scene Card Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pov_character_id",
+    "participant_ids",
+    "location_id",
+    "story_time",
+    "purpose",
+    "opening_state",
+    "required_beats",
+    "conflict",
+    "allowed_revelations",
+    "required_revelations",
+    "forbidden_revelations",
+    "allowed_updates",
+    "ending_state_targets",
+    "style_constraints"
+  ],
+  "properties": {
+    "pov_character_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "participant_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "location_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "story_time": {
+      "type": "string",
+      "minLength": 1
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "opening_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required_beats": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "beat_id",
+          "description",
+          "required",
+          "order_hint"
+        ],
+        "properties": {
+          "beat_id": {
+            "type": "string",
+            "pattern": "^beat-[0-9]{2,}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "order_hint": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "conflict": {
+      "type": "string",
+      "minLength": 1
+    },
+    "allowed_revelations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required_revelations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "forbidden_revelations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "allowed_updates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "target_type",
+          "target_id",
+          "allowed_fields"
+        ],
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "character_state",
+              "relationship_state",
+              "thread_state",
+              "timeline_state",
+              "inventory_state",
+              "commitment_state"
+            ]
+          },
+          "target_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "allowed_fields": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "ending_state_targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "style_constraints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

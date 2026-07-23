@@ -1,0 +1,34 @@
+# V1 Scene Card Candidateの修正
+
+批評issuesに従い、Scene Card Candidate全体を完全な置換objectとして返す。
+
+## 修正方針
+
+- 指摘されていない正しいID、事実、順序、制約を保持する
+- Scene Planとcurrent Generationを再確認する
+- POV、参加人物、場所をScene Planへ一致させる
+- opening_stateをcurrent Generationへ一致させる
+- required_beatsを具体化しつつ、完成本文へ固定しすぎない
+- required_revelationsをallowed_revelationsの部分集合にする
+- forbidden_revelationsとの重複を除く
+- allowed_updatesを最小限の対象とfieldへ縮小する
+- ending_state_targetsを予定として記述する
+- 非POV人物の秘密や入力にない固有事実を追加・温存しない
+- 差分や説明ではなく、完全なScene Card Candidateだけを返す
+- 採用metadataは出力しない
+
+## 元候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

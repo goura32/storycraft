@@ -38,6 +38,7 @@ class ReviewedCandidateSpec:
     artifact_type: str
     review_category: str
     next_stage: str
+    model_stage: str | None = None
 
 
 class ReviewedCandidateStageRunner:
@@ -88,6 +89,7 @@ class ReviewedCandidateStageRunner:
             )
 
         timestamp = updated_at or utc_now()
+        model_stage = self.spec.model_stage or self.spec.stage
         config = read_json(
             self.workspace_root / "runtime/config.json"
         )
@@ -102,7 +104,7 @@ class ReviewedCandidateStageRunner:
 
         try:
             candidate = model.generate(
-                self.spec.stage,
+                model_stage,
                 deepcopy(context),
             )
             validator(candidate)
@@ -141,7 +143,7 @@ class ReviewedCandidateStageRunner:
 
             try:
                 critique = model.critique(
-                    self.spec.stage,
+                    model_stage,
                     candidate,
                     deepcopy(context),
                 )
@@ -294,7 +296,7 @@ class ReviewedCandidateStageRunner:
 
             try:
                 revised = model.revision(
-                    self.spec.stage,
+                    model_stage,
                     candidate,
                     critique,
                     deepcopy(context),

@@ -1,0 +1,27 @@
+# V1 Scene Card Candidateの生成
+
+対象のScene Planを、本文生成へ直接渡せる詳細なScene Cardへ具体化する。
+
+## 必須方針
+
+- Scene Planの目的、POV、参加人物、場所、予定beat、予定開示、予定変化、禁止開示を保持する
+- `pov_character_id` は `participant_ids` に含める
+- `opening_state` はcurrent Generationの現在状態と一致させる
+- `required_beats` は本文で確認可能な意味的出来事として具体化する
+- beatを完成台詞や完成本文へ固定しすぎない
+- `required_revelations` は `allowed_revelations` の部分集合にする
+- `forbidden_revelations` と許可・必須開示を重複させない
+- 開示IDは入力に存在するKnowledge IDまたはThread IDだけを使う
+- `allowed_updates` は、このScene本文から実際に生じ得る最小限の変更範囲だけにする
+- `ending_state_targets` は予定であり、確定済みCanonやStateとして扱わない
+- POV人物が知覚・推測できない非公開情報を、Scene Cardへ無条件に複製しない
+- 入力にない人物、場所、Knowledge、Thread、事実、制度、証拠を新設しない
+- 採用metadataである `schema_version`、`scene_id`、`version`、`basis_generation_id`、`scene_plan_id`、`created_at` は出力しない
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

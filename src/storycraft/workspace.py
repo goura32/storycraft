@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 from typing import Any
@@ -276,6 +277,7 @@ def validate_workspace_layout(
     _validate_volume_plan_artifacts(root)
     _validate_chapter_plan_artifacts(root)
     _validate_scene_plan_artifacts(root)
+    _validate_scene_card_staging_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -1545,6 +1547,119 @@ def _validate_identifier(
     ):
         raise ContractError(
             f"{field}が安全な{prefix}識別子ではありません"
+        )
+
+
+def _validate_scene_card_staging_artifacts(
+    root: Path,
+) -> None:
+    """存在するactive Scene Card stagingを検証する。"""
+    staging_root = root / "runtime/staging"
+    for entry in sorted(staging_root.iterdir()):
+        if not entry.name.startswith("scene-scene-"):
+            continue
+        if not entry.is_dir():
+            raise ContractError(
+                "Scene staging entryはdirectoryが必要です"
+            )
+
+        match = re.fullmatch(
+            r"scene-(scene-v(\d{2})-c(\d{3})-s(\d{3}))",
+            entry.name,
+        )
+        if match is None:
+            raise ContractError(
+                "Scene staging directory名が不正です"
+            )
+        scene_id = match.group(1)
+        volume_number = int(match.group(2))
+        chapter_number = int(match.group(3))
+        scene_number = int(match.group(4))
+
+        card_path = entry / "scene-card.json"
+        if not card_path.is_file():
+            raise ContractError(
+                "Scene stagingにscene-card.jsonがありません"
+            )
+        card = _read_json(card_path)
+        if card.get("scene_id") != scene_id:
+            raise ContractError(
+                "Scene stagingとScene Cardのscene_idが"
+                "一致しません"
+            )
+
+        brief = _read_json(root / "input/brief.json")
+        initial_design = _read_json(
+            root / "design/initial/v0001/initial-design.json"
+        )
+        series_plan = _read_json(
+            root
+            / "design/series-plans"
+            / "series-plan-v0001"
+            / "series-plan.json"
+        )
+        volume_plan = _read_json(
+            root
+            / "design/volume-plans"
+            / f"v{volume_number:02d}-v0001"
+            / "volume-plan.json"
+        )
+        chapter_plan = _read_json(
+            root
+            / "design/chapter-plans"
+            / (
+                f"v{volume_number:02d}"
+                f"-c{chapter_number:03d}-v0001"
+            )
+            / "chapter-plan.json"
+        )
+        scene_plan = _read_json(
+            root
+            / "design/scene-plans"
+            / (
+                f"v{volume_number:02d}"
+                f"-c{chapter_number:03d}"
+                f"-s{scene_number:03d}-v0001"
+            )
+            / "scene-plan.json"
+        )
+
+        basis_generation_id = card.get(
+            "basis_generation_id"
+        )
+        if not isinstance(basis_generation_id, str):
+            raise ContractError(
+                "Scene Cardのbasis_generation_idが不正です"
+            )
+        generation_root = (
+            root / "generations" / basis_generation_id
+        )
+        current_generation = {
+            name: _read_json(generation_root / name)
+            for name in (
+                "canon.json",
+                "state.json",
+                "evidence.json",
+                "commit.json",
+            )
+        }
+
+        from .series_contracts import ContractValidator
+
+        ContractValidator._validate_scene_card_v1(
+            card,
+            brief,
+            initial_design,
+            series_plan,
+            volume_plan,
+            chapter_plan,
+            scene_plan,
+            current_generation,
+            volume_number,
+            chapter_number,
+            scene_number,
+            basis_generation_id,
+            adopted=True,
         )
 
 
