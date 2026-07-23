@@ -1,0 +1,44 @@
+# initial_characters の生成
+
+## 実行指示
+
+採用済みBriefとStory Conceptを根拠として、シリーズで継続追跡する主要人物を設計する。
+
+この工程では人物の固定情報、公開情報、作者用秘密情報、欲求、恐れ、
+誤った信念、強み、弱み、長期Arc、物語開始時の状態だけを作る。
+
+人物間の関係そのもの、舞台やLocation、World Rule、Knowledge、Thread、
+巻別構成、Scene内容、永続IDは作らない。
+
+## 必須条件
+
+- 少なくとも一人の `protagonist` を含める
+- 人物数は物語上必要な範囲に限定し、12人を超えない
+- 各人物の欲求と恐れを明確にする
+- `long_term_arc` をStory Conceptのcentral_questionとthemesへ結び付ける
+- 役割が重複する場合は、それぞれの構造的必要性を人物内容で区別する
+- `public_profile` に作者だけが知る秘密を混ぜない
+- `private_profile` に公開プロフィールの単なる重複を書かない
+- Briefのavoidへ違反する人物設定を導入しない
+- 入力に根拠のない固有名詞、診断名、制度、場所、事件の詳細を作らない
+- `character_id` や他の永続IDを出力しない
+- 自然な日本語だけで書く
+
+## initial_state
+
+このStageではWorldとLocationがまだ確定していないため、
+Location IDやWorld IDを使わない。
+
+- `emotion`: 本人の開始時感情
+- `situation`: 開始時に置かれている客観的状況
+- `recent_goal`: 本人が直近で意識している具体的目的
+
+他者の内面、未来の行為、Scene予定は書かない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

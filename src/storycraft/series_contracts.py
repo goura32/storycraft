@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -136,6 +137,118 @@ class ContractValidator:
         if violated:
             raise ContractError(
                 "Initial ConceptがBriefのavoidを含みます: "
+                + ", ".join(violated)
+            )
+
+    @staticmethod
+    def _validate_initial_characters(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Initial Characters Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial CharactersはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_brief(brief)
+        ContractValidator._validate_initial_concept(
+            concept,
+            brief,
+        )
+
+        candidate = deepcopy(value)
+        records = candidate.get("characters")
+        if not isinstance(records, list):
+            raise ContractError(
+                "Initial Characters.charactersは配列でなければなりません"
+            )
+
+        identifiers: list[str] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise ContractError(
+                    "Character recordはobjectでなければなりません"
+                )
+
+            if adopted:
+                identifier = record.get("character_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("char-")
+                ):
+                    raise ContractError(
+                        "採用済みCharacterにはcharacter_idが必要です"
+                    )
+                identifiers.append(identifier)
+                record.pop("character_id")
+            elif "character_id" in record:
+                raise ContractError(
+                    "Character Candidateへcharacter_idを含められません"
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_characters",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Characters契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if adopted and len(identifiers) != len(set(identifiers)):
+            raise ContractError(
+                "採用済みCharacterのcharacter_idが重複しています"
+            )
+
+        names = [
+            record["name"]
+            for record in candidate["characters"]
+        ]
+        if len(names) != len(set(names)):
+            raise ContractError(
+                "Characterのnameが重複しています"
+            )
+
+        protagonist_count = sum(
+            record["role"] == "protagonist"
+            for record in candidate["characters"]
+        )
+        if protagonist_count < 1:
+            raise ContractError(
+                "Initial Charactersにはprotagonistが必要です"
+            )
+
+        serialized = json.dumps(
+            candidate,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        violated = [
+            item
+            for item in brief["avoid"]
+            if item and item in serialized
+        ]
+        if violated:
+            raise ContractError(
+                "Initial CharactersがBriefのavoidを含みます: "
                 + ", ".join(violated)
             )
 
