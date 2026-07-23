@@ -1,0 +1,51 @@
+# initial_relationships の批評
+
+候補を採用済みStory Concept、Characters、出力スキーマに照らし、
+修正可能で候補内に根拠のある問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. **参加人物**
+   - participant_idsが入力Charactersにすべて存在する
+   - 同一人物を重複参加させていない
+2. **物語を動かす関係**
+   - dramatic_engineまたはcentral_questionへ寄与する
+3. **長期変化**
+   - desired_arcが各人物のlong_term_arcと整合する
+4. **公開／秘密の分離**
+   - public_descriptionへprivate truthが混入していない
+   - private_truthを公開情報として扱っていない
+5. **重複**
+   - 同じ参加人物とrelationship_typeの関係が重複していない
+   - 関係数が過剰でない
+6. **開始状態**
+   - status、trust、affection、hostilityが開始時点を表す
+   - 数値が説明内容と明白に矛盾していない
+7. **工程の所有範囲**
+   - World、Knowledge、Thread、巻別構成を確定していない
+   - relationship_idや未知の永続IDを出力していない
+8. **入力保持と日本語品質**
+   - 入力にない固有事実を追加していない
+   - 不自然な翻訳調、助詞欠落、意味不明な造語がない
+
+`issues: []` を返す前に候補の全string fieldを一つずつ確認する。
+
+各issueは次を満たすこと。
+
+- `field` は候補内に実在するJSON path
+- `description` は候補に実在する文字列を引用して具体的に説明する
+- `suggestion` は削除、入力事実での書き直し、日本語修正などの操作だけを示す
+- 候補にない事実や表現を新設しない
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

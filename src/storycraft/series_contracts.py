@@ -253,6 +253,127 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_relationships(
+        value: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Relationship Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial RelationshipsはJSON objectでなければなりません"
+            )
+
+        character_records = characters.get("characters")
+        if not isinstance(character_records, list):
+            raise ContractError(
+                "採用済みCharactersが不正です"
+            )
+
+        character_ids = {
+            record.get("character_id")
+            for record in character_records
+            if isinstance(record, dict)
+        }
+        if (
+            not character_ids
+            or None in character_ids
+            or len(character_ids) != len(character_records)
+        ):
+            raise ContractError(
+                "採用済みCharactersのIDが不正です"
+            )
+
+        if not isinstance(concept, dict):
+            raise ContractError(
+                "採用済みConceptが不正です"
+            )
+        ContractValidator._validate_initial_concept(concept)
+
+        candidate = deepcopy(value)
+        records = candidate.get("relationships")
+        if not isinstance(records, list):
+            raise ContractError(
+                "Initial Relationships.relationshipsは"
+                "配列でなければなりません"
+            )
+
+        identifiers: list[str] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise ContractError(
+                    "Relationship recordはobjectでなければなりません"
+                )
+
+            if adopted:
+                identifier = record.get("relationship_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("rel-")
+                ):
+                    raise ContractError(
+                        "採用済みRelationshipには"
+                        "relationship_idが必要です"
+                    )
+                identifiers.append(identifier)
+                record.pop("relationship_id")
+            elif "relationship_id" in record:
+                raise ContractError(
+                    "Relationship Candidateへ"
+                    "relationship_idを含められません"
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_relationships",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Relationships契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if adopted and len(identifiers) != len(set(identifiers)):
+            raise ContractError(
+                "採用済みRelationshipのIDが重複しています"
+            )
+
+        seen: set[tuple[tuple[str, ...], str]] = set()
+        for record in candidate["relationships"]:
+            participants = record["participant_ids"]
+            unknown = set(participants) - character_ids
+            if unknown:
+                raise ContractError(
+                    "Relationshipが未知のCharacterを参照しています: "
+                    + ", ".join(sorted(unknown))
+                )
+
+            key = (
+                tuple(sorted(participants)),
+                record["relationship_type"],
+            )
+            if key in seen:
+                raise ContractError(
+                    "同じ参加人物と種別のRelationshipが重複しています"
+                )
+            seen.add(key)
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:

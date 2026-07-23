@@ -1,0 +1,34 @@
+# initial_relationships の修正
+
+採用済み批評issuesに従って候補を修正する。
+
+**issuesで引用されたfieldだけを変更し、issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- suggestionを新しい物語事実として採用しない
+- 入力Charactersにないparticipant IDを追加しない
+- participant_ids、relationship_type、配列順を理由なく変更しない
+- public_descriptionとprivate_truthを混同しない
+- desired_arcを人物のlong_term_arcと整合させる
+- World、Knowledge、Thread、巻別構成を追加しない
+- relationship_idや他の永続IDを追加しない
+- 指摘されていない関係や正しい内容を変更しない
+- 自然な日本語へ修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

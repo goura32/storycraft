@@ -57,6 +57,7 @@ LEGACY_TEMPLATE_STAGES = (
 V1_TEMPLATE_STAGES = (
     Stage.INITIAL_CONCEPT.value,
     Stage.INITIAL_CHARACTERS.value,
+    Stage.INITIAL_RELATIONSHIPS.value,
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。

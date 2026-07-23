@@ -1,0 +1,44 @@
+# initial_relationships の生成
+
+## 実行指示
+
+採用済みStory ConceptとCharactersを根拠として、
+シリーズで継続追跡する主要な人物関係を設計する。
+
+この工程では、参加人物、関係種別、公開説明、作者用の秘密、
+開始状態、長期変化、維持すべき制約だけを作る。
+
+World、Location、Knowledge、Thread、巻別構成、Scene内容、
+永続Relationship IDは作らない。
+
+## 必須条件
+
+- `participant_ids` は入力Charactersの `character_id` と完全一致させる
+- 一つの関係には異なる人物を二人以上含める
+- 関係がStory Conceptのdramatic_engineまたはcentral_questionを動かす
+- `desired_arc` は参加人物のlong_term_arcと矛盾しない
+- `public_description` へ作者用秘密を混ぜない
+- `private_truth` を公開済み事実として書かない
+- 同じ参加人物とrelationship_typeの関係を重複させない
+- 人物ごとの内面を、他の参加人物も共有する事実として扱わない
+- 入力に根拠のない出会い、事件、制度、場所を新設しない
+- `relationship_id` や他の永続IDを出力しない
+- 自然な日本語だけで書く
+
+## initial_state
+
+- `status`: 開始時点の関係状態を簡潔に示す
+- `trust`: 相互信頼の程度を0〜10で示す
+- `affection`: 相互的な親愛の程度を0〜10で示す
+- `hostility`: 相互的な敵意の程度を0〜10で示す
+
+数値だけでは表せない非対称性は、
+public_descriptionまたはprivate_truthへ根拠の範囲で書く。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
