@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Initial World Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "world",
+    "locations",
+    "world_rules"
+  ],
+  "properties": {
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "setting_summary",
+        "historical_background",
+        "social_structure",
+        "technology_or_magic",
+        "cultural_norms",
+        "major_conflicts",
+        "public_knowledge",
+        "private_truths"
+      ],
+      "properties": {
+        "setting_summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "historical_background": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1600
+        },
+        "social_structure": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1600
+        },
+        "technology_or_magic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1600
+        },
+        "cultural_norms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        },
+        "major_conflicts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "public_knowledge": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "private_truths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "parent_location_index",
+          "description",
+          "access_constraints",
+          "public_facts",
+          "private_facts"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "parent_location_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "access_constraints": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            }
+          },
+          "public_facts": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "private_facts": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          }
+        }
+      }
+    },
+    "world_rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "scope",
+          "exceptions",
+          "reader_visibility",
+          "change_policy"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "series",
+              "world",
+              "society",
+              "location"
+            ]
+          },
+          "exceptions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "reader_visibility": {
+            "type": "string",
+            "enum": [
+              "reader_visible",
+              "hidden"
+            ]
+          },
+          "change_policy": {
+            "type": "string",
+            "enum": [
+              "immutable",
+              "explicit_exception_only"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

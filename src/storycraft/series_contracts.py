@@ -374,6 +374,244 @@ class ContractValidator:
             seen.add(key)
 
     @staticmethod
+    def _validate_initial_world_prerequisites(
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+    ) -> None:
+        """Initial Worldの採用済み入力を検証する。"""
+        ContractValidator._validate_brief(brief)
+        ContractValidator._validate_initial_concept(
+            concept,
+            brief,
+        )
+        ContractValidator._validate_initial_characters(
+            characters,
+            brief,
+            concept,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_relationships(
+            relationships,
+            concept,
+            characters,
+            adopted=True,
+        )
+
+    @staticmethod
+    def _validate_initial_world(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 World Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial WorldはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_initial_world_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+        )
+
+        candidate = deepcopy(value)
+        locations = candidate.get("locations")
+        rules = candidate.get("world_rules")
+        if not isinstance(locations, list):
+            raise ContractError(
+                "Initial World.locationsは配列でなければなりません"
+            )
+        if not isinstance(rules, list):
+            raise ContractError(
+                "Initial World.world_rulesは配列でなければなりません"
+            )
+
+        location_ids: list[str] = []
+        rule_ids: list[str] = []
+
+        if adopted:
+            id_to_index: dict[str, int] = {}
+            for index, location in enumerate(locations):
+                if not isinstance(location, dict):
+                    raise ContractError(
+                        "Location recordはobjectでなければなりません"
+                    )
+                if "parent_location_index" in location:
+                    raise ContractError(
+                        "採用済みLocationへ"
+                        "parent_location_indexを含められません"
+                    )
+                if "parent_location_id" not in location:
+                    raise ContractError(
+                        "採用済みLocationには"
+                        "parent_location_idが必要です"
+                    )
+                identifier = location.get("location_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("loc-")
+                ):
+                    raise ContractError(
+                        "採用済みLocationにはlocation_idが必要です"
+                    )
+                location_ids.append(identifier)
+                id_to_index[identifier] = index
+
+            if len(id_to_index) != len(locations):
+                raise ContractError(
+                    "採用済みLocationのIDが重複しています"
+                )
+
+            for location in locations:
+                parent_id = location.pop(
+                    "parent_location_id",
+                    None,
+                )
+                location.pop("location_id")
+                if parent_id is None:
+                    location["parent_location_index"] = None
+                elif parent_id in id_to_index:
+                    location["parent_location_index"] = (
+                        id_to_index[parent_id]
+                    )
+                else:
+                    raise ContractError(
+                        "Locationが未知の親Locationを参照しています"
+                    )
+
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    raise ContractError(
+                        "World Rule recordはobjectでなければなりません"
+                    )
+                identifier = rule.get("rule_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("rule-")
+                ):
+                    raise ContractError(
+                        "採用済みWorld Ruleにはrule_idが必要です"
+                    )
+                rule_ids.append(identifier)
+                rule.pop("rule_id")
+        else:
+            for location in locations:
+                if not isinstance(location, dict):
+                    raise ContractError(
+                        "Location recordはobjectでなければなりません"
+                    )
+                if (
+                    "location_id" in location
+                    or "parent_location_id" in location
+                ):
+                    raise ContractError(
+                        "World CandidateへLocation IDを含められません"
+                    )
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    raise ContractError(
+                        "World Rule recordはobjectでなければなりません"
+                    )
+                if "rule_id" in rule:
+                    raise ContractError(
+                        "World Candidateへrule_idを含められません"
+                    )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_world",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial World契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if len(rule_ids) != len(set(rule_ids)):
+            raise ContractError(
+                "採用済みWorld RuleのIDが重複しています"
+            )
+
+        location_names = [
+            location["name"]
+            for location in candidate["locations"]
+        ]
+        if len(location_names) != len(set(location_names)):
+            raise ContractError(
+                "Locationのnameが重複しています"
+            )
+
+        rule_names = [
+            rule["name"]
+            for rule in candidate["world_rules"]
+        ]
+        if len(rule_names) != len(set(rule_names)):
+            raise ContractError(
+                "World Ruleのnameが重複しています"
+            )
+
+        roots = 0
+        for index, location in enumerate(
+            candidate["locations"]
+        ):
+            parent_index = location["parent_location_index"]
+            if parent_index is None:
+                roots += 1
+                continue
+            if (
+                isinstance(parent_index, bool)
+                or not isinstance(parent_index, int)
+                or parent_index < 0
+                or parent_index >= index
+            ):
+                raise ContractError(
+                    "parent_location_indexは"
+                    "先行する親Locationを参照しなければなりません"
+                )
+
+        if roots < 1:
+            raise ContractError(
+                "Location階層には最上位Locationが必要です"
+            )
+
+        serialized = json.dumps(
+            candidate,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        violated = [
+            item
+            for item in brief["avoid"]
+            if item and item in serialized
+        ]
+        if violated:
+            raise ContractError(
+                "Initial WorldがBriefのavoidを含みます: "
+                + ", ".join(violated)
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:
