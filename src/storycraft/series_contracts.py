@@ -1027,6 +1027,314 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_ending_prerequisites(
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        threads: dict[str, Any],
+    ) -> None:
+        """Initial Endingの採用済み入力を検証する。"""
+        ContractValidator._validate_brief(brief)
+        ContractValidator._validate_initial_concept(
+            concept,
+            brief,
+        )
+        ContractValidator._validate_initial_characters(
+            characters,
+            brief,
+            concept,
+            adopted=True,
+        )
+        ContractValidator._validate_initial_relationships(
+            relationships,
+            concept,
+            characters,
+            adopted=True,
+        )
+
+        version_root_placeholder_world = {
+            "world": {
+                "setting_summary": "Ending前提検証用の世界。",
+                "historical_background": "Ending前提検証用の歴史。",
+                "social_structure": "Ending前提検証用の社会。",
+                "technology_or_magic": "Ending前提検証用の技術。",
+                "cultural_norms": [
+                    "Ending前提検証用の文化。",
+                ],
+                "major_conflicts": [
+                    "Ending前提検証用の対立。",
+                ],
+                "public_knowledge": [],
+                "private_truths": [],
+            },
+            "locations": [{
+                "location_id": "loc-ending-validation",
+                "name": "Ending前提検証用",
+                "parent_location_id": None,
+                "description": "Ending前提検証用の場所。",
+                "access_constraints": [],
+                "public_facts": [],
+                "private_facts": [],
+            }],
+            "world_rules": [{
+                "rule_id": "rule-ending-validation",
+                "name": "Ending前提検証用",
+                "description": "Ending前提検証用の規則。",
+                "scope": "series",
+                "exceptions": [],
+                "reader_visibility": "hidden",
+                "change_policy": "immutable",
+            }],
+        }
+        version_root_placeholder_knowledge = {
+            "knowledge_facts": [{
+                "knowledge_id": "know-ending-validation",
+                "statement": "Ending前提検証用",
+                "truth_status": "true",
+                "reader_visibility": "hidden",
+                "source_type": "validation",
+                "private_notes": None,
+            }],
+            "character_knowledge": [
+                {
+                    "character_id": character["character_id"],
+                    "knowledge_id": "know-ending-validation",
+                    "state": "unknown",
+                }
+                for character in characters["characters"]
+            ],
+        }
+        ContractValidator._validate_initial_threads(
+            threads,
+            brief,
+            concept,
+            characters,
+            relationships,
+            version_root_placeholder_world,
+            version_root_placeholder_knowledge,
+            adopted=True,
+        )
+
+    @staticmethod
+    def _validate_initial_ending(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+        concept: dict[str, Any],
+        characters: dict[str, Any],
+        relationships: dict[str, Any],
+        threads: dict[str, Any],
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Ending Candidateまたは採用版を検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial EndingはJSON objectでなければなりません"
+            )
+
+        ContractValidator._validate_initial_ending_prerequisites(
+            brief,
+            concept,
+            characters,
+            relationships,
+            threads,
+        )
+
+        candidate = deepcopy(value)
+        ending = candidate.get("ending")
+        arcs = candidate.get("long_term_arcs")
+
+        if not isinstance(ending, dict):
+            raise ContractError(
+                "Initial Ending.endingはobjectが必要です"
+            )
+        if not isinstance(arcs, list):
+            raise ContractError(
+                "Initial Ending.long_term_arcsは配列が必要です"
+            )
+
+        ending_identifier: str | None = None
+        arc_identifiers: list[str] = []
+
+        if adopted:
+            ending_identifier = ending.get("ending_id")
+            if (
+                not isinstance(ending_identifier, str)
+                or not ending_identifier.startswith("ending-")
+            ):
+                raise ContractError(
+                    "採用済みEndingにはending_idが必要です"
+                )
+            ending.pop("ending_id")
+        elif "ending_id" in ending:
+            raise ContractError(
+                "Ending Candidateへending_idを含められません"
+            )
+
+        for arc in arcs:
+            if not isinstance(arc, dict):
+                raise ContractError(
+                    "Long-term Arc recordはobjectが必要です"
+                )
+            if adopted:
+                identifier = arc.get("arc_id")
+                if (
+                    not isinstance(identifier, str)
+                    or not identifier.startswith("arc-")
+                ):
+                    raise ContractError(
+                        "採用済みLong-term Arcには"
+                        "arc_idが必要です"
+                    )
+                arc_identifiers.append(identifier)
+                arc.pop("arc_id")
+            elif "arc_id" in arc:
+                raise ContractError(
+                    "Long-term Arc Candidateへ"
+                    "arc_idを含められません"
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_ending",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Initial Ending契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        if adopted and len(arc_identifiers) != len(
+            set(arc_identifiers)
+        ):
+            raise ContractError(
+                "採用済みLong-term ArcのIDが重複しています"
+            )
+
+        character_ids = {
+            record["character_id"]
+            for record in characters["characters"]
+        }
+        principal_character_ids = {
+            record["character_id"]
+            for record in characters["characters"]
+            if record["role"] in {
+                "protagonist",
+                "co_protagonist",
+            }
+        }
+        relationship_ids = {
+            record["relationship_id"]
+            for record in relationships["relationships"]
+        }
+        thread_ids = {
+            record["thread_id"]
+            for record in threads["threads"]
+        }
+        required_thread_ids = {
+            record["thread_id"]
+            for record in threads["threads"]
+            if record["required_for_completion"]
+        }
+
+        ending_character_ids = set(
+            ending["character_end_states"]
+        )
+        unknown_characters = (
+            ending_character_ids - character_ids
+        )
+        if unknown_characters:
+            raise ContractError(
+                "character_end_statesが未知の"
+                "Characterを参照しています"
+            )
+        missing_principals = (
+            principal_character_ids - ending_character_ids
+        )
+        if missing_principals:
+            raise ContractError(
+                "主人公のcharacter_end_statesが不足しています"
+            )
+
+        ending_relationship_ids = set(
+            ending["relationship_end_states"]
+        )
+        if ending_relationship_ids - relationship_ids:
+            raise ContractError(
+                "relationship_end_statesが未知の"
+                "Relationshipを参照しています"
+            )
+
+        requirement_ids = set(
+            ending["thread_requirements"]
+        )
+        if requirement_ids - thread_ids:
+            raise ContractError(
+                "thread_requirementsが未知の"
+                "Threadを参照しています"
+            )
+        if requirement_ids != required_thread_ids:
+            raise ContractError(
+                "thread_requirementsは完結必須Threadを"
+                "漏れなく一度ずつ含める必要があります"
+            )
+
+        arc_targets: set[tuple[str, str]] = set()
+        for arc in arcs:
+            target_type = arc["target_type"]
+            target_id = arc["target_id"]
+            target = (target_type, target_id)
+
+            if target in arc_targets:
+                raise ContractError(
+                    "同じ対象のLong-term Arcが重複しています"
+                )
+            arc_targets.add(target)
+
+            valid_ids = {
+                "character": character_ids,
+                "relationship": relationship_ids,
+                "thread": thread_ids,
+            }[target_type]
+            if target_id not in valid_ids:
+                raise ContractError(
+                    "Long-term Arcが未知の対象を"
+                    "参照しています"
+                )
+
+        missing_character_arcs = {
+            ("character", identifier)
+            for identifier in principal_character_ids
+        } - arc_targets
+        if missing_character_arcs:
+            raise ContractError(
+                "主人公のLong-term Arcが不足しています"
+            )
+
+        missing_thread_arcs = {
+            ("thread", identifier)
+            for identifier in required_thread_ids
+        } - arc_targets
+        if missing_thread_arcs:
+            raise ContractError(
+                "完結必須ThreadのLong-term Arcが不足しています"
+            )
+
+    @staticmethod
     def _validate_chapter_count_length(brief: dict[str, Any], volume_count: int) -> None:
         counts = brief.get("chapters_per_volume")
         if counts is not None and len(counts) != volume_count:
