@@ -275,6 +275,7 @@ def validate_workspace_layout(
     _validate_series_plan_artifacts(root)
     _validate_volume_plan_artifacts(root)
     _validate_chapter_plan_artifacts(root)
+    _validate_scene_plan_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -1300,6 +1301,220 @@ def _validate_chapter_plan_artifacts(
             raise ContractError(
                 "採用済みChapter Plan全体の"
                 "required_revelationsがVolume Planの"
+                "開示予定を超えています"
+            )
+
+
+
+def _validate_scene_plan_artifacts(
+    root: Path,
+) -> None:
+    """存在する採用済みScene Planを検証する。"""
+    plans_root = root / "design/scene-plans"
+    entries = sorted(plans_root.iterdir())
+    if not entries:
+        return
+
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "採用済みScene Planには"
+            "採用済みInitial Designが必要です"
+        )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "採用済みScene Planには"
+            "採用済みSeries Planが必要です"
+        )
+
+    brief = _read_json(root / "input/brief.json")
+    initial_design = _read_json(initial_design_path)
+    series_plan = _read_json(series_plan_path)
+
+    seen_targets: set[tuple[int, int, int]] = set()
+    scene_numbers_by_chapter: dict[
+        tuple[int, int],
+        set[int],
+    ] = {}
+    revelation_usage: dict[tuple[int, int], int] = {}
+    revelation_limits: dict[tuple[int, int], int] = {}
+
+    for directory in entries:
+        if not directory.is_dir():
+            raise ContractError(
+                "Scene Plan version pathは"
+                "directoryが必要です"
+            )
+
+        plan_path = directory / "scene-plan.json"
+        if not plan_path.is_file():
+            raise ContractError(
+                "Scene Plan version directoryに"
+                "scene-plan.jsonがありません"
+            )
+
+        plan = _read_json(plan_path)
+        volume_number = plan.get("volume_number")
+        chapter_number = plan.get("chapter_number")
+        scene_number = plan.get("scene_number")
+        for number, label in (
+            (volume_number, "volume_number"),
+            (chapter_number, "chapter_number"),
+            (scene_number, "scene_number"),
+        ):
+            if (
+                not isinstance(number, int)
+                or isinstance(number, bool)
+                or number < 1
+            ):
+                raise ContractError(
+                    f"Scene Planの{label}が不正です"
+                )
+
+        expected_directory = (
+            f"v{volume_number:02d}"
+            f"-c{chapter_number:03d}"
+            f"-s{scene_number:03d}-v0001"
+        )
+        if directory.name != expected_directory:
+            raise ContractError(
+                "Scene Plan directory名が対象Sceneと"
+                "一致しません"
+            )
+
+        target = (
+            volume_number,
+            chapter_number,
+            scene_number,
+        )
+        if target in seen_targets:
+            raise ContractError(
+                "同じSceneの採用済みPlanが複数あります"
+            )
+        seen_targets.add(target)
+
+        chapter_key = (
+            volume_number,
+            chapter_number,
+        )
+        scene_numbers_by_chapter.setdefault(
+            chapter_key,
+            set(),
+        ).add(scene_number)
+
+        volume_plan_path = (
+            root
+            / "design/volume-plans"
+            / f"v{volume_number:02d}-v0001"
+            / "volume-plan.json"
+        )
+        chapter_plan_path = (
+            root
+            / "design/chapter-plans"
+            / (
+                f"v{volume_number:02d}"
+                f"-c{chapter_number:03d}-v0001"
+            )
+            / "chapter-plan.json"
+        )
+        if not volume_plan_path.is_file():
+            raise ContractError(
+                "採用済みScene Planには"
+                "親Volume Planが必要です"
+            )
+        if not chapter_plan_path.is_file():
+            raise ContractError(
+                "採用済みScene Planには"
+                "親Chapter Planが必要です"
+            )
+
+        volume_plan = _read_json(volume_plan_path)
+        chapter_plan = _read_json(chapter_plan_path)
+
+        basis_generation_id = plan.get(
+            "basis_generation_id"
+        )
+        if not isinstance(basis_generation_id, str):
+            raise ContractError(
+                "Scene Planのbasis_generation_idが不正です"
+            )
+
+        generation_root = (
+            root / "generations" / basis_generation_id
+        )
+        if not generation_root.is_dir():
+            raise ContractError(
+                "Scene Planのbasis Generationが存在しません"
+            )
+
+        current_generation = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            generation_path = generation_root / name
+            if not generation_path.is_file():
+                raise ContractError(
+                    "Scene Planのbasis Generationが"
+                    f"不完全です: {name}"
+                )
+            current_generation[name] = _read_json(
+                generation_path
+            )
+
+        from .series_contracts import ContractValidator
+
+        ContractValidator._validate_scene_plan(
+            plan,
+            brief,
+            initial_design,
+            series_plan,
+            volume_plan,
+            chapter_plan,
+            current_generation,
+            volume_number,
+            chapter_number,
+            scene_number,
+            basis_generation_id,
+            adopted=True,
+        )
+
+        revelation_limits[chapter_key] = len(
+            chapter_plan["required_revelations"]
+        )
+        revelation_usage[chapter_key] = (
+            revelation_usage.get(chapter_key, 0)
+            + len(plan["intended_revelations"])
+        )
+
+    for chapter_key, scene_numbers in (
+        scene_numbers_by_chapter.items()
+    ):
+        expected = set(
+            range(1, max(scene_numbers) + 1)
+        )
+        if scene_numbers != expected:
+            raise ContractError(
+                "採用済みScene Planは第一Sceneから"
+                "連続して存在しなければなりません"
+            )
+        if (
+            revelation_usage.get(chapter_key, 0)
+            > revelation_limits[chapter_key]
+        ):
+            raise ContractError(
+                "採用済みScene Plan全体の"
+                "intended_revelationsがChapter Planの"
                 "開示予定を超えています"
             )
 

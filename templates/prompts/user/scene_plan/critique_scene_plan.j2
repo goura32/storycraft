@@ -1,0 +1,40 @@
+# scene_plan の批評
+
+Scene Plan CandidateをChapter Plan、current Generation、
+採用済みInitial Designへ照合する。
+候補内で修正可能な問題だけをissuesへ出し、
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. 対象Volume、Chapter、Sceneが正しい
+2. purposeが対象Scene summaryを具体化している
+3. POV人物が参加人物に含まれている
+4. 人物とLocationのIDが採用済みデータに存在する
+5. 人物の現在State、所在、Knowledge、利用可能性と矛盾しない
+6. starting_conditionsがScene開始前の確定状態だけを表す
+7. intended_beatsが因果順で、Scene目的へ寄与する
+8. intended_revelationsがChapter Planの許容範囲内である
+9. intended_changesがChapter目的と終了変化へ寄与する
+10. prohibited_disclosuresが上位Planの秘匿を保持する
+11. 許可開示と禁止開示が重複していない
+12. 最終SceneならChapter終点へ収束する
+13. 最終Scene以外なら次Sceneへ接続する
+14. Scene Card相当の過剰な詳細へ踏み込んでいない
+15. 未入力の事実、ID、採用metadataを追加していない
+16. 不自然な日本語、意味の重複、直接矛盾がない
+
+各issueの `field` はCandidate内に実在するJSON pathを指定し、
+候補外の新事実をsuggestionとして追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

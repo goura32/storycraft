@@ -80,6 +80,7 @@ class StageModelV1Tests(unittest.TestCase):
                 "series_plan",
                 "volume_plan",
                 "chapter_plan",
+                "scene_plan",
             ),
         )
         self.assertEqual(
