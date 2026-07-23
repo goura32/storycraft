@@ -54,6 +54,46 @@ INITIAL_COUNTERS = {
 }
 
 
+def create_workspace(
+    workspace_root: Path,
+    *,
+    workspace_id: str,
+    config: dict[str, Any],
+    brief: dict[str, Any] | None = None,
+    keywords: dict[str, Any] | None = None,
+    created_at: str | None = None,
+) -> Path:
+    """BriefまたはKeywordsの正確に一方からworkspaceを作成する。"""
+    if brief is not None and keywords is not None:
+        raise ContractError(
+            "INPUT_MODE_CONFLICT: BriefとKeywordsを同時に指定できません"
+        )
+    if brief is None and keywords is None:
+        raise ContractError(
+            "INPUT_MODE_REQUIRED: BriefまたはKeywordsのどちらか一方が必要です"
+        )
+
+    if brief is not None:
+        return _create_workspace(
+            workspace_root,
+            workspace_id=workspace_id,
+            input_kind="brief",
+            input_payload=brief,
+            config=config,
+            created_at=created_at,
+        )
+
+    assert keywords is not None
+    return _create_workspace(
+        workspace_root,
+        workspace_id=workspace_id,
+        input_kind="keywords",
+        input_payload=keywords,
+        config=config,
+        created_at=created_at,
+    )
+
+
 def create_workspace_from_brief(
     workspace_root: Path,
     *,
@@ -62,7 +102,43 @@ def create_workspace_from_brief(
     config: dict[str, Any],
     created_at: str | None = None,
 ) -> Path:
-    """Brief入力からV1 workspaceを一時directory経由で作成する。"""
+    """Brief入力からV1 workspaceを作成する。"""
+    return create_workspace(
+        workspace_root,
+        workspace_id=workspace_id,
+        brief=brief,
+        config=config,
+        created_at=created_at,
+    )
+
+
+def create_workspace_from_keywords(
+    workspace_root: Path,
+    *,
+    workspace_id: str,
+    keywords: dict[str, Any],
+    config: dict[str, Any],
+    created_at: str | None = None,
+) -> Path:
+    """Keywords入力からV1 workspaceを作成する。"""
+    return create_workspace(
+        workspace_root,
+        workspace_id=workspace_id,
+        keywords=keywords,
+        config=config,
+        created_at=created_at,
+    )
+
+
+def _create_workspace(
+    workspace_root: Path,
+    *,
+    workspace_id: str,
+    input_kind: str,
+    input_payload: dict[str, Any],
+    config: dict[str, Any],
+    created_at: str | None,
+) -> Path:
     root = workspace_root.expanduser()
 
     if root.exists():
@@ -72,7 +148,15 @@ def create_workspace_from_brief(
 
     _validate_workspace_destination(root)
     _validate_identifier(workspace_id, "workspace_id", "ws-")
-    _validate_brief(brief)
+
+    if input_kind == "brief":
+        _validate_brief(input_payload)
+    elif input_kind == "keywords":
+        _validate_keywords(input_payload)
+    else:
+        raise ContractError(
+            f"未知のinput kindです: {input_kind!r}"
+        )
 
     timestamp = created_at or _utc_now()
     initial_config = _prepare_config(
@@ -112,15 +196,20 @@ def create_workspace_from_brief(
         )
     )
 
+    input_filename = f"{input_kind}.json"
+
     try:
         _create_directories(staging)
-        _write_json(staging / "input/brief.json", brief)
+        _write_json(
+            staging / "input" / input_filename,
+            input_payload,
+        )
         _write_json(
             staging / "input/source.json",
             {
                 "schema_version": 1,
-                "source_type": "brief",
-                "source_path": "input/brief.json",
+                "source_type": input_kind,
+                "source_path": f"input/{input_filename}",
                 "created_at": timestamp,
             },
         )
@@ -172,7 +261,6 @@ def validate_workspace_layout(
         "runtime/config.json",
         "runtime/counters.json",
         "runtime/lock",
-        "input/brief.json",
         "input/source.json",
     ):
         path = root / relative
@@ -180,6 +268,8 @@ def validate_workspace_layout(
             raise ContractError(
                 f"workspace必須fileがありません: {relative}"
             )
+
+    _validate_workspace_input(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -273,6 +363,150 @@ def _validate_brief(brief: object) -> None:
         raise ContractError(
             f"Brief契約違反: {path}: {first.message}"
         )
+
+
+def _validate_keywords(keywords: object) -> None:
+    if not isinstance(keywords, dict):
+        raise ContractError(
+            "Keywordsはオブジェクトでなければなりません"
+        )
+
+    required = {
+        "schema_version",
+        "source_type",
+        "keywords",
+        "avoid",
+        "ending_preference",
+        "volume_hint",
+        "language",
+    }
+    allowed = required | {"notes"}
+    missing = required - set(keywords)
+    unknown = set(keywords) - allowed
+
+    if missing:
+        raise ContractError(
+            "Keywords必須field不足: "
+            + ", ".join(sorted(missing))
+        )
+    if unknown:
+        raise ContractError(
+            "Keywords未知field: "
+            + ", ".join(sorted(unknown))
+        )
+    if keywords["schema_version"] != 1:
+        raise ContractError(
+            "Keywords.schema_versionは1でなければなりません"
+        )
+    if keywords["source_type"] != "keywords":
+        raise ContractError(
+            "Keywords.source_typeはkeywordsでなければなりません"
+        )
+
+    _validate_unique_string_list(
+        keywords["keywords"],
+        "Keywords.keywords",
+        allow_empty=False,
+    )
+    _validate_unique_string_list(
+        keywords["avoid"],
+        "Keywords.avoid",
+        allow_empty=True,
+    )
+
+    ending = keywords["ending_preference"]
+    if not isinstance(ending, str) or not ending.strip():
+        raise ContractError(
+            "Keywords.ending_preferenceは空でない文字列が必要です"
+        )
+
+    volume_hint = keywords["volume_hint"]
+    if (
+        not isinstance(volume_hint, int)
+        or isinstance(volume_hint, bool)
+        or not 4 <= volume_hint <= 10
+    ):
+        raise ContractError(
+            "Keywords.volume_hintは4から10の整数でなければなりません"
+        )
+
+    if keywords["language"] != "ja":
+        raise ContractError(
+            "Keywords.languageはjaでなければなりません"
+        )
+
+    notes = keywords.get("notes")
+    if notes is not None and not isinstance(notes, str):
+        raise ContractError(
+            "Keywords.notesは文字列またはnullでなければなりません"
+        )
+
+
+def _validate_unique_string_list(
+    value: object,
+    field: str,
+    *,
+    allow_empty: bool,
+) -> None:
+    if not isinstance(value, list):
+        raise ContractError(
+            f"{field}は配列でなければなりません"
+        )
+    if not allow_empty and not value:
+        raise ContractError(
+            f"{field}は一つ以上必要です"
+        )
+    if not all(
+        isinstance(item, str) and item.strip()
+        for item in value
+    ):
+        raise ContractError(
+            f"{field}は空でない文字列だけを含めなければなりません"
+        )
+    if len(value) != len(set(value)):
+        raise ContractError(
+            f"{field}に重複を含められません"
+        )
+
+
+def _validate_workspace_input(root: Path) -> None:
+    source = _read_json(root / "input/source.json")
+    source_type = source.get("source_type")
+    source_path = source.get("source_path")
+
+    if source_type not in {"brief", "keywords"}:
+        raise ContractError(
+            "input/source.jsonのsource_typeが不正です"
+        )
+
+    expected_path = f"input/{source_type}.json"
+    if source_path != expected_path:
+        raise ContractError(
+            "input/source.jsonのsource_pathが不正です"
+        )
+
+    selected = root / expected_path
+    other_name = (
+        "keywords.json"
+        if source_type == "brief"
+        else "brief.json"
+    )
+    other = root / "input" / other_name
+
+    if not selected.is_file():
+        raise ContractError(
+            f"workspace入力fileがありません: {expected_path}"
+        )
+    if other.exists():
+        raise ContractError(
+            "workspaceにはBriefとKeywordsの両方を保存できません"
+        )
+
+    payload = _read_json(selected)
+    if source_type == "brief":
+        _validate_brief(payload)
+    else:
+        _validate_keywords(payload)
 
 
 def _validate_workspace_destination(root: Path) -> None:

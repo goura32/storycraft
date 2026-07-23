@@ -10,7 +10,9 @@ from storycraft.run_state import RunStateStore
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import (
     REQUIRED_DIRECTORIES,
+    create_workspace,
     create_workspace_from_brief,
+    create_workspace_from_keywords,
     validate_workspace_layout,
 )
 
@@ -32,6 +34,9 @@ class WorkspaceV1Tests(unittest.TestCase):
         )
         self.config = load_json(
             "tests/fixtures/workspace/config.json"
+        )
+        self.keywords = load_json(
+            "tests/fixtures/keywords/valid.json"
         )
 
     def test_create_workspace_from_brief(self) -> None:
@@ -118,6 +123,99 @@ class WorkspaceV1Tests(unittest.TestCase):
                 counters["updated_at"],
                 CREATED_AT,
             )
+
+    def test_create_workspace_from_keywords(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+
+            create_workspace_from_keywords(
+                workspace,
+                workspace_id="ws-test-0001",
+                keywords=self.keywords,
+                config=self.config,
+                created_at=CREATED_AT,
+            )
+
+            validate_workspace_layout(workspace)
+            self.assertTrue(
+                (workspace / "input/keywords.json").is_file()
+            )
+            self.assertFalse(
+                (workspace / "input/brief.json").exists()
+            )
+
+            source = json.loads(
+                (
+                    workspace / "input/source.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                source["source_type"],
+                "keywords",
+            )
+            self.assertEqual(
+                source["source_path"],
+                "input/keywords.json",
+            )
+
+            state = RunStateStore(workspace).load()
+            self.assertEqual(state["current_stage"], "input")
+
+    def test_brief_and_keywords_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "INPUT_MODE_CONFLICT",
+            ):
+                create_workspace(
+                    workspace,
+                    workspace_id="ws-test-0001",
+                    brief=self.brief,
+                    keywords=self.keywords,
+                    config=self.config,
+                    created_at=CREATED_AT,
+                )
+
+            self.assertFalse(workspace.exists())
+
+    def test_missing_input_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "INPUT_MODE_REQUIRED",
+            ):
+                create_workspace(
+                    workspace,
+                    workspace_id="ws-test-0001",
+                    config=self.config,
+                    created_at=CREATED_AT,
+                )
+
+            self.assertFalse(workspace.exists())
+
+    def test_invalid_keywords_create_no_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "novel"
+            invalid = dict(self.keywords)
+            invalid["volume_hint"] = 3
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "volume_hint",
+            ):
+                create_workspace_from_keywords(
+                    workspace,
+                    workspace_id="ws-test-0001",
+                    keywords=invalid,
+                    config=self.config,
+                    created_at=CREATED_AT,
+                )
+
+            self.assertFalse(workspace.exists())
 
     def test_existing_workspace_is_never_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
