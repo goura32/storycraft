@@ -1,0 +1,52 @@
+# scene_plan の生成
+
+## 目的
+
+採用済みChapter Planとcurrent Generationを基準に、
+対象Scene一つのScene Plan Candidateを作成する。
+
+## 必須条件
+
+- `target_volume_number`、`target_chapter_number`、
+  `target_scene_number` の一Sceneだけを計画する
+- Chapter Planの対象 `scene_summaries` を具体化する
+- `purpose` は対象Sceneの固有目的を具体化する
+- POV人物は `participant_ids` に含める
+- 人物とLocationは採用済みInitial DesignのIDだけを使う
+- 人物の状態、所在、Knowledge、利用可能性をcurrent Generationへ照合する
+- `starting_conditions` はScene開始時点の確定Stateだけを書く
+- 移動や状態変化がScene内で起きる場合、それを開始条件へ先取りしない
+- `intended_beats` は因果順に並べ、Scene目的の達成へ寄与させる
+- `intended_revelations` はChapter Planで許可された開示だけを扱う
+- `intended_changes` はScene終了時の予定変化であり、確定Canonではない
+- `prohibited_disclosures` は上位Planとcurrent Stateの秘匿を保持する
+- 同じ内容を許可開示と禁止開示の両方へ入れない
+- 最終SceneではChapter Planの `ending_changes` へ収束させる
+- 最終Scene以外では次Sceneへ接続できる変化を作る
+- Scene PlanはScene Cardより粗い計画に留める
+- 入力にない人物、場所、Knowledge、秘密、犯人、
+  事件原因、制度、結末条件、IDを追加しない
+- Briefのrequired_elements、tone、avoidを保持する
+- 採用metadataを含めない
+
+## 禁止metadata
+
+- `schema_version`
+- `scene_plan_id`
+- `volume_number`
+- `chapter_number`
+- `scene_number`
+- `version`
+- `status`
+- `basis_generation_id`
+- `chapter_plan_id`
+- `parent_plan_id`
+- `created_at`
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

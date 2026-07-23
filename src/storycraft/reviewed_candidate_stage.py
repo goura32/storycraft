@@ -27,6 +27,9 @@ CandidateValidator = Callable[[object], None]
 CandidateAdopter = Callable[[dict[str, Any]], None]
 
 
+_PRESERVE_ACTIVE_SCENE = object()
+
+
 @dataclass(frozen=True)
 class ReviewedCandidateSpec:
     """Review対象Stageの固定契約。"""
@@ -57,6 +60,9 @@ class ReviewedCandidateStageRunner:
         validator: CandidateValidator,
         adopter: CandidateAdopter,
         next_target: dict[str, Any],
+        active_scene_id: str | None | object = (
+            _PRESERVE_ACTIVE_SCENE
+        ),
         updated_at: str | None = None,
     ) -> dict[str, Any]:
         validate_workspace_layout(self.workspace_root)
@@ -242,11 +248,18 @@ class ReviewedCandidateStageRunner:
                 adopted_state["active_candidate"] = None
                 validate_run_state(adopted_state)
 
+                transition_kwargs: dict[str, Any] = {}
+                if active_scene_id is not _PRESERVE_ACTIVE_SCENE:
+                    transition_kwargs["active_scene_id"] = (
+                        active_scene_id
+                    )
+
                 advanced = advance_run_state(
                     adopted_state,
                     next_stage=self.spec.next_stage,
                     next_target=deepcopy(next_target),
                     updated_at=timestamp,
+                    **transition_kwargs,
                 )
                 self.state_store.save(advanced)
                 return advanced
