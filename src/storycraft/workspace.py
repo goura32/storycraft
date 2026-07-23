@@ -271,6 +271,7 @@ def validate_workspace_layout(
 
     _validate_workspace_input(root)
     _validate_initial_design_artifacts(root)
+    _validate_initial_generation_artifacts(root)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -541,6 +542,7 @@ def _validate_initial_design_artifacts(root: Path) -> None:
     threads_path = version_root / "threads.json"
     ending_path = version_root / "ending.json"
     integrated_path = version_root / "integrated.json"
+    accepted_path = version_root / "initial-design.json"
 
     if characters_path.exists() and not concept_path.is_file():
         raise ContractError(
@@ -581,6 +583,12 @@ def _validate_initial_design_artifacts(root: Path) -> None:
         raise ContractError(
             "統合Initial Designには"
             "採用済みEndingが必要です"
+        )
+
+    if accepted_path.exists() and not integrated_path.is_file():
+        raise ContractError(
+            "採用済みInitial Designには"
+            "統合Initial Designが必要です"
         )
 
     if concept_path.exists():
@@ -721,6 +729,112 @@ def _validate_initial_design_artifacts(root: Path) -> None:
                                         threads,
                                         ending,
                                     )
+
+                                    if accepted_path.exists():
+                                        if not accepted_path.is_file():
+                                            raise ContractError(
+                                                "採用済みInitial Designは"
+                                                "fileでなければなりません"
+                                            )
+                                        from .initial_generation import (
+                                            validate_accepted_initial_design,
+                                        )
+
+                                        accepted = _read_json(
+                                            accepted_path
+                                        )
+                                        validate_accepted_initial_design(
+                                            accepted,
+                                            integrated,
+                                            brief,
+                                        )
+
+
+def _validate_initial_generation_artifacts(
+    root: Path,
+) -> None:
+    """存在するInitial Generationとrun-state参照を検証する。"""
+    version_root = root / "design/initial/v0001"
+    accepted_path = version_root / "initial-design.json"
+    state = RunStateStore(root).load()
+    current_generation_id = state[
+        "current_generation_id"
+    ]
+
+    if not accepted_path.exists():
+        if current_generation_id is not None:
+            raise ContractError(
+                "current_generation_idには採用済み"
+                "Initial Designが必要です"
+            )
+        return
+
+    accepted = _read_json(accepted_path)
+    generation_root = root / "generations"
+
+    from .initial_generation import (
+        validate_initial_generation,
+    )
+
+    initial_generation_ids: list[str] = []
+    for directory in sorted(generation_root.glob("gen-*")):
+        if not directory.is_dir():
+            raise ContractError(
+                "Generation pathはdirectoryが必要です"
+            )
+
+        commit_path = directory / "commit.json"
+        if not commit_path.is_file():
+            continue
+        commit = _read_json(commit_path)
+
+        if (
+            commit.get("parent_generation_id") is not None
+            or commit.get("commit_type") != "initial_design"
+            or commit.get("source_artifact_id")
+            != accepted["design_id"]
+        ):
+            continue
+
+        files = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            path = directory / name
+            if not path.is_file():
+                raise ContractError(
+                    "Initial Generationの必須fileが"
+                    f"ありません: {name}"
+                )
+            files[name] = _read_json(path)
+
+        validate_initial_generation(files, accepted)
+        initial_generation_ids.append(directory.name)
+
+    if len(initial_generation_ids) > 1:
+        raise ContractError(
+            "Initial Generationが複数存在します"
+        )
+
+    if current_generation_id is None:
+        if (
+            state["current_stage"] != Stage.INITIAL_ACCEPT.value
+            and initial_generation_ids
+        ):
+            raise ContractError(
+                "Initial Generationがある場合は"
+                "current_generation_idが必要です"
+            )
+        return
+
+    if current_generation_id not in initial_generation_ids:
+        raise ContractError(
+            "current_generation_idが有効な"
+            "Initial Generationを参照していません"
+        )
 
 
 def _validate_workspace_destination(root: Path) -> None:
