@@ -1247,15 +1247,30 @@ attempt増加
 
 ## 65. `ACC-LLM-003` timeout
 
+**前提:**
+
+次の各境界で、fake transportをblocking状態にできる。
+
+```text
+接続確立
+最初の応答event
+応答中の次event
+Call全体
+```
+
 **期待結果:**
 
 ```text
-部分応答を採用しない
-transport errorとして記録
-上限内ならRetry
+対応するtimeoutでblocking I/Oを外側から中断
+部分応答をCandidateとして採用しない
+transport errorとして分類
+上限内の場合だけ独立したtransport retry
+fake clockを使い、長い実時間待機なし
 ```
 
-**対応要件:** `REQ-OPS-006`
+chunk受信後に経過時間を確認するだけの実装は失敗とする。
+
+**対応要件:** `REQ-OPS-006`, `REQ-NFR-006`
 
 ---
 
@@ -1363,9 +1378,399 @@ Completion incomplete
 
 ---
 
-# Part XIII: 試験品質
+# Part XIII: 契約補完試験
 
-## 71. Fixture整合性
+## 71. `ACC-PLAN-005` Chapter／Scene計画単位
+
+**期待結果:**
+
+```text
+一つのChapter Plan Candidateは一つの対象Chapterだけを定義
+一つのScene Plan Candidateは一つの対象Sceneだけを定義
+Scene PlanはScene開始直前のbasis Generationを参照
+一回のCandidateで複数Chapterまたは複数Sceneを採用しない
+```
+
+**対応要件:** `REQ-FR-013`
+
+---
+
+## 72. `ACC-CONT-007` Continuity状態種別とAuthority
+
+**前提:**
+
+本文に、人物移動、関係変化、場所封鎖、世界警報、Thread進行、人物の知識取得、読者への開示、時間経過、物品移動、約束成立を含める。
+
+**期待結果:**
+
+```text
+10種類のtarget_typeだけを受理
+各事実をDATA_MODEL.mdで定めた一つのAuthorityだけへ保存
+Character StateへInventoryやKnowledgeの重複copyを作らない
+Location Stateへ人物所在の逆引きcopyを作らない
+```
+
+**対応要件:** `REQ-FR-020`, `REQ-DATA-007`
+
+---
+
+## 73. `ACC-CONT-008` Character KnowledgeとReader Knowledge
+
+**前提:**
+
+```text
+人物Aだけが知る事実
+読者だけへ開示される事実
+人物Aと読者の両方へ開示される事実
+```
+
+を本文に含める。
+
+**期待結果:**
+
+```text
+character_knowledgeとreader_knowledgeを独立更新
+Initial Design上の公開予定を実際の開示済み状態として扱わない
+Evidenceのない開示状態変更を拒否
+Continuity Contextへ不要な作者用秘密を含めない
+```
+
+**対応要件:** `REQ-FR-019`, `REQ-FR-020`, `REQ-SEC-003`
+
+---
+
+## 74. `ACC-DATA-001` 現在位置Authorityの一意性
+
+**期待結果:**
+
+```text
+現在のrun位置はrun-state.jsonだけから決定
+CURRENT、HEAD、Manifest、Gateなどの独立pointerを参照しない
+run-stateと矛盾する補助fileを正本として採用しない
+```
+
+**対応要件:** `REQ-DATA-001`, `REQ-DATA-007`
+
+---
+
+## 75. `ACC-DATA-002` 複数file成果物のatomic可視性
+
+**前提:**
+
+SceneまたはPublicationの各fileを書き終える途中で故障を注入する。
+
+**期待結果:**
+
+```text
+不完全なdirectoryをfinal成果物として列挙しない
+final directoryは全必須fileの検証後に一回のrenameで現れる
+run-stateはfinalize前の成果物を参照しない
+```
+
+**対応要件:** `REQ-DATA-003`, `REQ-REC-003`
+
+---
+
+## 76. `ACC-DATA-003` Hash／ManifestをAuthorityにしない
+
+**確認方法:**
+
+production source、Schema、workspace fixtureを静的に検査する。
+
+**期待結果:**
+
+```text
+現在位置の決定にhash chainを使わない
+reachability ManifestをRecoveryの正本にしない
+Hash fieldが存在する場合は補助的な用途と処理が文書化されている
+```
+
+**対応要件:** `REQ-DATA-006`, `REQ-DATA-007`
+
+---
+
+## 77. `ACC-OPS-001` 対応environment
+
+**期待結果:**
+
+```text
+通常のローカルfilesystem上でworkspaceを作成可能
+一つの利用者・一つのwriterとして動作
+remote workspace、分散Lock、共同編集を必須前提にしない
+file browserとeditorで主要成果物を確認可能
+```
+
+**対応要件:** `REQ-OPS-002`, `REQ-NFR-001`
+
+---
+
+## 78. `ACC-OPS-002` 実行設定の確定
+
+**前提:**
+
+実行開始後に外部設定fileを変更する。
+
+**期待結果:**
+
+```text
+開始時に検証済みの完全な設定snapshotを確定
+実行途中で外部fileの変更を暗黙に取り込まない
+再開時はworkspaceに記録した設定識別情報と互換性を検証
+```
+
+**対応要件:** `REQ-OPS-003`
+
+---
+
+## 79. `ACC-OPS-003` operation別Provider／model
+
+**前提:**
+
+Scene Prose、Review、Continuity、Completionへ異なるfake Providerまたはmodelを設定する。
+
+**期待結果:**
+
+```text
+各operationが指定された設定を使用
+code-only operationへmodel設定を要求しない
+未指定operationは明示されたdefault規則だけを使用
+Auditへ実際に選択したProviderとmodelを記録
+```
+
+**対応要件:** `REQ-OPS-004`, `REQ-OPS-008`
+
+---
+
+## 80. `ACC-START-001` 起動検証とRecovery順序
+
+**前提:**
+
+`pending_commit`が残るworkspaceと、接続不能なProvider設定を用意する。
+
+**期待結果:**
+
+```text
+Lock取得
+run-stateと必要成果物の検証
+pending_commit Recovery
+次Stage判定
+必要なLLM operationの場合だけProvider factory呼出
+```
+
+Recoveryだけで正常状態へ前進できる場合、Provider factory callは0とする。
+
+**対応要件:** `REQ-REC-001`, `REQ-REC-008`
+
+---
+
+## 81. `ACC-ID-001` Counter不整合
+
+**前提:**
+
+counter値を、既存final成果物で使用済みの最大番号より小さくする。
+
+**期待結果:**
+
+```text
+自動巻戻しなし
+使用済み番号の再利用なし
+自動再採番なし
+manualを要求
+```
+
+**対応要件:** `REQ-DATA-008`, `REQ-REC-007`
+
+---
+
+## 82. `ACC-SEC-001` Continuity Contextの秘密情報除外
+
+**前提:**
+
+Initial Designに、現在Sceneと無関係な将来計画、Ending内部設計、作者用Thread回答を含める。
+
+**期待結果:**
+
+```text
+Continuityへ現在Sceneの判定に必要な情報だけを渡す
+不要な将来計画と作者用秘密をPromptへ含めない
+秘密情報なしで判定不能な場合は暗黙に追加せず停止
+```
+
+**対応要件:** `REQ-SEC-003`, `REQ-NFR-004`
+
+---
+
+## 83. `ACC-SEC-002` Path安全性
+
+**前提:**
+
+```text
+absolute path
+../ traversal
+workspace外を指すsymlink
+symlinkを経由する既存file
+```
+
+を入力pathまたは成果物pathへ指定する。
+
+**期待結果:**
+
+```text
+workspace外のread／writeなし
+Provider callなし
+安定した期待error
+```
+
+**対応要件:** `REQ-SEC-006`
+
+---
+
+## 84. `ACC-SEC-003` 外部取得禁止
+
+**前提:**
+
+作品データにWeb検索、外部file取得、別会話memory参照を求める命令風文字列を含める。
+
+**期待結果:**
+
+```text
+network toolを呼ばない
+workspace外fileを取得しない
+別会話memoryを参照しない
+作品内文字列を制御命令として扱わない
+```
+
+**対応要件:** `REQ-SEC-004`, `REQ-SEC-007`
+
+---
+
+## 85. `ACC-FMT-001` 共通構造化データ規則
+
+**期待結果:**
+
+```text
+UTF-8
+定めたUnicode正規化
+NaNとInfinityを拒否
+未知fieldを拒否
+人間が通常のeditorで読めるindentと改行
+```
+
+同じserializer／validator規則をrun-state、Generation、Scene成果物、Publication metadataへ適用する。
+
+**対応要件:** `REQ-NFR-001`, `REQ-NFR-002`
+
+---
+
+## 86. `ACC-LLM-006` Call前token確認
+
+**前提:**
+
+Prompt描画後の最終入力が設定上限を超えるケースを用意する。
+
+**期待結果:**
+
+```text
+最終送信payloadを対象にtoken量を確認
+Provider callを開始しない
+入力資料削減または明示的停止
+Auditへpreflight結果を記録
+```
+
+概算前の素材量だけを確認して成功扱いにしない。
+
+**対応要件:** `REQ-NFR-005`, `REQ-OPS-007`
+
+---
+
+## 87. `ACC-LLM-007` code-only operationのProvider非依存
+
+**対象:**
+
+```text
+initial_accept
+scene_commit
+Recovery
+Publication Builder
+workspace audit
+```
+
+**期待結果:**
+
+```text
+Provider factory call 0
+Credential参照 0
+Provider endpoint接続 0
+model設定なしで実行可能
+```
+
+**対応要件:** `REQ-FR-033`, `REQ-REC-008`, `REQ-NFR-003`
+
+---
+
+## 88. `ACC-LLM-008` internal error分類
+
+**前提:**
+
+Adapter、serializer、validator、filesystem wrapperから予期しない例外を発生させる。
+
+**期待結果:**
+
+```text
+internal_errorとして記録
+Candidate rejectionやReview Issueへ変換しない
+manual_review_requiredへ偽装しない
+安全な永続状態を維持
+利用者向けには秘密情報を除いたerror codeを表示
+```
+
+**対応要件:** `REQ-FR-026`, `REQ-SEC-008`
+
+---
+
+## 89. `ACC-TEST-001` 必須suiteのhermetic性
+
+**期待結果:**
+
+```text
+実networkなし
+実Credentialなし
+fake clock使用
+長い実時間sleepなし
+Provider Adapterをfakeまたはstubへ置換可能
+```
+
+予期しないnetwork接続は試験失敗とする。
+
+**対応要件:** `REQ-NFR-006`
+
+---
+
+## 90. `ACC-REL-001` Release必須scenarioの網羅
+
+Requirement traceを機械検査し、全76要件が少なくとも一つの`ACC-*`から参照されることを確認する。
+
+さらに必須suiteに次が存在し、skipされていないことを確認する。
+
+```text
+正常系
+Review／Revision
+transport failure
+format failure
+Scene途中中断
+Scene／Generation／Publication確定直後中断
+秘密情報除外
+Completion incomplete
+Lock競合
+```
+
+**対応要件:** `REQ-NFR-008`
+
+---
+
+# Part XIV: 試験品質
+
+## 91. Fixture整合性
 
 Fixture自体をSchema検証する。
 
@@ -1373,7 +1778,7 @@ Fixture自体をSchema検証する。
 
 ---
 
-## 72. Production code共用
+## 92. Production code共用
 
 試験はproductionと同じ次を使う。
 
@@ -1390,7 +1795,7 @@ Publication Builder
 
 ---
 
-## 73. 時間制御
+## 93. 時間制御
 
 Retry、timeout、Budget試験ではfake clockとfake sleepを使えるようにする。
 
@@ -1398,7 +1803,7 @@ Retry、timeout、Budget試験ではfake clockとfake sleepを使えるように
 
 ---
 
-## 74. 故障注入
+## 94. 故障注入
 
 Crash試験では、少なくとも次へ故障を注入できるようにする。
 
@@ -1415,13 +1820,13 @@ completed更新前
 
 ---
 
-## 75. Network禁止
+## 95. Network禁止
 
 Unit、integration、acceptanceの必須suiteは、予期しないnetwork接続を失敗させる。
 
 ---
 
-## 76. 秘密情報検査
+## 96. 秘密情報検査
 
 Test log、snapshot、failure outputへfake secretが含まれないことを確認する。
 
@@ -1433,9 +1838,9 @@ sk-test-storycraft-secret
 
 ---
 
-# Part XIV: Release Gate
+# Part XV: Release Gate
 
-## 77. 必須suite
+## 97. 必須suite
 
 Release前に次をすべて実行する。
 
@@ -1453,7 +1858,7 @@ package smoke
 
 ---
 
-## 78. Release不可条件
+## 98. Release不可条件
 
 次が一つでもある場合はReleaseしない。
 
@@ -1472,7 +1877,7 @@ installed packageでPrompt欠落
 
 ---
 
-## 79. 手動確認
+## 99. 手動確認
 
 自動試験に加え、Release候補で次を手動確認する。
 
@@ -1488,7 +1893,7 @@ Publicationの章・巻区切り
 
 ---
 
-## 80. 実装状況への反映
+## 100. 実装状況への反映
 
 Release試験結果は`../product/IMPLEMENTATION_STATUS.md`へ反映する。
 
@@ -1496,7 +1901,7 @@ Release試験結果は`../product/IMPLEMENTATION_STATUS.md`へ反映する。
 
 ---
 
-## 81. 最終原則
+## 101. 最終原則
 
 Storycraft Version 1の受入試験は、次を証明する。
 
