@@ -1,6 +1,8 @@
 """Storycraft Version 1 のrun-state契約。"""
 from __future__ import annotations
 
+from copy import deepcopy
+
 from datetime import datetime
 import json
 import os
@@ -348,6 +350,79 @@ def _parse_timestamp(value: object, field: str) -> datetime:
 
 
 
+def _is_stale_scene_commit_shape(
+    state: dict[str, Any],
+) -> bool:
+    """最終state更新後にpendingだけ残った形か判定する。"""
+    pending = state.get("pending_commit")
+    if not isinstance(pending, dict):
+        return False
+
+    expected_fields = {
+        "kind",
+        "target_id",
+        "expected_generation_id",
+        "phase",
+    }
+    if set(pending) != expected_fields:
+        return False
+
+    target_id = pending.get("target_id")
+    expected_generation_id = pending.get(
+        "expected_generation_id"
+    )
+
+    return (
+        pending.get("kind") == Stage.SCENE_COMMIT.value
+        and pending.get("phase") == "generation_finalized"
+        and isinstance(target_id, str)
+        and target_id.startswith("scene-v")
+        and isinstance(expected_generation_id, str)
+        and expected_generation_id.startswith("gen-")
+        and state.get("status") == "running"
+        and state.get("current_stage") in {
+            Stage.SCENE_PLAN.value,
+            Stage.CHAPTER_PLAN.value,
+            Stage.VOLUME_HANDOFF.value,
+        }
+        and state.get("current_generation_id")
+        == expected_generation_id
+        and state.get("active_candidate") is None
+        and state.get("active_scene_id") is None
+    )
+
+
+def validate_recovery_run_state(
+    state: object,
+) -> dict[str, Any]:
+    """通常stateまたは限定されたstale pending stateを検証する。"""
+    try:
+        return validate_run_state(state)
+    except ContractError:
+        if (
+            not isinstance(state, dict)
+            or not _is_stale_scene_commit_shape(state)
+        ):
+            raise
+
+        normalized = deepcopy(state)
+        normalized["pending_commit"] = None
+        validate_run_state(normalized)
+        return state
+
+
+def is_stale_scene_commit_recovery_state(
+    state: object,
+) -> bool:
+    """検証済みstateがstale Scene Commit pendingか判定する。"""
+    try:
+        validated = validate_recovery_run_state(state)
+    except ContractError:
+        return False
+
+    return _is_stale_scene_commit_shape(validated)
+
+
 class RunStateStore:
     """V1 runtime/run-state.json の原子的な永続化。"""
 
@@ -359,12 +434,12 @@ class RunStateStore:
     def exists(self) -> bool:
         return self.path.is_file()
 
-    def load(self) -> dict[str, Any]:
+    def _read(self) -> object:
         if not self.exists():
             raise ContractError("V1 run-stateがありません")
 
         try:
-            state = json.loads(
+            return json.loads(
                 self.path.read_text(encoding="utf-8")
             )
         except json.JSONDecodeError as exc:
@@ -376,7 +451,15 @@ class RunStateStore:
                 "V1 run-stateを読み込めません"
             ) from exc
 
-        return validate_run_state(state)
+    def load(self) -> dict[str, Any]:
+        """通常のrun-stateを厳密に読み込む。"""
+        return validate_run_state(self._read())
+
+    def load_recovery(self) -> dict[str, Any]:
+        """Recovery開始時に限定特殊状態も含めて読み込む。"""
+        return validate_recovery_run_state(
+            self._read()
+        )
 
     def save(self, state: dict[str, Any]) -> None:
         validate_run_state(state)

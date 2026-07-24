@@ -14,7 +14,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from .prompt_template import get_template_loader
-from .run_state import RunStateStore, validate_run_state
+from .run_state import (
+    RunStateStore,
+    validate_recovery_run_state,
+    validate_run_state,
+)
 from .series_contracts import ContractError
 from .stages import Stage
 
@@ -241,6 +245,8 @@ def _create_workspace(
 
 def validate_workspace_layout(
     workspace_root: Path,
+    *,
+    run_state: dict[str, Any] | None = None,
 ) -> None:
     """既存V1 workspaceの必須layoutを検証する。"""
     root = workspace_root.expanduser()
@@ -270,14 +276,26 @@ def validate_workspace_layout(
                 f"workspace必須fileがありません: {relative}"
             )
 
+    state = (
+        validate_recovery_run_state(run_state)
+        if run_state is not None
+        else RunStateStore(root).load()
+    )
+
     _validate_workspace_input(root)
     _validate_initial_design_artifacts(root)
-    _validate_initial_generation_artifacts(root)
+    _validate_initial_generation_artifacts(root, state=state)
     _validate_series_plan_artifacts(root)
     _validate_volume_plan_artifacts(root)
     _validate_chapter_plan_artifacts(root)
     _validate_scene_plan_artifacts(root)
-    _validate_scene_card_staging_artifacts(root)
+    _validate_volume_handoff_artifacts(root)
+    _validate_completion_artifacts(root)
+    _validate_publication_artifacts(
+        root,
+        run_state=run_state,
+    )
+    _validate_scene_card_staging_artifacts(root, state=state)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -758,11 +776,12 @@ def _validate_initial_design_artifacts(root: Path) -> None:
 
 def _validate_initial_generation_artifacts(
     root: Path,
+    *,
+    state: dict[str, Any],
 ) -> None:
     """存在するGenerationとrun-state参照を検証する。"""
     version_root = root / "design/initial/v0001"
     accepted_path = version_root / "initial-design.json"
-    state = RunStateStore(root).load()
     current_generation_id = state[
         "current_generation_id"
     ]
@@ -871,7 +890,6 @@ def _validate_initial_generation_artifacts(
             )
         if (
             not isinstance(changed_targets, list)
-            or not changed_targets
             or any(
                 not isinstance(target, str) or not target
                 for target in changed_targets
@@ -1521,6 +1539,443 @@ def _validate_scene_plan_artifacts(
             )
 
 
+def _validate_volume_handoff_artifacts(
+    root: Path,
+) -> None:
+    """存在するimmutable Volume Handoffを検証する。"""
+    handoffs_root = root / "handoffs"
+    entries = sorted(handoffs_root.iterdir())
+    if not entries:
+        return
+
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "Volume Handoffには"
+            "採用済みSeries Planが必要です"
+        )
+
+    from .series_contracts import ContractValidator
+
+    series_plan = _read_json(series_plan_path)
+    seen_numbers: list[int] = []
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Volume Handoff pathは"
+                "通常directoryが必要です"
+            )
+
+        match = re.fullmatch(
+            r"handoff-v(\d{2})",
+            directory.name,
+        )
+        if match is None:
+            raise ContractError(
+                "Volume Handoff directory名が不正です"
+            )
+
+        volume_number = int(match.group(1))
+        seen_numbers.append(volume_number)
+
+        if {
+            entry.name for entry in directory.iterdir()
+        } != {"handoff.json"}:
+            raise ContractError(
+                "Volume Handoff directoryの"
+                "file構成が不正です"
+            )
+
+        handoff = _read_json(
+            directory / "handoff.json"
+        )
+        generation_id = handoff.get(
+            "basis_generation_id"
+        )
+        if not isinstance(generation_id, str):
+            raise ContractError(
+                "Volume Handoffの"
+                "basis_generation_idが不正です"
+            )
+
+        generation_root = (
+            root / "generations" / generation_id
+        )
+        generation: dict[str, Any] = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            file = generation_root / name
+            if not file.is_file():
+                raise ContractError(
+                    "Volume Handoffのbasis Generationが"
+                    f"不完全です: {name}"
+                )
+            generation[name] = _read_json(file)
+
+        volume_plan_path = (
+            root
+            / "design/volume-plans"
+            / f"v{volume_number:02d}-v0001"
+            / "volume-plan.json"
+        )
+        if not volume_plan_path.is_file():
+            raise ContractError(
+                "Volume Handoffには"
+                "採用済みVolume Planが必要です"
+            )
+        volume_plan = _read_json(volume_plan_path)
+
+        chapter_summaries = volume_plan.get(
+            "chapter_summaries"
+        )
+        if (
+            not isinstance(chapter_summaries, list)
+            or not chapter_summaries
+        ):
+            raise ContractError(
+                "Volume Plan.chapter_summariesが不正です"
+            )
+
+        expected_chapter_ids: list[str] = []
+        expected_scene_ids: list[str] = []
+
+        for expected_chapter_number, summary in enumerate(
+            chapter_summaries,
+            1,
+        ):
+            if (
+                not isinstance(summary, dict)
+                or summary.get("chapter_number")
+                != expected_chapter_number
+            ):
+                raise ContractError(
+                    "Volume Plan Chapter番号は"
+                    "1からの連番が必要です"
+                )
+
+            chapter_plan_path = (
+                root
+                / "design/chapter-plans"
+                / (
+                    f"v{volume_number:02d}"
+                    f"-c{expected_chapter_number:03d}"
+                    "-v0001"
+                )
+                / "chapter-plan.json"
+            )
+            if not chapter_plan_path.is_file():
+                raise ContractError(
+                    "Volume HandoffのChapter Planが"
+                    "存在しません"
+                )
+
+            chapter_plan = _read_json(
+                chapter_plan_path
+            )
+            expected_chapter_ids.append(
+                f"chapter-v{volume_number:02d}"
+                f"-c{expected_chapter_number:03d}"
+            )
+
+            scene_summaries = chapter_plan.get(
+                "scene_summaries"
+            )
+            if (
+                not isinstance(scene_summaries, list)
+                or not scene_summaries
+            ):
+                raise ContractError(
+                    "Chapter Plan.scene_summariesが"
+                    "不正です"
+                )
+
+            for expected_scene_number, scene in enumerate(
+                scene_summaries,
+                1,
+            ):
+                if (
+                    not isinstance(scene, dict)
+                    or scene.get("scene_number")
+                    != expected_scene_number
+                ):
+                    raise ContractError(
+                        "Chapter Plan Scene番号は"
+                        "1からの連番が必要です"
+                    )
+                expected_scene_ids.append(
+                    f"scene-v{volume_number:02d}"
+                    f"-c{expected_chapter_number:03d}"
+                    f"-s{expected_scene_number:03d}"
+                )
+
+        ContractValidator._validate_volume_handoff(
+            handoff,
+            generation,
+            series_plan,
+            volume_plan,
+            volume_number,
+            generation_id,
+            adopted=True,
+            expected_chapter_ids=expected_chapter_ids,
+            expected_scene_ids=expected_scene_ids,
+        )
+
+    if seen_numbers != list(
+        range(1, len(seen_numbers) + 1)
+    ):
+        raise ContractError(
+            "Volume Handoffは第一巻から"
+            "欠番なく存在する必要があります"
+        )
+
+
+def _validate_completion_artifacts(
+    root: Path,
+) -> None:
+    """存在するimmutable Completion Resultを検証する。"""
+    completion_root = root / "completion"
+    entries = sorted(completion_root.iterdir())
+    if not entries:
+        return
+
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "Completion Resultには"
+            "採用済みInitial Designが必要です"
+        )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "Completion Resultには"
+            "採用済みSeries Planが必要です"
+        )
+
+    initial_design = _read_json(initial_design_path)
+    series_plan = _read_json(series_plan_path)
+
+    volume_count = series_plan.get("volume_count")
+    if (
+        not isinstance(volume_count, int)
+        or isinstance(volume_count, bool)
+        or volume_count < 1
+    ):
+        raise ContractError(
+            "Completion Resultの"
+            "Series Plan.volume_countが不正です"
+        )
+
+    handoffs: list[dict[str, Any]] = []
+    for volume_number in range(1, volume_count + 1):
+        path = (
+            root
+            / "handoffs"
+            / f"handoff-v{volume_number:02d}"
+            / "handoff.json"
+        )
+        if not path.is_file():
+            raise ContractError(
+                "Completion Resultには"
+                "全Volume Handoffが必要です"
+            )
+        handoffs.append(_read_json(path))
+
+    from .series_contracts import ContractValidator
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Completion pathは通常directoryが必要です"
+            )
+        if re.fullmatch(
+            r"completion-[0-9]{6}",
+            directory.name,
+        ) is None:
+            raise ContractError(
+                "Completion directory名が不正です"
+            )
+        if {
+            entry.name for entry in directory.iterdir()
+        } != {"result.json"}:
+            raise ContractError(
+                "Completion directoryの"
+                "file構成が不正です"
+            )
+
+        result = _read_json(
+            directory / "result.json"
+        )
+        if (
+            result.get("completion_id")
+            != directory.name
+        ):
+            raise ContractError(
+                "Completion IDがdirectory名と"
+                "一致しません"
+            )
+
+        generation_id = result.get(
+            "basis_generation_id"
+        )
+        if not isinstance(generation_id, str):
+            raise ContractError(
+                "Completion basis_generation_idが"
+                "不正です"
+            )
+
+        generation_root = (
+            root / "generations" / generation_id
+        )
+        generation: dict[str, Any] = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            file = generation_root / name
+            if not file.is_file():
+                raise ContractError(
+                    "Completion basis Generationが"
+                    f"不完全です: {name}"
+                )
+            generation[name] = _read_json(file)
+
+        ContractValidator._validate_completion(
+            result,
+            generation,
+            initial_design,
+            series_plan,
+            handoffs,
+            generation_id,
+            adopted=True,
+        )
+
+
+def _validate_publication_artifacts(
+    root: Path,
+    *,
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    """存在するimmutable Publicationを検証する。"""
+    from .publication_builder import (
+        validate_publication_directory,
+    )
+    from .run_state import RunStateStore
+
+    publications_root = root / "publications"
+    state = (
+        run_state
+        if run_state is not None
+        else RunStateStore(root).load()
+    )
+    entries = sorted(publications_root.iterdir())
+
+    publication_ids: set[str] = set()
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Publication pathは通常directoryが必要です"
+            )
+        if re.fullmatch(
+            r"pub-[0-9]{6}",
+            directory.name,
+        ) is None:
+            raise ContractError(
+                "Publication directory名が不正です"
+            )
+
+        files = validate_publication_directory(directory)
+        metadata = files["metadata.json"]
+        completion = files["completion.json"]
+
+        if metadata["publication_id"] != directory.name:
+            raise ContractError(
+                "Publication IDがdirectory名と"
+                "一致しません"
+            )
+
+        completion_path = (
+            root
+            / "completion"
+            / metadata["completion_id"]
+            / "result.json"
+        )
+        if not completion_path.is_file():
+            raise ContractError(
+                "Publicationが参照する"
+                "Completion Resultが存在しません"
+            )
+        if _read_json(completion_path) != completion:
+            raise ContractError(
+                "Publication completion.jsonが"
+                "Completion Authorityと一致しません"
+            )
+
+        generation_root = (
+            root
+            / "generations"
+            / metadata["basis_generation_id"]
+        )
+        if not generation_root.is_dir():
+            raise ContractError(
+                "Publication basis Generationが"
+                "存在しません"
+            )
+
+        publication_ids.add(directory.name)
+
+    current_publication_id = state[
+        "current_publication_id"
+    ]
+    if (
+        current_publication_id is not None
+        and current_publication_id
+        not in publication_ids
+    ):
+        raise ContractError(
+            "current_publication_idが"
+            "確定済みPublicationを参照していません"
+        )
+
+    if state["status"] == "completed":
+        target_id = state["current_target"].get(
+            "publication_id"
+        )
+        if target_id != current_publication_id:
+            raise ContractError(
+                "completed runのPublication targetと"
+                "current_publication_idが一致しません"
+            )
+
+
 def _validate_workspace_destination(root: Path) -> None:
     if not root.name or root.name in {".", ".."}:
         raise ContractError(
@@ -1552,9 +2007,20 @@ def _validate_identifier(
 
 def _validate_scene_card_staging_artifacts(
     root: Path,
+    *,
+    state: dict[str, Any],
 ) -> None:
     """存在するactive Scene Card stagingを検証する。"""
     staging_root = root / "runtime/staging"
+    recoverable_scene_id = (
+        state["active_scene_id"]
+        if (
+            state["current_stage"]
+            == Stage.SCENE_COMMIT.value
+        )
+        else None
+    )
+
     for entry in sorted(staging_root.iterdir()):
         if not entry.name.startswith("scene-scene-"):
             continue
@@ -1575,6 +2041,24 @@ def _validate_scene_card_staging_artifacts(
         volume_number = int(match.group(2))
         chapter_number = int(match.group(3))
         scene_number = int(match.group(4))
+
+        # scene_commitでは欠落したstaging成果物を
+        # immutable採用記録から復元できる。
+        #
+        # 三成果物がすべて存在する場合は通常どおり検証し、
+        # 内容改変や構造破損をRecovery対象として隠さない。
+        if scene_id == recoverable_scene_id:
+            recoverable_paths = (
+                entry / "scene-card.json",
+                entry / "prose.md",
+                entry / "continuity.json",
+            )
+            if any(
+                not candidate.exists()
+                and not candidate.is_symlink()
+                for candidate in recoverable_paths
+            ):
+                continue
 
         card_path = entry / "scene-card.json"
         if not card_path.is_file():

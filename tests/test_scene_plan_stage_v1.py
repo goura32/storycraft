@@ -524,5 +524,23 @@ class ScenePlanStageV1Tests(unittest.TestCase):
             validate_workspace_layout(workspace)
 
 
+    def test_workspace_accepts_scene_generation_without_changes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = prepare_second_scene_workspace(
+                temporary
+            )
+            path = (
+                workspace
+                / "generations/gen-000002/commit.json"
+            )
+            commit = load_json_from(path)
+            commit["changed_targets"] = []
+            write_json(path, commit)
+
+            validate_workspace_layout(workspace)
+
+
 if __name__ == "__main__":
     unittest.main()

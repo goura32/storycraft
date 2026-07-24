@@ -18,13 +18,24 @@ from .series_contracts import (
     ContractValidator,
     StoryModel,
 )
-from .series_workflow import SeriesWorkflow
+from .review_contracts import (
+    validate_critique_fields,
+    validate_revision_scope,
+)
 from .stage_transition import advance_run_state
 from .workspace import validate_workspace_layout
 
 
 CandidateValidator = Callable[[object], None]
 CandidateAdopter = Callable[[dict[str, Any]], None]
+CandidateAfterAdoption = Callable[
+    [
+        dict[str, Any],
+        dict[str, Any],
+        str,
+    ],
+    dict[str, Any],
+]
 
 
 _PRESERVE_ACTIVE_SCENE = object()
@@ -61,6 +72,8 @@ class ReviewedCandidateStageRunner:
         validator: CandidateValidator,
         adopter: CandidateAdopter,
         next_target: dict[str, Any],
+        next_stage: str | None = None,
+        after_adoption: CandidateAfterAdoption | None = None,
         active_scene_id: str | None | object = (
             _PRESERVE_ACTIVE_SCENE
         ),
@@ -148,7 +161,7 @@ class ReviewedCandidateStageRunner:
                     deepcopy(context),
                 )
                 ContractValidator._validate_critique(critique)
-                SeriesWorkflow._validate_critique_fields(
+                validate_critique_fields(
                     critique,
                     candidate,
                 )
@@ -250,6 +263,16 @@ class ReviewedCandidateStageRunner:
                 adopted_state["active_candidate"] = None
                 validate_run_state(adopted_state)
 
+                if after_adoption is not None:
+                    finalized = after_adoption(
+                        deepcopy(candidate),
+                        deepcopy(adopted_state),
+                        timestamp,
+                    )
+                    validate_run_state(finalized)
+                    self.state_store.save(finalized)
+                    return finalized
+
                 transition_kwargs: dict[str, Any] = {}
                 if active_scene_id is not _PRESERVE_ACTIVE_SCENE:
                     transition_kwargs["active_scene_id"] = (
@@ -258,7 +281,9 @@ class ReviewedCandidateStageRunner:
 
                 advanced = advance_run_state(
                     adopted_state,
-                    next_stage=self.spec.next_stage,
+                    next_stage=(
+                        next_stage or self.spec.next_stage
+                    ),
                     next_target=deepcopy(next_target),
                     updated_at=timestamp,
                     **transition_kwargs,
@@ -306,7 +331,7 @@ class ReviewedCandidateStageRunner:
                     raise ContractError(
                         "修正版CandidateがJSON objectではありません"
                     )
-                SeriesWorkflow._validate_revision_scope(
+                validate_revision_scope(
                     candidate,
                     revised,
                     critique,

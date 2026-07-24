@@ -23,6 +23,10 @@ from .reviewed_candidate_stage import (
     reserve_identifier,
     utc_now,
 )
+from .scene_generation import state_target_record
+from .scene_adoption_record import (
+    publish_scene_adoption_record,
+)
 from .scene_prose_stage import SceneProseStageService
 from .series_contracts import (
     ContractError,
@@ -402,31 +406,11 @@ class SceneContinuityStageService:
         target_type: str,
         target_id: str,
     ) -> dict[str, Any]:
-        if target_type == "timeline_state":
-            if target_id != "timeline":
-                raise ContractError(
-                    "timeline_stateのtarget_idはtimelineが必要です"
-                )
-            return state["timeline"]
-
-        sources = {
-            "character_state": state["characters"],
-            "relationship_state": state["relationships"],
-            "thread_state": state["threads"],
-            "inventory_state": state["inventory"],
-            "commitment_state": state["commitments"],
-        }
-        source = sources.get(target_type)
-        if source is None or target_id not in source:
-            raise ContractError(
-                "Continuityが未知のState targetを参照しています"
-            )
-        record = source[target_id]
-        if not isinstance(record, dict):
-            raise ContractError(
-                "Continuity targetのcurrent Stateが不正です"
-            )
-        return record
+        return state_target_record(
+            state,
+            target_type,
+            target_id,
+        )
 
     @classmethod
     def _validate_candidate(
@@ -1063,10 +1047,6 @@ class SceneContinuityStageService:
         )
 
         path = staging_root / "continuity.json"
-        if path.exists():
-            raise ContractError(
-                "採用済みContinuityを上書きできません"
-            )
 
         evidence_ids = [
             reserve_identifier(
@@ -1139,7 +1119,22 @@ class SceneContinuityStageService:
             scene_id=scene_id,
             basis_generation_id=basis_generation_id,
         )
-        self._write_json_atomic(path, adopted)
+        if path.exists():
+            existing = read_json(path)
+            if existing != adopted:
+                raise ContractError(
+                    "採用済みContinuityを上書きできません"
+                )
+        else:
+            self._write_json_atomic(path, adopted)
+
+        publish_scene_adoption_record(
+            self.workspace_root,
+            scene_id=scene_id,
+            scene_card=scene_card,
+            prose=prose,
+            continuity=adopted,
+        )
 
     @staticmethod
     def _write_json_atomic(

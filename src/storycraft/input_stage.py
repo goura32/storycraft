@@ -16,7 +16,10 @@ from .series_contracts import (
     ContractValidator,
     StoryModel,
 )
-from .series_workflow import SeriesWorkflow
+from .review_contracts import (
+    validate_critique_fields,
+    validate_revision_scope,
+)
 from .stage_transition import advance_run_state
 from .workspace import validate_workspace_layout
 
@@ -129,7 +132,7 @@ class InputStageService:
                     context,
                 )
                 ContractValidator._validate_critique(critique)
-                SeriesWorkflow._validate_critique_fields(
+                validate_critique_fields(
                     critique,
                     candidate,
                 )
@@ -264,7 +267,7 @@ class InputStageService:
                     revised,
                     keywords,
                 )
-                SeriesWorkflow._validate_revision_scope(
+                validate_revision_scope(
                     candidate,
                     revised,
                     critique,

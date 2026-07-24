@@ -218,6 +218,37 @@ class SceneContinuityStageV1Tests(unittest.TestCase):
                 continuity["evidence"][0]["evidence_id"],
                 "evidence-000001",
             )
+
+            adoption_root = (
+                workspace
+                / "runtime/candidates/scene_continuity"
+                / (
+                    "adopted-scene-v01-c001-s001"
+                    "-v0001"
+                )
+            )
+            self.assertEqual(
+                load_json_from(
+                    adoption_root / "continuity.json"
+                ),
+                continuity,
+            )
+            self.assertEqual(
+                load_json_from(
+                    adoption_root / "scene-card.json"
+                ),
+                load_json_from(
+                    root / "scene-card.json"
+                ),
+            )
+            self.assertEqual(
+                (
+                    adoption_root / "prose.md"
+                ).read_text(encoding="utf-8"),
+                (
+                    root / "prose.md"
+                ).read_text(encoding="utf-8"),
+            )
             self.assertEqual(
                 continuity["operations"][0]["evidence_ids"],
                 ["evidence-000001"],

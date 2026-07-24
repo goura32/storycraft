@@ -1,0 +1,36 @@
+# volume_handoff の修正
+
+採用済み批評issuesに従いVolume Handoff Candidateを修正する。
+
+**issuesで引用されたfieldだけを変更し、
+issuesにないfieldは変更しない。**
+
+## 修正原則
+
+- 巻末GenerationのCharacter、Relationship、Thread IDを変更しない
+- resolved/openの判定は巻末Thread statusを正本にする
+- 確定Sceneにない出来事を追加しない
+- 未解決Threadを勝手に解決しない
+- CanonまたはStateを変更しない
+- 次巻の出来事を既成事実として書かない
+- Series PlanのEnding pathを別のEndingへ変更しない
+- 入力にない新事実やIDを追加しない
+- 採用metadataを追加しない
+- 自然な日本語へ必要最小限で修正する
+- 出力スキーマを完全に満たす
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 批評issues
+
+{{ critique | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
