@@ -9,6 +9,9 @@ from typing import Any
 from .chapter_plan_stage import ChapterPlanStageService
 from .completion_stage import CompletionStageService
 from .initial_accept_stage import InitialAcceptStageService
+from .publication_recovery import (
+    execute_publication_recovery,
+)
 from .publication_stage import PublicationStageService
 from .initial_characters_stage import (
     InitialCharactersStageService,
@@ -202,6 +205,13 @@ class V1WorkflowService:
 
         if pending.get("kind") == Stage.SCENE_COMMIT.value:
             execute_scene_commit_recovery(
+                self.workspace_root,
+                state,
+            )
+            return
+
+        if pending.get("kind") == Stage.PUBLICATION.value:
+            execute_publication_recovery(
                 self.workspace_root,
                 state,
             )
