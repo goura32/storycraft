@@ -215,6 +215,15 @@ class V1WorkflowService:
         if pending.get("kind") == "candidate_adoption":
             stage = Stage(state["current_stage"])
 
+            if stage is Stage.INPUT:
+                InputStageService(
+                    self.workspace_root
+                ).run(
+                    None,
+                    updated_at=state["updated_at"],
+                )
+                return
+
             if (
                 stage
                 not in _CANDIDATE_ADOPTION_RECOVERY_STAGES
