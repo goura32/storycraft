@@ -871,7 +871,6 @@ def _validate_initial_generation_artifacts(
             )
         if (
             not isinstance(changed_targets, list)
-            or not changed_targets
             or any(
                 not isinstance(target, str) or not target
                 for target in changed_targets
