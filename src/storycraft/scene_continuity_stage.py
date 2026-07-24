@@ -24,6 +24,9 @@ from .reviewed_candidate_stage import (
     utc_now,
 )
 from .scene_generation import state_target_record
+from .scene_adoption_record import (
+    publish_scene_adoption_record,
+)
 from .scene_prose_stage import SceneProseStageService
 from .series_contracts import (
     ContractError,
@@ -1044,10 +1047,6 @@ class SceneContinuityStageService:
         )
 
         path = staging_root / "continuity.json"
-        if path.exists():
-            raise ContractError(
-                "採用済みContinuityを上書きできません"
-            )
 
         evidence_ids = [
             reserve_identifier(
@@ -1120,7 +1119,22 @@ class SceneContinuityStageService:
             scene_id=scene_id,
             basis_generation_id=basis_generation_id,
         )
-        self._write_json_atomic(path, adopted)
+        if path.exists():
+            existing = read_json(path)
+            if existing != adopted:
+                raise ContractError(
+                    "採用済みContinuityを上書きできません"
+                )
+        else:
+            self._write_json_atomic(path, adopted)
+
+        publish_scene_adoption_record(
+            self.workspace_root,
+            scene_id=scene_id,
+            scene_card=scene_card,
+            prose=prose,
+            continuity=adopted,
+        )
 
     @staticmethod
     def _write_json_atomic(
