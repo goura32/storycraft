@@ -1,0 +1,33 @@
+# V1 Scene継続性更新の批評
+
+候補を凍結本文、allowed_updates、Current Stateへ照合し、
+修正可能で具体的な問題だけをissuesへ出す。
+問題がなければ空配列を返す。
+
+## Review観点
+
+- 本文に書かれた変化だけである
+- allowed_updates外のtargetまたはfieldがない
+- old_valueがCurrent Stateと完全一致する
+- new_valueがfieldの型と不変条件を守る
+- no-op更新がない
+- Evidence quoteが本文へ完全一致する
+- occurrenceが正しい
+- Evidenceが対応する更新対象と一致する
+- 曖昧な変化を断定していない
+- 将来Plan、Ending、作者用秘密を新事実として追加していない
+- operationsが空でも、本文上変更なしなら正当な候補として扱う
+
+issue.fieldには `operations[0].old_value` のような具体的fieldを指定する。
+
+## Continuity Candidate
+
+{{ candidate | tojson }}
+
+## Continuity Context
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

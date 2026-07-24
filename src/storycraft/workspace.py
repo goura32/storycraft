@@ -1680,6 +1680,33 @@ def _validate_scene_card_staging_artifacts(
                 ) from exc
             SceneProseStageService._validate_prose_text(prose)
 
+        continuity_path = entry / "continuity.json"
+        if continuity_path.exists():
+            if not prose_path.is_file():
+                raise ContractError(
+                    "Scene stagingのContinuityにはprose.mdが必要です"
+                )
+            if not continuity_path.is_file():
+                raise ContractError(
+                    "Scene stagingのcontinuity.jsonはfileが必要です"
+                )
+
+            from .scene_continuity_stage import (
+                SceneContinuityStageService,
+            )
+
+            continuity = _read_json(continuity_path)
+            prose = prose_path.read_text(encoding="utf-8")
+            SceneContinuityStageService._validate_adopted(
+                continuity,
+                prose=prose,
+                scene_card=card,
+                current_generation=current_generation,
+                initial_design=initial_design,
+                scene_id=scene_id,
+                basis_generation_id=basis_generation_id,
+            )
+
 
 def _create_directories(root: Path) -> None:
     for relative in REQUIRED_DIRECTORIES:
