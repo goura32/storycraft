@@ -35,6 +35,53 @@ class OpenAIStoryModel:
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         return self._call("revision", stage, self._render("revision", stage, candidate=candidate, critique=critique, context=context))
 
+    def generate_prose(
+        self,
+        stage: str,
+        context: dict[str, Any],
+    ) -> str:
+        return self._call_text(
+            "generate",
+            stage,
+            self._render("generate", stage, context=context),
+        )
+
+    def critique_prose(
+        self,
+        stage: str,
+        candidate: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._call(
+            "critique",
+            stage,
+            self._render(
+                "critique",
+                stage,
+                candidate=candidate,
+                context=context,
+            ),
+        )
+
+    def revision_prose(
+        self,
+        stage: str,
+        candidate: str,
+        critique: dict[str, Any],
+        context: dict[str, Any],
+    ) -> str:
+        return self._call_text(
+            "revision",
+            stage,
+            self._render(
+                "revision",
+                stage,
+                candidate=candidate,
+                critique=critique,
+                context=context,
+            ),
+        )
+
     @staticmethod
     def _render(kind: str, stage: str, **kwargs: Any) -> str:
         if stage not in ACTIVE_TEMPLATE_STAGES:
@@ -96,3 +143,87 @@ class OpenAIStoryModel:
                 stage, kind, retry_attempt, attempts, type(value).__name__,
             )
         raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: reason={failure_reason}")
+
+    def _call_text(
+        self,
+        kind: str,
+        stage: str,
+        user_prompt: str,
+    ) -> str:
+        failure_reason = "unknown"
+        attempts = max(
+            int(
+                self.client.settings.retry.get(
+                    "max_attempts",
+                    1,
+                )
+            ),
+            1,
+        )
+        ref = getattr(self, "_log_ref", stage)
+        for retry_attempt in range(1, attempts + 1):
+            self._seed_sequence = (
+                getattr(self, "_seed_sequence", 0) + 1
+            )
+            seed = self._seed_sequence
+            messages = [
+                {
+                    "role": "system",
+                    "content": get_template_loader().render_system(
+                        "prose"
+                    ),
+                },
+                {"role": "user", "content": user_prompt},
+                {
+                    "__kind": kind,
+                    "__phase": stage,
+                    "__ref": ref,
+                    "__attempt": retry_attempt,
+                    "__retry_total": attempts,
+                    "__quality_pass": getattr(
+                        self,
+                        "_log_quality_pass",
+                        "",
+                    ),
+                },
+            ]
+            record = self.client.call_once(
+                messages,
+                None,
+                seed,
+            )
+            self.client.save_raw(record, messages)
+            if record.error:
+                failure_reason = (
+                    "transport:"
+                    f"{self._safe_error_type(record.error)}"
+                )
+                logger.error(
+                    "LLM通信エラー: stage=%s kind=%s "
+                    "attempt=%s/%s error_type=%s",
+                    stage,
+                    kind,
+                    retry_attempt,
+                    attempts,
+                    self._safe_error_type(record.error),
+                )
+                continue
+
+            value = record.content.strip()
+            if value:
+                return value
+
+            failure_reason = "empty_text"
+            logger.error(
+                "LLM本文形式エラー: stage=%s kind=%s "
+                "attempt=%s/%s reason=empty_text",
+                stage,
+                kind,
+                retry_attempt,
+                attempts,
+            )
+
+        raise LLMCallError(
+            f"{stage} のLLM本文呼び出しに失敗しました: "
+            f"reason={failure_reason}"
+        )

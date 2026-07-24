@@ -1,0 +1,32 @@
+# V1 Scene本文の修正
+
+Review issuesを解消した、完全な置換本文を返す。
+
+## 修正方針
+
+- 問題のない出来事、POV、開示、文体、因果を保持する
+- 指摘された問題を本文中で直接修正する
+- Scene Cardの必須beatやrequired_revelationsを削除しない
+- forbidden_revelationsを追加しない
+- 非POV人物の内面を断定しない
+- 入力にない人物、事実、秘密、状態変化を追加しない
+- 差分、説明、見出し、箇条書き、JSON、code fenceを返さない
+- 完成したScene本文だけを返す
+
+## 元本文
+
+{{ candidate }}
+
+## Review issues
+
+{{ critique | tojson }}
+
+## Writer Context
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+以下のSchemaは応答値の型を示す。JSON文字列としてquoteせず、本文そのものだけを返す。
+
+{{ output_schema }}

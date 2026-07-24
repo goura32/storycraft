@@ -125,13 +125,26 @@ class LLMClient:
         )
         logger.info("LLM開始: %s", rec.log_identity())
         try:
+            request = {
+                "model": llm["model"],
+                "messages": [
+                    m for m in messages
+                    if not (
+                        isinstance(m, dict)
+                        and "__" in "".join(m.keys())
+                    )
+                ],
+                "stream": True,
+                "extra_body": {
+                    "think": bool(llm.get("thinking", True)),
+                    "seed": seed,
+                },
+            }
+            if response_format is not None:
+                request["response_format"] = response_format
             stream = self.client.chat.completions.create(
-                            model=llm["model"],
-                            messages=[m for m in messages if not (isinstance(m, dict) and "__" in "".join(m.keys()))],  # type: ignore[list-item]
-                            response_format=response_format,
-                            stream=True,
-                            extra_body={"think": bool(llm.get("thinking", True)), "seed": seed},
-                        )
+                **request,
+            )
             idle_timeout = llm.get("idle_timeout_seconds", 600)
             progress_interval = llm.get("stream_progress_log_interval_seconds", 30)
             start = time.time()
