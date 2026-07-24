@@ -387,3 +387,22 @@ class V1WorkflowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class V1WorkflowDispatchCoverageTest(unittest.TestCase):
+    def test_every_v1_stage_has_dispatch_path(self) -> None:
+        from storycraft import v1_workflow
+        from storycraft.stages import Stage
+
+        code_only_or_special = {
+            Stage.INPUT,
+            Stage.INITIAL_ACCEPT,
+            Stage.SCENE_COMMIT,
+            Stage.PUBLICATION,
+        }
+        handled = (
+            set(v1_workflow._MODEL_STAGE_SERVICES)
+            | code_only_or_special
+        )
+
+        self.assertEqual(handled, set(Stage))

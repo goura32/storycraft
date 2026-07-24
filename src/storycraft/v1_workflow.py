@@ -154,7 +154,7 @@ class V1WorkflowService:
 
         if service_type is None:
             raise ContractError(
-                "V1 Stageはまだ実装されていません: "
+                "V1 Stage handlerが登録されていません: "
                 f"{stage.value}"
             )
 
