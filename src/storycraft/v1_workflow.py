@@ -87,7 +87,7 @@ class V1WorkflowService:
                 validate_workspace_layout(
                     self.workspace_root
                 )
-                state = self.state_store.load()
+                return self.state_store.load()
 
             return self._execute_stage(
                 state,

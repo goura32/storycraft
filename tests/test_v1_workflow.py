@@ -245,7 +245,7 @@ class V1WorkflowTest(unittest.TestCase):
                 model,
             )
 
-    def test_pending_commit_stops_before_validation_and_model(
+    def test_pending_commit_recovery_returns_without_running_next_stage(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -264,23 +264,57 @@ class V1WorkflowTest(unittest.TestCase):
                 },
             )
             model_calls: list[object] = []
+            store = RunStateStore(workspace)
+            recovered = store.load()
+            recovered["current_stage"] = "scene_plan"
+            recovered["current_target"] = {
+                "series": "ws-test-0001",
+                "volume_number": 1,
+                "chapter_number": 1,
+                "scene_number": 2,
+                "basis_generation_id": "gen-000002",
+            }
+            recovered["current_generation_id"] = (
+                "gen-000002"
+            )
+            recovered["active_scene_id"] = None
+            recovered["pending_commit"] = None
 
-            with patch(
-                "storycraft.v1_workflow."
-                "validate_workspace_layout"
-            ) as validate:
-                with self.assertRaisesRegex(
-                    ContractError,
-                    "Recoveryは未実装",
-                ):
-                    V1WorkflowService(
-                        workspace,
-                        model_factory=lambda: model_calls.append(
-                            object()
-                        ),
-                    ).step()
+            def recover(state: dict) -> None:
+                self.assertEqual(
+                    state["current_stage"],
+                    "scene_commit",
+                )
+                store.save(recovered)
 
-            validate.assert_called_once_with(workspace)
+            service = V1WorkflowService(
+                workspace,
+                model_factory=lambda: model_calls.append(
+                    object()
+                ),
+            )
+
+            with (
+                patch(
+                    "storycraft.v1_workflow."
+                    "validate_workspace_layout"
+                ) as validate,
+                patch.object(
+                    service,
+                    "_recover_pending_commit",
+                    side_effect=recover,
+                ) as recovery,
+                patch.object(
+                    service,
+                    "_execute_stage",
+                ) as execute,
+            ):
+                result = service.step()
+
+            self.assertEqual(result, recovered)
+            recovery.assert_called_once()
+            execute.assert_not_called()
+            self.assertEqual(validate.call_count, 2)
             self.assertEqual(model_calls, [])
 
     def test_scene_commit_does_not_create_model(
