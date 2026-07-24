@@ -28,6 +28,14 @@ from .workspace import validate_workspace_layout
 
 CandidateValidator = Callable[[object], None]
 CandidateAdopter = Callable[[dict[str, Any]], None]
+CandidateAfterAdoption = Callable[
+    [
+        dict[str, Any],
+        dict[str, Any],
+        str,
+    ],
+    dict[str, Any],
+]
 
 
 _PRESERVE_ACTIVE_SCENE = object()
@@ -65,6 +73,7 @@ class ReviewedCandidateStageRunner:
         adopter: CandidateAdopter,
         next_target: dict[str, Any],
         next_stage: str | None = None,
+        after_adoption: CandidateAfterAdoption | None = None,
         active_scene_id: str | None | object = (
             _PRESERVE_ACTIVE_SCENE
         ),
@@ -253,6 +262,16 @@ class ReviewedCandidateStageRunner:
                 adopted_state = deepcopy(state)
                 adopted_state["active_candidate"] = None
                 validate_run_state(adopted_state)
+
+                if after_adoption is not None:
+                    finalized = after_adoption(
+                        deepcopy(candidate),
+                        deepcopy(adopted_state),
+                        timestamp,
+                    )
+                    validate_run_state(finalized)
+                    self.state_store.save(finalized)
+                    return finalized
 
                 transition_kwargs: dict[str, Any] = {}
                 if active_scene_id is not _PRESERVE_ACTIVE_SCENE:

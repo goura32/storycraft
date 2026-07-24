@@ -349,13 +349,13 @@ class V1WorkflowTest(unittest.TestCase):
             self.assertEqual(model_calls, [])
             self.assertEqual(FakeService.calls[0][0], ())
 
-    def test_unimplemented_completion_does_not_create_model(
+    def test_unimplemented_publication_does_not_create_model(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = self.create_workspace(
                 temporary,
-                stage="completion",
+                stage="publication",
             )
             model_calls: list[object] = []
 

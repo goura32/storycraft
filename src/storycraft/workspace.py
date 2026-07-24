@@ -290,6 +290,7 @@ def validate_workspace_layout(
     _validate_chapter_plan_artifacts(root)
     _validate_scene_plan_artifacts(root)
     _validate_volume_handoff_artifacts(root)
+    _validate_completion_artifacts(root)
     _validate_scene_card_staging_artifacts(root, state=state)
 
     resolved_root = root.resolve()
@@ -1734,6 +1735,139 @@ def _validate_volume_handoff_artifacts(
         raise ContractError(
             "Volume Handoffは第一巻から"
             "欠番なく存在する必要があります"
+        )
+
+
+def _validate_completion_artifacts(
+    root: Path,
+) -> None:
+    """存在するimmutable Completion Resultを検証する。"""
+    completion_root = root / "completion"
+    entries = sorted(completion_root.iterdir())
+    if not entries:
+        return
+
+    initial_design_path = (
+        root / "design/initial/v0001/initial-design.json"
+    )
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    if not initial_design_path.is_file():
+        raise ContractError(
+            "Completion Resultには"
+            "採用済みInitial Designが必要です"
+        )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "Completion Resultには"
+            "採用済みSeries Planが必要です"
+        )
+
+    initial_design = _read_json(initial_design_path)
+    series_plan = _read_json(series_plan_path)
+
+    volume_count = series_plan.get("volume_count")
+    if (
+        not isinstance(volume_count, int)
+        or isinstance(volume_count, bool)
+        or volume_count < 1
+    ):
+        raise ContractError(
+            "Completion Resultの"
+            "Series Plan.volume_countが不正です"
+        )
+
+    handoffs: list[dict[str, Any]] = []
+    for volume_number in range(1, volume_count + 1):
+        path = (
+            root
+            / "handoffs"
+            / f"handoff-v{volume_number:02d}"
+            / "handoff.json"
+        )
+        if not path.is_file():
+            raise ContractError(
+                "Completion Resultには"
+                "全Volume Handoffが必要です"
+            )
+        handoffs.append(_read_json(path))
+
+    from .series_contracts import ContractValidator
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Completion pathは通常directoryが必要です"
+            )
+        if re.fullmatch(
+            r"completion-[0-9]{6}",
+            directory.name,
+        ) is None:
+            raise ContractError(
+                "Completion directory名が不正です"
+            )
+        if {
+            entry.name for entry in directory.iterdir()
+        } != {"result.json"}:
+            raise ContractError(
+                "Completion directoryの"
+                "file構成が不正です"
+            )
+
+        result = _read_json(
+            directory / "result.json"
+        )
+        if (
+            result.get("completion_id")
+            != directory.name
+        ):
+            raise ContractError(
+                "Completion IDがdirectory名と"
+                "一致しません"
+            )
+
+        generation_id = result.get(
+            "basis_generation_id"
+        )
+        if not isinstance(generation_id, str):
+            raise ContractError(
+                "Completion basis_generation_idが"
+                "不正です"
+            )
+
+        generation_root = (
+            root / "generations" / generation_id
+        )
+        generation: dict[str, Any] = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            file = generation_root / name
+            if not file.is_file():
+                raise ContractError(
+                    "Completion basis Generationが"
+                    f"不完全です: {name}"
+                )
+            generation[name] = _read_json(file)
+
+        ContractValidator._validate_completion(
+            result,
+            generation,
+            initial_design,
+            series_plan,
+            handoffs,
+            generation_id,
+            adopted=True,
         )
 
 

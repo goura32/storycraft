@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .chapter_plan_stage import ChapterPlanStageService
+from .completion_stage import CompletionStageService
 from .initial_accept_stage import InitialAcceptStageService
 from .initial_characters_stage import (
     InitialCharactersStageService,
@@ -63,6 +64,7 @@ _MODEL_STAGE_SERVICES = {
     Stage.SCENE_PROSE: SceneProseStageService,
     Stage.SCENE_CONTINUITY: SceneContinuityStageService,
     Stage.VOLUME_HANDOFF: VolumeHandoffStageService,
+    Stage.COMPLETION: CompletionStageService,
 }
 
 
