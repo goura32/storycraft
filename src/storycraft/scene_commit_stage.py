@@ -17,7 +17,12 @@ from .reviewed_candidate_stage import (
     utc_now,
     write_json_new,
 )
+from .orphan_storage import move_directory_to_orphans
 from .run_state import RunStateStore, validate_run_state
+from .scene_adoption_record import (
+    load_scene_adoption_record,
+    restore_scene_staging_from_adoption_record,
+)
 from .scene_continuity_stage import (
     SceneContinuityStageService,
 )
@@ -222,6 +227,11 @@ class SceneCommitStageService:
                 "scene_commit targetのscene_idが"
                 "対象座標と一致しません"
             )
+
+        self._ensure_scene_staging_available(
+            scene_id=scene_id,
+            updated_at=timestamp,
+        )
 
         parent_generation_id = state[
             "current_generation_id"
@@ -520,6 +530,90 @@ class SceneCommitStageService:
 
         validate_workspace_layout(self.workspace_root)
         return advanced
+
+    def _ensure_scene_staging_available(
+        self,
+        *,
+        scene_id: str,
+        updated_at: str,
+    ) -> Path:
+        """採用記録と一致するScene stagingを用意する。"""
+        final_scene = (
+            self.workspace_root / "scenes" / scene_id
+        )
+        if (
+            final_scene.exists()
+            or final_scene.is_symlink()
+        ):
+            raise ContractError(
+                "pending_commitがない状態で"
+                "確定済みSceneが存在します"
+            )
+
+        record = load_scene_adoption_record(
+            self.workspace_root,
+            scene_id,
+        )
+        staging = (
+            self.workspace_root
+            / "runtime/staging"
+            / f"scene-{scene_id}"
+        )
+
+        if not staging.exists() and not staging.is_symlink():
+            return restore_scene_staging_from_adoption_record(
+                self.workspace_root,
+                scene_id,
+            )
+
+        if staging.is_symlink() or not staging.is_dir():
+            raise ContractError(
+                "Scene stagingが通常directoryでは"
+                "ないためmanual対応が必要です"
+            )
+
+        try:
+            scene_card = read_json(
+                staging / "scene-card.json"
+            )
+            continuity = read_json(
+                staging / "continuity.json"
+            )
+            prose = (
+                staging / "prose.md"
+            ).read_text(encoding="utf-8")
+
+            if scene_card != record.scene_card:
+                raise ContractError(
+                    "Scene stagingのScene Cardが"
+                    "採用記録と一致しません"
+                )
+            if prose != record.prose:
+                raise ContractError(
+                    "Scene stagingの本文が"
+                    "採用記録と一致しません"
+                )
+            if continuity != record.continuity:
+                raise ContractError(
+                    "Scene stagingのContinuityが"
+                    "採用記録と一致しません"
+                )
+
+            return staging
+        except (
+            ContractError,
+            OSError,
+            UnicodeError,
+        ):
+            move_directory_to_orphans(
+                self.workspace_root,
+                staging,
+                updated_at=updated_at,
+            )
+            return restore_scene_staging_from_adoption_record(
+                self.workspace_root,
+                scene_id,
+            )
 
     def _read_generation(
         self,

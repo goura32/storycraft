@@ -300,3 +300,71 @@ def _write_text_new(path: Path, value: str) -> None:
         raise ContractError(
             "Scene採用記録の本文を書き込めません"
         ) from exc
+
+
+def restore_scene_staging_from_adoption_record(
+    workspace_root: Path,
+    scene_id: str,
+) -> Path:
+    """immutable採用記録からactive Scene stagingを復元する。"""
+    root = workspace_root.expanduser()
+    record = load_scene_adoption_record(
+        root,
+        scene_id,
+    )
+    final = (
+        root
+        / "runtime/staging"
+        / f"scene-{scene_id}"
+    )
+    parent = final.parent
+
+    if final.exists() or final.is_symlink():
+        raise ContractError(
+            "復元先Scene stagingが既に存在します"
+        )
+    if parent.is_symlink() or not parent.is_dir():
+        raise ContractError(
+            "runtime/staging directoryが存在しません"
+        )
+
+    staging = Path(
+        tempfile.mkdtemp(
+            prefix=f".restore-{scene_id}-",
+            dir=parent,
+        )
+    )
+
+    try:
+        write_json_new(
+            staging / "scene-card.json",
+            record.scene_card,
+        )
+        _write_text_new(
+            staging / "prose.md",
+            record.prose,
+        )
+        write_json_new(
+            staging / "continuity.json",
+            record.continuity,
+        )
+        fsync_directory(staging)
+
+        validator = lambda path: (
+            _validate_record_directory(
+                path,
+                scene_id=scene_id,
+                expected=record,
+            )
+        )
+
+        finalize_immutable_directory(
+            staging=staging,
+            final=final,
+            validator=validator,
+        )
+        return final
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise

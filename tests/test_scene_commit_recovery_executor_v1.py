@@ -72,6 +72,65 @@ class SceneCommitRecoveryExecutorV1Test(
                 ).is_dir()
             )
 
+    def test_prepared_recovery_rebuilds_missing_scene_staging(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_commit_workspace(
+                temporary
+            )
+            service = SceneCommitStageService(workspace)
+
+            with patch(
+                "storycraft.scene_commit_stage."
+                "finalize_immutable_directory",
+                side_effect=RuntimeError("crash"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    service.run(updated_at=COMMIT_AT)
+
+            scene_staging = (
+                Path(workspace)
+                / "runtime/staging"
+                / "scene-scene-v01-c001-s001"
+            )
+            for child in scene_staging.iterdir():
+                child.unlink()
+            scene_staging.rmdir()
+
+            recovered = execute_scene_commit_recovery(
+                workspace
+            )
+
+            self.assertEqual(
+                recovered["current_generation_id"],
+                "gen-000002",
+            )
+            self.assertTrue(
+                (
+                    Path(workspace)
+                    / "scenes/scene-v01-c001-s001"
+                ).is_dir()
+            )
+            self.assertTrue(
+                (
+                    Path(workspace)
+                    / "generations/gen-000002"
+                ).is_dir()
+            )
+            generation_orphans = list(
+                (
+                    Path(workspace)
+                    / "runtime/orphans"
+                ).glob(
+                    "*-generation-gen-000002*"
+                )
+            )
+            self.assertEqual(
+                len(generation_orphans),
+                1,
+            )
+
     def test_scene_rename_recovery_finishes_commit(
         self,
     ) -> None:

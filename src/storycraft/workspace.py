@@ -1554,6 +1554,16 @@ def _validate_scene_card_staging_artifacts(
 ) -> None:
     """存在するactive Scene Card stagingを検証する。"""
     staging_root = root / "runtime/staging"
+    state = RunStateStore(root).load()
+    recoverable_scene_id = (
+        state["active_scene_id"]
+        if (
+            state["current_stage"]
+            == Stage.SCENE_COMMIT.value
+        )
+        else None
+    )
+
     for entry in sorted(staging_root.iterdir()):
         if not entry.name.startswith("scene-scene-"):
             continue
@@ -1574,6 +1584,24 @@ def _validate_scene_card_staging_artifacts(
         volume_number = int(match.group(2))
         chapter_number = int(match.group(3))
         scene_number = int(match.group(4))
+
+        # scene_commitでは欠落したstaging成果物を
+        # immutable採用記録から復元できる。
+        #
+        # 三成果物がすべて存在する場合は通常どおり検証し、
+        # 内容改変や構造破損をRecovery対象として隠さない。
+        if scene_id == recoverable_scene_id:
+            recoverable_paths = (
+                entry / "scene-card.json",
+                entry / "prose.md",
+                entry / "continuity.json",
+            )
+            if any(
+                not candidate.exists()
+                and not candidate.is_symlink()
+                for candidate in recoverable_paths
+            ):
+                continue
 
         card_path = entry / "scene-card.json"
         if not card_path.is_file():

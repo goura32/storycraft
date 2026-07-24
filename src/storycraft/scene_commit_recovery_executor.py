@@ -3,19 +3,18 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-import os
 from pathlib import Path
-import re
 from typing import Any, Callable
 
 from .immutable_directory import (
     finalize_immutable_directory,
 )
-from .reviewed_candidate_stage import (
-    fsync_directory,
-    read_json,
-)
+from .orphan_storage import move_directory_to_orphans
+from .reviewed_candidate_stage import read_json
 from .run_state import RunStateStore, validate_run_state
+from .scene_adoption_record import (
+    load_scene_adoption_record,
+)
 from .scene_commit_recovery import (
     DirectoryCondition,
     SceneCommitRecoveryAction,
@@ -27,7 +26,11 @@ from .scene_commit_stage import (
     SceneCommitStageService,
     determine_scene_commit_transition,
 )
-from .scene_generation import build_scene_generation
+from .scene_generation import (
+    build_scene_commit,
+    build_scene_generation,
+    validate_scene_commit,
+)
 from .series_contracts import ContractError
 from .stage_transition import advance_run_state
 from .workspace import validate_workspace_layout
@@ -205,9 +208,9 @@ def execute_scene_commit_recovery(
             inspection.snapshot.generation_staging
             is not DirectoryCondition.ABSENT
         ):
-            _move_to_orphans(
+            move_directory_to_orphans(
+                context.root,
                 context.generation_staging,
-                context.root / "runtime/orphans",
                 updated_at=timestamp,
             )
 
@@ -283,20 +286,21 @@ def _restart_commit(
     """finalがない状態でGeneration stagingを再準備する。"""
     if (
         inspection.snapshot.scene_staging
-        is not DirectoryCondition.COMPLETE
+        is DirectoryCondition.INVALID
     ):
-        raise ContractError(
-            "Scene stagingを決定的に再構築する情報が"
-            "不足しているためmanual対応が必要です"
+        move_directory_to_orphans(
+            context.root,
+            context.scene_staging,
+            updated_at=updated_at,
         )
 
     if (
         inspection.snapshot.generation_staging
         is not DirectoryCondition.ABSENT
     ):
-        _move_to_orphans(
+        move_directory_to_orphans(
+            context.root,
             context.generation_staging,
-            context.root / "runtime/orphans",
             updated_at=updated_at,
         )
 
@@ -436,25 +440,46 @@ def _load_context(
         scene_source = scene_staging
 
     if scene_source is None:
-        _raise_manual(inspection)
+        try:
+            adoption = load_scene_adoption_record(
+                root,
+                scene_id,
+            )
+        except ContractError:
+            _raise_manual(inspection)
 
-    scene_card = read_json(
-        scene_source / "scene-card.json"
-    )
-    continuity = read_json(
-        scene_source / "continuity.json"
-    )
-    scene_commit = read_json(
-        scene_source / "commit.json"
-    )
-    try:
-        prose = (scene_source / "prose.md").read_text(
-            encoding="utf-8"
+        scene_card = deepcopy(adoption.scene_card)
+        prose = adoption.prose
+        continuity = deepcopy(adoption.continuity)
+        scene_commit = build_scene_commit(
+            scene_card=scene_card,
+            continuity=continuity,
         )
-    except (OSError, UnicodeError) as exc:
-        raise ContractError(
-            "Recovery対象Scene本文を読み込めません"
-        ) from exc
+        validate_scene_commit(
+            scene_commit,
+            scene_card=scene_card,
+            continuity=continuity,
+        )
+    else:
+        scene_card = read_json(
+            scene_source / "scene-card.json"
+        )
+        continuity = read_json(
+            scene_source / "continuity.json"
+        )
+        scene_commit = read_json(
+            scene_source / "commit.json"
+        )
+        try:
+            prose = (
+                scene_source / "prose.md"
+            ).read_text(
+                encoding="utf-8"
+            )
+        except (OSError, UnicodeError) as exc:
+            raise ContractError(
+                "Recovery対象Scene本文を読み込めません"
+            ) from exc
 
     def scene_validator(path: Path) -> None:
         service._validate_scene_directory(
@@ -507,48 +532,6 @@ def _load_context(
         scene_validator=scene_validator,
         generation_validator=generation_validator,
     )
-
-
-def _move_to_orphans(
-    source: Path,
-    orphans_root: Path,
-    *,
-    updated_at: str,
-) -> Path:
-    """未採用stagingを上書きせずorphansへ移す。"""
-    if source.is_symlink() or not source.is_dir():
-        raise ContractError(
-            "Recovery対象stagingが通常directoryでは"
-            "ないためmanual対応が必要です"
-        )
-
-    orphans_root.mkdir(parents=True, exist_ok=True)
-
-    timestamp = re.sub(
-        r"[^0-9A-Za-z]",
-        "",
-        updated_at,
-    )
-    base = f"{timestamp}-{source.name}"
-    destination = orphans_root / base
-    suffix = 1
-
-    while destination.exists() or destination.is_symlink():
-        destination = (
-            orphans_root / f"{base}-{suffix:03d}"
-        )
-        suffix += 1
-
-    try:
-        os.rename(source, destination)
-        fsync_directory(source.parent)
-        fsync_directory(orphans_root)
-    except OSError as exc:
-        raise ContractError(
-            "stagingをorphansへ移動できません"
-        ) from exc
-
-    return destination
 
 
 def _raise_manual(

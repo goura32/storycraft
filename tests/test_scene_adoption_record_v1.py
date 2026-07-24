@@ -8,6 +8,7 @@ import unittest
 from storycraft.scene_adoption_record import (
     load_scene_adoption_record,
     publish_scene_adoption_record,
+    restore_scene_staging_from_adoption_record,
     scene_adoption_record_path,
 )
 from storycraft.scene_continuity_stage import (
@@ -117,6 +118,52 @@ class SceneAdoptionRecordV1Test(unittest.TestCase):
                     SCENE_ID,
                 ),
                 expected,
+            )
+
+    def test_record_restores_missing_scene_staging(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_record_workspace(temporary)
+            expected = load_scene_adoption_record(
+                workspace,
+                SCENE_ID,
+            )
+            staging = (
+                workspace
+                / "runtime/staging"
+                / f"scene-{SCENE_ID}"
+            )
+
+            for entry in staging.iterdir():
+                entry.unlink()
+            staging.rmdir()
+
+            restored = (
+                restore_scene_staging_from_adoption_record(
+                    workspace,
+                    SCENE_ID,
+                )
+            )
+
+            self.assertEqual(restored, staging)
+            self.assertEqual(
+                load_json_from(
+                    restored / "scene-card.json"
+                ),
+                expected.scene_card,
+            )
+            self.assertEqual(
+                (
+                    restored / "prose.md"
+                ).read_text(encoding="utf-8"),
+                expected.prose,
+            )
+            self.assertEqual(
+                load_json_from(
+                    restored / "continuity.json"
+                ),
+                expected.continuity,
             )
 
     def test_identical_record_publish_is_idempotent(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -227,6 +228,75 @@ class SceneCommitStageV1Test(unittest.TestCase):
 
             validate_workspace_layout(workspace)
 
+    def test_missing_scene_staging_is_rebuilt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_commit_workspace(
+                temporary
+            )
+            staging = (
+                workspace
+                / "runtime/staging"
+                / "scene-scene-v01-c001-s001"
+            )
+            shutil.rmtree(staging)
+
+            state = SceneCommitStageService(
+                workspace
+            ).run(
+                updated_at=COMMIT_AT,
+            )
+
+            self.assertEqual(
+                state["current_generation_id"],
+                "gen-000002",
+            )
+            self.assertTrue(
+                (
+                    workspace
+                    / "scenes/scene-v01-c001-s001"
+                ).is_dir()
+            )
+
+    def test_incomplete_scene_staging_is_orphaned(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_commit_workspace(
+                temporary
+            )
+            staging = (
+                workspace
+                / "runtime/staging"
+                / "scene-scene-v01-c001-s001"
+            )
+            (staging / "continuity.json").unlink()
+
+            state = SceneCommitStageService(
+                workspace
+            ).run(
+                updated_at=COMMIT_AT,
+            )
+
+            self.assertEqual(
+                state["current_generation_id"],
+                "gen-000002",
+            )
+            orphans = list(
+                (
+                    workspace / "runtime/orphans"
+                ).glob(
+                    "*-scene-scene-v01-c001-s001*"
+                )
+            )
+            self.assertEqual(len(orphans), 1)
+            self.assertFalse(
+                (
+                    orphans[0] / "continuity.json"
+                ).exists()
+            )
+
     def test_pending_phases_are_saved_in_order(
         self,
     ) -> None:
@@ -306,7 +376,7 @@ class SceneCommitStageV1Test(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ContractError,
-                "確定済みScene順",
+                "確定済みScene",
             ):
                 SceneCommitStageService(workspace).run(
                     updated_at=COMMIT_AT,
