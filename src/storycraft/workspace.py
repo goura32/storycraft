@@ -14,7 +14,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from .prompt_template import get_template_loader
-from .run_state import RunStateStore, validate_run_state
+from .run_state import (
+    RunStateStore,
+    validate_recovery_run_state,
+    validate_run_state,
+)
 from .series_contracts import ContractError
 from .stages import Stage
 
@@ -241,6 +245,8 @@ def _create_workspace(
 
 def validate_workspace_layout(
     workspace_root: Path,
+    *,
+    run_state: dict[str, Any] | None = None,
 ) -> None:
     """既存V1 workspaceの必須layoutを検証する。"""
     root = workspace_root.expanduser()
@@ -270,14 +276,20 @@ def validate_workspace_layout(
                 f"workspace必須fileがありません: {relative}"
             )
 
+    state = (
+        validate_recovery_run_state(run_state)
+        if run_state is not None
+        else RunStateStore(root).load()
+    )
+
     _validate_workspace_input(root)
     _validate_initial_design_artifacts(root)
-    _validate_initial_generation_artifacts(root)
+    _validate_initial_generation_artifacts(root, state=state)
     _validate_series_plan_artifacts(root)
     _validate_volume_plan_artifacts(root)
     _validate_chapter_plan_artifacts(root)
     _validate_scene_plan_artifacts(root)
-    _validate_scene_card_staging_artifacts(root)
+    _validate_scene_card_staging_artifacts(root, state=state)
 
     resolved_root = root.resolve()
     for path in root.rglob("*"):
@@ -758,11 +770,12 @@ def _validate_initial_design_artifacts(root: Path) -> None:
 
 def _validate_initial_generation_artifacts(
     root: Path,
+    *,
+    state: dict[str, Any],
 ) -> None:
     """存在するGenerationとrun-state参照を検証する。"""
     version_root = root / "design/initial/v0001"
     accepted_path = version_root / "initial-design.json"
-    state = RunStateStore(root).load()
     current_generation_id = state[
         "current_generation_id"
     ]
@@ -1551,10 +1564,11 @@ def _validate_identifier(
 
 def _validate_scene_card_staging_artifacts(
     root: Path,
+    *,
+    state: dict[str, Any],
 ) -> None:
     """存在するactive Scene Card stagingを検証する。"""
     staging_root = root / "runtime/staging"
-    state = RunStateStore(root).load()
     recoverable_scene_id = (
         state["active_scene_id"]
         if (

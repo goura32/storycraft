@@ -82,8 +82,11 @@ class V1WorkflowService:
     ) -> dict[str, Any]:
         """現在Stageを一工程だけ進める。"""
         with workspace_lock(self.workspace_root):
-            validate_workspace_layout(self.workspace_root)
-            state = self.state_store.load()
+            state = self.state_store.load_recovery()
+            validate_workspace_layout(
+                self.workspace_root,
+                run_state=state,
+            )
 
             if state["pending_commit"] is not None:
                 self._recover_pending_commit(state)

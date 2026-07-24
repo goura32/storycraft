@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Callable
 
 from .immutable_directory import (
@@ -11,7 +12,11 @@ from .immutable_directory import (
 )
 from .orphan_storage import move_directory_to_orphans
 from .reviewed_candidate_stage import read_json
-from .run_state import RunStateStore, validate_run_state
+from .run_state import (
+    RunStateStore,
+    is_stale_scene_commit_recovery_state,
+    validate_run_state,
+)
 from .scene_adoption_record import (
     load_scene_adoption_record,
 )
@@ -71,12 +76,19 @@ def execute_scene_commit_recovery(
     """pending Scene Commitをforward-onlyに復旧する。"""
     root = workspace_root.expanduser()
     store = RunStateStore(root)
-    current = store.load()
+    current = store.load_recovery()
 
     if state is not None and current != state:
         raise ContractError(
             "Scene Commit Recovery開始前にrun-stateが"
             "変更されています"
+        )
+
+    if is_stale_scene_commit_recovery_state(current):
+        return _clear_stale_scene_commit_pending(
+            root,
+            current,
+            store,
         )
 
     inspection = inspect_scene_commit_recovery(
@@ -275,6 +287,166 @@ def execute_scene_commit_recovery(
     raise AssertionError(
         f"未処理のScene Commit Recovery action: {action}"
     )
+
+
+def _clear_stale_scene_commit_pending(
+    root: Path,
+    state: dict[str, Any],
+    store: RunStateStore,
+) -> dict[str, Any]:
+    """最終stateと完全一致するstale pendingだけを消す。"""
+    pending = state["pending_commit"]
+    assert isinstance(pending, dict)
+
+    scene_id = pending["target_id"]
+    expected_generation_id = pending[
+        "expected_generation_id"
+    ]
+
+    match = re.fullmatch(
+        r"scene-v(\d{2})-c(\d{3})-s(\d{3})",
+        scene_id,
+    )
+    if match is None:
+        raise ContractError(
+            "stale Scene CommitのScene IDが不正です"
+        )
+
+    volume_number = int(match.group(1))
+    chapter_number = int(match.group(2))
+    scene_number = int(match.group(3))
+
+    adoption = load_scene_adoption_record(
+        root,
+        scene_id,
+    )
+    basis_generation_id = (
+        adoption.continuity["basis_generation_id"]
+    )
+
+    if (
+        adoption.continuity["result_generation_id"]
+        != expected_generation_id
+    ):
+        raise ContractError(
+            "stale pendingのGeneration IDが"
+            "Scene採用記録と一致しません"
+        )
+
+    series_plan = read_json(
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    volume_plan = read_json(
+        root
+        / "design/volume-plans"
+        / f"v{volume_number:02d}-v0001"
+        / "volume-plan.json"
+    )
+    chapter_plan = read_json(
+        root
+        / "design/chapter-plans"
+        / (
+            f"v{volume_number:02d}"
+            f"-c{chapter_number:03d}-v0001"
+        )
+        / "chapter-plan.json"
+    )
+
+    precommit = deepcopy(state)
+    precommit["current_stage"] = "scene_commit"
+    precommit["current_target"] = {
+        "series": state["workspace_id"],
+        "series_plan_id": series_plan[
+            "series_plan_id"
+        ],
+        "volume_plan_id": volume_plan[
+            "volume_plan_id"
+        ],
+        "chapter_plan_id": chapter_plan[
+            "chapter_plan_id"
+        ],
+        "scene_plan_id": adoption.scene_card[
+            "scene_plan_id"
+        ],
+        "scene_id": scene_id,
+        "volume_number": volume_number,
+        "chapter_number": chapter_number,
+        "scene_number": scene_number,
+        "basis_generation_id": basis_generation_id,
+        "scene_card_version": adoption.scene_card[
+            "version"
+        ],
+        "prose_version": adoption.continuity[
+            "prose_version"
+        ],
+        "continuity_version": adoption.continuity[
+            "version"
+        ],
+        "result_generation_id": (
+            expected_generation_id
+        ),
+    }
+    precommit["current_generation_id"] = (
+        basis_generation_id
+    )
+    precommit["active_scene_id"] = scene_id
+    validate_run_state(precommit)
+
+    inspection = inspect_scene_commit_recovery(
+        root,
+        precommit,
+    )
+    if (
+        inspection.snapshot.scene_final
+        is not DirectoryCondition.COMPLETE
+        or inspection.snapshot.generation_final
+        is not DirectoryCondition.COMPLETE
+    ):
+        _raise_manual(inspection)
+
+    next_stage, next_target = (
+        determine_scene_commit_transition(
+            state=precommit,
+            series_plan=series_plan,
+            volume_plan=volume_plan,
+            chapter_plan=chapter_plan,
+            result_generation_id=(
+                expected_generation_id
+            ),
+        )
+    )
+
+    ready = deepcopy(precommit)
+    ready["current_generation_id"] = (
+        expected_generation_id
+    )
+    ready["pending_commit"] = None
+    validate_run_state(ready)
+
+    expected_final = advance_run_state(
+        ready,
+        next_stage=next_stage,
+        next_target=next_target,
+        updated_at=state["updated_at"],
+    )
+
+    observed = deepcopy(state)
+    observed["pending_commit"] = None
+    validate_run_state(observed)
+
+    if observed != expected_final:
+        raise ContractError(
+            "stale Scene Commit pendingを消せません: "
+            "現在stateが決定的な最終stateと一致しないため"
+            "manual対応が必要です"
+        )
+
+    store.save(observed)
+    validate_workspace_layout(root)
+    return observed
 
 
 def _restart_commit(

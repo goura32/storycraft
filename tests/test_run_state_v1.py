@@ -7,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storycraft.run_state import RunStateStore, validate_run_state
+from storycraft.run_state import (
+    RunStateStore,
+    is_stale_scene_commit_recovery_state,
+    validate_recovery_run_state,
+    validate_run_state,
+)
 from storycraft.series_contracts import ContractError
 
 
@@ -83,6 +88,127 @@ class RunStateV1Tests(unittest.TestCase):
         state["pending_commit"]["phase"] = "state_updated"
         with self.assertRaisesRegex(ContractError, "phase"):
             validate_run_state(state)
+
+    def test_recovery_validator_accepts_stale_scene_pending(
+        self,
+    ) -> None:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["status"] = "running"
+        state["current_stage"] = "scene_plan"
+        state["current_target"] = {
+            "series": state["workspace_id"],
+            "volume_number": 1,
+            "chapter_number": 1,
+            "scene_number": 2,
+            "basis_generation_id": "gen-000002",
+        }
+        state["current_generation_id"] = "gen-000002"
+        state["active_candidate"] = None
+        state["active_scene_id"] = None
+        state["pending_commit"] = {
+            "kind": "scene_commit",
+            "target_id": "scene-v01-c001-s001",
+            "expected_generation_id": "gen-000002",
+            "phase": "generation_finalized",
+        }
+        state["stop_reason"] = None
+        state["last_error"] = None
+
+        with self.assertRaises(ContractError):
+            validate_run_state(state)
+
+        self.assertIs(
+            validate_recovery_run_state(state),
+            state,
+        )
+        self.assertTrue(
+            is_stale_scene_commit_recovery_state(
+                state
+            )
+        )
+
+    def test_recovery_validator_rejects_prepared_stale_pending(
+        self,
+    ) -> None:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["status"] = "running"
+        state["current_stage"] = "scene_plan"
+        state["current_target"] = {
+            "series": state["workspace_id"],
+            "volume_number": 1,
+            "chapter_number": 1,
+            "scene_number": 2,
+            "basis_generation_id": "gen-000002",
+        }
+        state["current_generation_id"] = "gen-000002"
+        state["active_candidate"] = None
+        state["active_scene_id"] = None
+        state["pending_commit"] = {
+            "kind": "scene_commit",
+            "target_id": "scene-v01-c001-s001",
+            "expected_generation_id": "gen-000002",
+            "phase": "prepared",
+        }
+        state["stop_reason"] = None
+        state["last_error"] = None
+
+        with self.assertRaises(ContractError):
+            validate_recovery_run_state(state)
+
+    def test_store_load_recovery_reads_stale_pending(
+        self,
+    ) -> None:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["status"] = "running"
+        state["current_stage"] = "scene_plan"
+        state["current_target"] = {
+            "series": state["workspace_id"],
+            "volume_number": 1,
+            "chapter_number": 1,
+            "scene_number": 2,
+            "basis_generation_id": "gen-000002",
+        }
+        state["current_generation_id"] = "gen-000002"
+        state["active_candidate"] = None
+        state["active_scene_id"] = None
+        state["pending_commit"] = {
+            "kind": "scene_commit",
+            "target_id": "scene-v01-c001-s001",
+            "expected_generation_id": "gen-000002",
+            "phase": "generation_finalized",
+        }
+        state["stop_reason"] = None
+        state["last_error"] = None
+
+        with tempfile.TemporaryDirectory() as temporary:
+            store = RunStateStore(Path(temporary))
+            store.runtime_root.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            store.path.write_text(
+                json.dumps(
+                    state,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ContractError):
+                store.load()
+
+            self.assertEqual(
+                store.load_recovery(),
+                state,
+            )
 
     def test_store_saves_and_loads_runtime_run_state(self) -> None:
         state = load_fixture("workspace/run-state-running.json")

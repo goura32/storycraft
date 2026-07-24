@@ -1,11 +1,15 @@
 """Scene Commit Recovery Executor試験。"""
 from __future__ import annotations
 
+from copy import deepcopy
+
+import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
+from storycraft.run_state import RunStateStore
 from storycraft.scene_commit_recovery_executor import (
     execute_scene_commit_recovery,
 )
@@ -314,6 +318,110 @@ class SceneCommitRecoveryExecutorV1Test(
             self.assertIsNone(
                 recovered["pending_commit"]
             )
+
+    def test_stale_pending_is_cleared_without_model(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_commit_workspace(
+                temporary
+            )
+            completed = SceneCommitStageService(
+                workspace
+            ).run(
+                updated_at=COMMIT_AT,
+            )
+
+            immutable_files: dict[str, bytes] = {}
+            for root_name in (
+                "scenes/scene-v01-c001-s001",
+                "generations/gen-000002",
+            ):
+                root = Path(workspace) / root_name
+                for file in sorted(root.iterdir()):
+                    immutable_files[
+                        str(file.relative_to(workspace))
+                    ] = file.read_bytes()
+
+            stale = deepcopy(completed)
+            stale["pending_commit"] = {
+                "kind": "scene_commit",
+                "target_id": "scene-v01-c001-s001",
+                "expected_generation_id": "gen-000002",
+                "phase": "generation_finalized",
+            }
+
+            store = RunStateStore(workspace)
+            store.path.write_text(
+                json.dumps(
+                    stale,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            model_calls: list[object] = []
+            recovered = V1WorkflowService(
+                workspace,
+                model_factory=lambda: model_calls.append(
+                    object()
+                ),
+            ).step()
+
+            self.assertEqual(recovered, completed)
+            self.assertEqual(store.load(), completed)
+            self.assertEqual(model_calls, [])
+
+            for relative, expected in immutable_files.items():
+                self.assertEqual(
+                    (
+                        Path(workspace) / relative
+                    ).read_bytes(),
+                    expected,
+                )
+
+    def test_mismatched_stale_pending_is_manual(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_commit_workspace(
+                temporary
+            )
+            completed = SceneCommitStageService(
+                workspace
+            ).run(
+                updated_at=COMMIT_AT,
+            )
+
+            stale = deepcopy(completed)
+            stale["current_target"]["scene_number"] = 3
+            stale["pending_commit"] = {
+                "kind": "scene_commit",
+                "target_id": "scene-v01-c001-s001",
+                "expected_generation_id": "gen-000002",
+                "phase": "generation_finalized",
+            }
+
+            store = RunStateStore(workspace)
+            store.path.write_text(
+                json.dumps(
+                    stale,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "manual対応",
+            ):
+                execute_scene_commit_recovery(
+                    workspace
+                )
 
     def test_invalid_scene_final_is_manual(
         self,
