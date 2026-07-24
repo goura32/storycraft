@@ -23,6 +23,7 @@ from .reviewed_candidate_stage import (
     reserve_identifier,
     utc_now,
 )
+from .scene_generation import state_target_record
 from .scene_prose_stage import SceneProseStageService
 from .series_contracts import (
     ContractError,
@@ -402,31 +403,11 @@ class SceneContinuityStageService:
         target_type: str,
         target_id: str,
     ) -> dict[str, Any]:
-        if target_type == "timeline_state":
-            if target_id != "timeline":
-                raise ContractError(
-                    "timeline_stateのtarget_idはtimelineが必要です"
-                )
-            return state["timeline"]
-
-        sources = {
-            "character_state": state["characters"],
-            "relationship_state": state["relationships"],
-            "thread_state": state["threads"],
-            "inventory_state": state["inventory"],
-            "commitment_state": state["commitments"],
-        }
-        source = sources.get(target_type)
-        if source is None or target_id not in source:
-            raise ContractError(
-                "Continuityが未知のState targetを参照しています"
-            )
-        record = source[target_id]
-        if not isinstance(record, dict):
-            raise ContractError(
-                "Continuity targetのcurrent Stateが不正です"
-            )
-        return record
+        return state_target_record(
+            state,
+            target_type,
+            target_id,
+        )
 
     @classmethod
     def _validate_candidate(
