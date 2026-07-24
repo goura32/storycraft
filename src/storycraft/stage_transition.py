@@ -64,7 +64,6 @@ ALLOWED_STAGE_TRANSITIONS: Mapping[Stage, frozenset[Stage]] = {
         Stage.SCENE_COMMIT,
     }),
     Stage.SCENE_COMMIT: frozenset({
-        Stage.SCENE_CARD,
         Stage.CHAPTER_PLAN,
         Stage.SCENE_PLAN,
         Stage.VOLUME_HANDOFF,

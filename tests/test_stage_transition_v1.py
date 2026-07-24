@@ -66,7 +66,6 @@ class StageTransitionV1Tests(unittest.TestCase):
         self.assertEqual(
             allowed_next_stages(Stage.SCENE_COMMIT),
             frozenset({
-                Stage.SCENE_CARD,
                 Stage.CHAPTER_PLAN,
                 Stage.SCENE_PLAN,
                 Stage.VOLUME_HANDOFF,
