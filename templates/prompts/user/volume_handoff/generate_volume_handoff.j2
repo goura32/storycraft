@@ -1,0 +1,62 @@
+# volume_handoff の生成
+
+## 目的
+
+対象Volumeで実際に確定したSceneと巻末Generationを基準に、
+次巻またはCompletionへ渡すVolume Handoff Candidateを作成する。
+
+## Authority
+
+- 人物、Relationship、Threadの現在状態は
+  `current_generation.state.json` を正本とする
+- 出来事と変化の根拠は `completed_scenes` と
+  `current_generation.evidence.json` に限定する
+- Series PlanとVolume Planは予定であり、
+  実際の状態より優先しない
+
+## 必須条件
+
+- `character_states` は巻末Generationにある全Character IDを
+  省略せず一度ずつ使用する
+- `relationship_states` は巻末Generationにある全Relationship IDを
+  省略せず一度ずつ使用する
+- `resolved_threads` には巻末Generationで
+  `status == "resolved"` のThread IDだけをすべて含める
+- `open_threads` には巻末Generationで
+  `status != "resolved"` のThread IDだけをすべて含める
+- Threadを本文や予定だけから解決済みにしない
+- `new_constraints` は巻中に実際に成立し、
+  次処理で無視できない制約だけを含める
+- `ending_progress` はSeries PlanのEnding pathに対する
+  実際の進捗を記述する
+- 最終Volume以外では `next_volume_requirements` を空にせず、
+  次巻で保持すべき結果、制約、未解決事項を記述する
+- 最終Volumeでは `next_volume_requirements` を空配列にする
+- `issues` には矛盾、未達、根拠不足など、
+  後続処理が認識すべき問題だけを含める
+- CanonまたはStateを変更しない
+- 次巻で起きる出来事を既成事実として書かない
+- 入力にない人物、Relationship、Thread、事件、秘密、
+  真相、犯人、制度、Ending条件を追加しない
+
+## 禁止metadata
+
+Candidateへ次を含めない。
+
+- `schema_version`
+- `handoff_id`
+- `volume_number`
+- `basis_generation_id`
+- `completed_chapter_ids`
+- `completed_scene_ids`
+- `created_at`
+
+これらは採用処理がコードで付与する。
+
+## 入力
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

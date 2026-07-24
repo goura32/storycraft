@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft V1 Volume Handoff Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "character_states",
+    "relationship_states",
+    "resolved_threads",
+    "open_threads",
+    "new_constraints",
+    "ending_progress",
+    "next_volume_requirements",
+    "issues"
+  ],
+  "properties": {
+    "character_states": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^char-[A-Za-z0-9_-]+$": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        }
+      }
+    },
+    "relationship_states": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^rel-[A-Za-z0-9_-]+$": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        }
+      }
+    },
+    "resolved_threads": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^thread-[A-Za-z0-9_-]+$"
+      }
+    },
+    "open_threads": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^thread-[A-Za-z0-9_-]+$"
+      }
+    },
+    "new_constraints": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1200
+      }
+    },
+    "ending_progress": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1600
+    },
+    "next_volume_requirements": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1200
+      }
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1200
+      }
+    }
+  }
+}

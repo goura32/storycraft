@@ -1,0 +1,42 @@
+# volume_handoff の批評
+
+Volume Handoff Candidateを巻末Generation、確定Scene、
+Volume Plan、Series Planへ照合し、
+候補内で修正可能な問題だけをissuesへ出す。
+問題がなければ `issues: []` を返す。
+
+## Review観点
+
+1. Character IDが巻末Generationの全Characterと正確に一致する
+2. Character要約が巻末Stateと確定Sceneに一致する
+3. Relationship IDが巻末Generationの全Relationshipと一致する
+4. Relationship要約が巻末Stateと確定Sceneに一致する
+5. resolved_threadsが`status == resolved`のThreadだけを含む
+6. open_threadsが`status != resolved`のThreadだけを含む
+7. resolved_threadsとopen_threadsに重複、欠落、未知IDがない
+8. 本文にない出来事を追加していない
+9. 未解決Threadを予定だけで解決していない
+10. new_constraintsに実際には成立していない制約がない
+11. ending_progressが実際の進捗を過大評価していない
+12. 最終巻以外では次巻要件が具体的である
+13. 最終巻では不要な次巻要件を作っていない
+14. CanonまたはStateを変更する指示になっていない
+15. 次巻本文を先に書いていない
+16. 入力にないID、秘密、真相、犯人、制度を追加していない
+17. 採用metadataをCandidateへ含めていない
+18. 不自然な日本語、意味の重複、直接矛盾がない
+
+各issueの `field` はCandidate内に実在するJSON pathを指定する。
+候補外の新事実をsuggestionとして追加しない。
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 入力状態
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

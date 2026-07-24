@@ -3374,6 +3374,342 @@ class ContractValidator:
         if is_final_scene and not unresolved.issubset(resolved):
             raise ContractError("最終場面で主要項目がすべて回収されていません")
 
+    @classmethod
+    def _validate_volume_handoff(
+        cls,
+        value: object,
+        current_generation: dict[str, Any],
+        series_plan: dict[str, Any],
+        volume_plan: dict[str, Any],
+        volume_number: int,
+        basis_generation_id: str,
+        *,
+        adopted: bool = False,
+        expected_chapter_ids: list[str] | None = None,
+        expected_scene_ids: list[str] | None = None,
+    ) -> None:
+        """Volume Handoffを巻末Generationへ照合する。"""
+        from datetime import datetime
+        import re as identifier_re
+
+        from jsonschema import Draft202012Validator
+
+        from .prompt_template import get_template_loader
+
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Volume Handoffはobjectが必要です"
+            )
+
+        candidate_fields = {
+            "character_states",
+            "relationship_states",
+            "resolved_threads",
+            "open_threads",
+            "new_constraints",
+            "ending_progress",
+            "next_volume_requirements",
+            "issues",
+        }
+
+        if adopted:
+            expected_fields = candidate_fields | {
+                "schema_version",
+                "handoff_id",
+                "volume_number",
+                "basis_generation_id",
+                "completed_chapter_ids",
+                "completed_scene_ids",
+                "created_at",
+            }
+            if set(value) != expected_fields:
+                raise ContractError(
+                    "採用済みVolume Handoffの"
+                    "field構成が不正です"
+                )
+            if value["schema_version"] != 1:
+                raise ContractError(
+                    "Volume Handoff.schema_versionは"
+                    "1が必要です"
+                )
+            if value["handoff_id"] != (
+                f"handoff-v{volume_number:02d}"
+            ):
+                raise ContractError(
+                    "Volume Handoff IDが不正です"
+                )
+            if value["volume_number"] != volume_number:
+                raise ContractError(
+                    "Volume Handoffの巻番号が不正です"
+                )
+            if (
+                value["basis_generation_id"]
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Volume Handoffのbasis Generationが"
+                    "不正です"
+                )
+
+            chapter_ids = value["completed_chapter_ids"]
+            scene_ids = value["completed_scene_ids"]
+            if (
+                not isinstance(chapter_ids, list)
+                or not chapter_ids
+                or len(chapter_ids) != len(set(chapter_ids))
+                or any(
+                    not identifier_re.fullmatch(
+                        (
+                            rf"chapter-v{volume_number:02d}"
+                            r"-c\d{3}"
+                        ),
+                        str(identifier),
+                    )
+                    for identifier in chapter_ids
+                )
+            ):
+                raise ContractError(
+                    "Volume Handoffの完了Chapter IDが"
+                    "不正です"
+                )
+            if (
+                not isinstance(scene_ids, list)
+                or not scene_ids
+                or len(scene_ids) != len(set(scene_ids))
+                or any(
+                    not identifier_re.fullmatch(
+                        (
+                            rf"scene-v{volume_number:02d}"
+                            r"-c\d{3}-s\d{3}"
+                        ),
+                        str(identifier),
+                    )
+                    for identifier in scene_ids
+                )
+            ):
+                raise ContractError(
+                    "Volume Handoffの完了Scene IDが"
+                    "不正です"
+                )
+
+            if (
+                expected_chapter_ids is not None
+                and chapter_ids != expected_chapter_ids
+            ):
+                raise ContractError(
+                    "Volume Handoffの完了Chapter順が"
+                    "採用済みPlanと一致しません"
+                )
+            if (
+                expected_scene_ids is not None
+                and scene_ids != expected_scene_ids
+            ):
+                raise ContractError(
+                    "Volume Handoffの完了Scene順が"
+                    "採用済みPlanと一致しません"
+                )
+
+            created_at = value["created_at"]
+            if not isinstance(created_at, str):
+                raise ContractError(
+                    "Volume Handoff.created_atは"
+                    "文字列が必要です"
+                )
+            try:
+                parsed = datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ContractError(
+                    "Volume Handoff.created_atが"
+                    "ISO 8601形式ではありません"
+                ) from exc
+            if parsed.tzinfo is None:
+                raise ContractError(
+                    "Volume Handoff.created_atには"
+                    "timezoneが必要です"
+                )
+
+            candidate = {
+                field: value[field]
+                for field in candidate_fields
+            }
+        else:
+            candidate = value
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "volume_handoff",
+        )
+        errors = sorted(
+            Draft202012Validator(
+                schema
+            ).iter_errors(candidate),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part)
+                for part in error.absolute_path
+            ) or "<root>"
+            raise ContractError(
+                "Volume Handoff契約違反: "
+                f"{location}: {error.message}"
+            )
+
+        if (
+            not isinstance(volume_number, int)
+            or isinstance(volume_number, bool)
+            or volume_number < 1
+        ):
+            raise ContractError(
+                "Volume Handoffの対象巻番号が不正です"
+            )
+
+        if (
+            not isinstance(series_plan, dict)
+            or not isinstance(volume_plan, dict)
+        ):
+            raise ContractError(
+                "Volume Handoffの採用済みPlanが不正です"
+            )
+        if (
+            volume_plan.get("volume_number")
+            != volume_number
+        ):
+            raise ContractError(
+                "Volume HandoffとVolume Planの"
+                "巻番号が一致しません"
+            )
+        if volume_plan.get("volume_plan_id") != (
+            f"volume-plan-v{volume_number:02d}"
+        ):
+            raise ContractError(
+                "Volume HandoffのVolume Plan IDが"
+                "不正です"
+            )
+        if (
+            volume_plan.get("series_plan_id")
+            != series_plan.get("series_plan_id")
+        ):
+            raise ContractError(
+                "Volume HandoffのSeries Plan参照が"
+                "一致しません"
+            )
+
+        volume_count = series_plan.get("volume_count")
+        if (
+            not isinstance(volume_count, int)
+            or isinstance(volume_count, bool)
+            or not 1 <= volume_number <= volume_count
+        ):
+            raise ContractError(
+                "Volume Handoffの対象巻が"
+                "Series Plan範囲外です"
+            )
+
+        if not isinstance(current_generation, dict):
+            raise ContractError(
+                "Volume Handoffの巻末Generationが"
+                "不正です"
+            )
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            record = current_generation.get(name)
+            if (
+                not isinstance(record, dict)
+                or record.get("generation_id")
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Volume Handoffの巻末Generationが"
+                    f"不正です: {name}"
+                )
+
+        state = current_generation["state.json"]
+        characters = state.get("characters")
+        relationships = state.get("relationships")
+        threads = state.get("threads")
+        if (
+            not isinstance(characters, dict)
+            or not isinstance(relationships, dict)
+            or not isinstance(threads, dict)
+        ):
+            raise ContractError(
+                "Volume Handoffの巻末Stateが不正です"
+            )
+
+        if set(candidate["character_states"]) != set(
+            characters
+        ):
+            raise ContractError(
+                "Volume HandoffのCharacter IDが"
+                "巻末Generationと一致しません"
+            )
+        if set(candidate["relationship_states"]) != set(
+            relationships
+        ):
+            raise ContractError(
+                "Volume HandoffのRelationship IDが"
+                "巻末Generationと一致しません"
+            )
+
+        resolved = {
+            thread_id
+            for thread_id, record in threads.items()
+            if (
+                isinstance(record, dict)
+                and record.get("status") == "resolved"
+            )
+        }
+        opened = set(threads) - resolved
+
+        actual_resolved = candidate["resolved_threads"]
+        actual_open = candidate["open_threads"]
+        if set(actual_resolved) != resolved:
+            raise ContractError(
+                "Volume Handoffのresolved_threadsが"
+                "巻末Generationと一致しません"
+            )
+        if set(actual_open) != opened:
+            raise ContractError(
+                "Volume Handoffのopen_threadsが"
+                "巻末Generationと一致しません"
+            )
+        if set(actual_resolved) & set(actual_open):
+            raise ContractError(
+                "Volume HandoffのThreadが"
+                "resolvedとopenで重複しています"
+            )
+
+        next_requirements = candidate[
+            "next_volume_requirements"
+        ]
+        if (
+            volume_number < volume_count
+            and not next_requirements
+        ):
+            raise ContractError(
+                "最終巻以外のVolume Handoffには"
+                "next_volume_requirementsが必要です"
+            )
+        if (
+            volume_number == volume_count
+            and next_requirements
+        ):
+            raise ContractError(
+                "最終巻のVolume Handoffでは"
+                "next_volume_requirementsを空にしてください"
+            )
+
     @staticmethod
     def _validate_volume_summary(value: dict[str, Any], state: dict[str, Any]) -> None:
         if not isinstance(value.get("volume_summary"), str) or not value["volume_summary"].strip() or not isinstance(value.get("unresolved_thread_ids"), list):

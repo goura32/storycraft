@@ -70,6 +70,7 @@ V1_TEMPLATE_STAGES = (
     "scene_card_v1",
     "scene_prose_v1",
     "scene_continuity_v1",
+    Stage.VOLUME_HANDOFF.value,
 )
 
 # OpenAIStoryModelが現在描画できる全template工程。
