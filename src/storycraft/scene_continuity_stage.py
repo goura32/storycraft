@@ -42,6 +42,7 @@ _SPEC = ReviewedCandidateSpec(
     review_category="scene_continuity_accuracy",
     next_stage="scene_commit",
     model_stage="scene_continuity_v1",
+    recoverable_adoption=False,
 )
 
 

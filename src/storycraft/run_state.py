@@ -40,6 +40,11 @@ PUBLICATION_COMMIT_PHASES = frozenset({
     "publication_finalized",
 })
 
+CANDIDATE_ADOPTION_PHASES = frozenset({
+    "prepared",
+    "artifact_finalized",
+})
+
 REQUIRED_FIELDS = frozenset({
     "schema_version",
     "workspace_id",
@@ -244,6 +249,74 @@ def _validate_pending_commit(state: dict[str, Any]) -> None:
         raise ContractError(
             "run-state.pending_commit.target_idが必要です"
         )
+
+    if kind == "candidate_adoption":
+        expected_fields = {
+            "kind",
+            "target_id",
+            "stage",
+            "version",
+            "phase",
+        }
+        if set(pending) != expected_fields:
+            raise ContractError(
+                "candidate_adoption pending_commitの"
+                "field構成が不正です"
+            )
+
+        stage = pending.get("stage")
+        version = pending.get("version")
+
+        if stage != state["current_stage"]:
+            raise ContractError(
+                "candidate_adoption pending_commit.stageは"
+                "current_stageと一致しなければなりません"
+            )
+        if (
+            not target_id.startswith("candidate-")
+            or "/" in target_id
+            or "\\" in target_id
+            or "." in target_id
+        ):
+            raise ContractError(
+                "candidate_adoption target_idが不正です"
+            )
+        if (
+            not isinstance(version, int)
+            or isinstance(version, bool)
+            or version < 1
+        ):
+            raise ContractError(
+                "candidate_adoption versionは"
+                "1以上の整数が必要です"
+            )
+        if phase not in CANDIDATE_ADOPTION_PHASES:
+            raise ContractError(
+                "candidate_adoption phaseが不正です: "
+                f"{phase!r}"
+            )
+        if state["status"] != "running":
+            raise ContractError(
+                "candidate_adoption中のstatusは"
+                "runningでなければなりません"
+            )
+
+        active = state["active_candidate"]
+        if not isinstance(active, dict):
+            raise ContractError(
+                "candidate_adoptionには"
+                "active_candidateが必要です"
+            )
+        if (
+            active.get("kind") != stage
+            or active.get("candidate_id") != target_id
+            or active.get("version") != version
+        ):
+            raise ContractError(
+                "candidate_adoption pending_commitと"
+                "active_candidateが一致しません"
+            )
+        return
 
     if kind == Stage.SCENE_COMMIT.value:
         if set(pending) != {

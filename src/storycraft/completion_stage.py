@@ -35,6 +35,7 @@ _SPEC = ReviewedCandidateSpec(
     artifact_type="completion",
     review_category="completion_quality",
     next_stage=Stage.PUBLICATION.value,
+    recoverable_adoption=False,
 )
 
 _SCENE_FILES = {

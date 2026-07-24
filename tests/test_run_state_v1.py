@@ -281,3 +281,62 @@ class RunStateV1Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CandidateAdoptionPendingStateV1Tests(
+    unittest.TestCase
+):
+    def test_candidate_adoption_pending_is_valid(
+        self,
+    ) -> None:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["current_stage"] = "series_plan"
+        state["active_scene_id"] = None
+        state["active_candidate"] = {
+            "kind": "series_plan",
+            "candidate_id": "candidate-000001",
+            "version": 1,
+        }
+        state["pending_commit"] = {
+            "kind": "candidate_adoption",
+            "target_id": "candidate-000001",
+            "stage": "series_plan",
+            "version": 1,
+            "phase": "prepared",
+        }
+
+        validated = validate_run_state(state)
+
+        self.assertEqual(
+            validated["pending_commit"]["phase"],
+            "prepared",
+        )
+
+    def test_candidate_pending_must_match_active(
+        self,
+    ) -> None:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["current_stage"] = "series_plan"
+        state["active_scene_id"] = None
+        state["active_candidate"] = {
+            "kind": "series_plan",
+            "candidate_id": "candidate-000002",
+            "version": 1,
+        }
+        state["pending_commit"] = {
+            "kind": "candidate_adoption",
+            "target_id": "candidate-000001",
+            "stage": "series_plan",
+            "version": 1,
+            "phase": "prepared",
+        }
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "active_candidate",
+        ):
+            validate_run_state(state)
