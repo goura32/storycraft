@@ -289,6 +289,7 @@ def validate_workspace_layout(
     _validate_volume_plan_artifacts(root)
     _validate_chapter_plan_artifacts(root)
     _validate_scene_plan_artifacts(root)
+    _validate_volume_handoff_artifacts(root)
     _validate_scene_card_staging_artifacts(root, state=state)
 
     resolved_root = root.resolve()
@@ -1531,6 +1532,209 @@ def _validate_scene_plan_artifacts(
                 "intended_revelationsがChapter Planの"
                 "開示予定を超えています"
             )
+
+
+def _validate_volume_handoff_artifacts(
+    root: Path,
+) -> None:
+    """存在するimmutable Volume Handoffを検証する。"""
+    handoffs_root = root / "handoffs"
+    entries = sorted(handoffs_root.iterdir())
+    if not entries:
+        return
+
+    series_plan_path = (
+        root
+        / "design/series-plans"
+        / "series-plan-v0001"
+        / "series-plan.json"
+    )
+    if not series_plan_path.is_file():
+        raise ContractError(
+            "Volume Handoffには"
+            "採用済みSeries Planが必要です"
+        )
+
+    from .series_contracts import ContractValidator
+
+    series_plan = _read_json(series_plan_path)
+    seen_numbers: list[int] = []
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Volume Handoff pathは"
+                "通常directoryが必要です"
+            )
+
+        match = re.fullmatch(
+            r"handoff-v(\d{2})",
+            directory.name,
+        )
+        if match is None:
+            raise ContractError(
+                "Volume Handoff directory名が不正です"
+            )
+
+        volume_number = int(match.group(1))
+        seen_numbers.append(volume_number)
+
+        if {
+            entry.name for entry in directory.iterdir()
+        } != {"handoff.json"}:
+            raise ContractError(
+                "Volume Handoff directoryの"
+                "file構成が不正です"
+            )
+
+        handoff = _read_json(
+            directory / "handoff.json"
+        )
+        generation_id = handoff.get(
+            "basis_generation_id"
+        )
+        if not isinstance(generation_id, str):
+            raise ContractError(
+                "Volume Handoffの"
+                "basis_generation_idが不正です"
+            )
+
+        generation_root = (
+            root / "generations" / generation_id
+        )
+        generation: dict[str, Any] = {}
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            file = generation_root / name
+            if not file.is_file():
+                raise ContractError(
+                    "Volume Handoffのbasis Generationが"
+                    f"不完全です: {name}"
+                )
+            generation[name] = _read_json(file)
+
+        volume_plan_path = (
+            root
+            / "design/volume-plans"
+            / f"v{volume_number:02d}-v0001"
+            / "volume-plan.json"
+        )
+        if not volume_plan_path.is_file():
+            raise ContractError(
+                "Volume Handoffには"
+                "採用済みVolume Planが必要です"
+            )
+        volume_plan = _read_json(volume_plan_path)
+
+        chapter_summaries = volume_plan.get(
+            "chapter_summaries"
+        )
+        if (
+            not isinstance(chapter_summaries, list)
+            or not chapter_summaries
+        ):
+            raise ContractError(
+                "Volume Plan.chapter_summariesが不正です"
+            )
+
+        expected_chapter_ids: list[str] = []
+        expected_scene_ids: list[str] = []
+
+        for expected_chapter_number, summary in enumerate(
+            chapter_summaries,
+            1,
+        ):
+            if (
+                not isinstance(summary, dict)
+                or summary.get("chapter_number")
+                != expected_chapter_number
+            ):
+                raise ContractError(
+                    "Volume Plan Chapter番号は"
+                    "1からの連番が必要です"
+                )
+
+            chapter_plan_path = (
+                root
+                / "design/chapter-plans"
+                / (
+                    f"v{volume_number:02d}"
+                    f"-c{expected_chapter_number:03d}"
+                    "-v0001"
+                )
+                / "chapter-plan.json"
+            )
+            if not chapter_plan_path.is_file():
+                raise ContractError(
+                    "Volume HandoffのChapter Planが"
+                    "存在しません"
+                )
+
+            chapter_plan = _read_json(
+                chapter_plan_path
+            )
+            expected_chapter_ids.append(
+                f"chapter-v{volume_number:02d}"
+                f"-c{expected_chapter_number:03d}"
+            )
+
+            scene_summaries = chapter_plan.get(
+                "scene_summaries"
+            )
+            if (
+                not isinstance(scene_summaries, list)
+                or not scene_summaries
+            ):
+                raise ContractError(
+                    "Chapter Plan.scene_summariesが"
+                    "不正です"
+                )
+
+            for expected_scene_number, scene in enumerate(
+                scene_summaries,
+                1,
+            ):
+                if (
+                    not isinstance(scene, dict)
+                    or scene.get("scene_number")
+                    != expected_scene_number
+                ):
+                    raise ContractError(
+                        "Chapter Plan Scene番号は"
+                        "1からの連番が必要です"
+                    )
+                expected_scene_ids.append(
+                    f"scene-v{volume_number:02d}"
+                    f"-c{expected_chapter_number:03d}"
+                    f"-s{expected_scene_number:03d}"
+                )
+
+        ContractValidator._validate_volume_handoff(
+            handoff,
+            generation,
+            series_plan,
+            volume_plan,
+            volume_number,
+            generation_id,
+            adopted=True,
+            expected_chapter_ids=expected_chapter_ids,
+            expected_scene_ids=expected_scene_ids,
+        )
+
+    if seen_numbers != list(
+        range(1, len(seen_numbers) + 1)
+    ):
+        raise ContractError(
+            "Volume Handoffは第一巻から"
+            "欠番なく存在する必要があります"
+        )
 
 
 def _validate_workspace_destination(root: Path) -> None:

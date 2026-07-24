@@ -64,6 +64,7 @@ class ReviewedCandidateStageRunner:
         validator: CandidateValidator,
         adopter: CandidateAdopter,
         next_target: dict[str, Any],
+        next_stage: str | None = None,
         active_scene_id: str | None | object = (
             _PRESERVE_ACTIVE_SCENE
         ),
@@ -261,7 +262,9 @@ class ReviewedCandidateStageRunner:
 
                 advanced = advance_run_state(
                     adopted_state,
-                    next_stage=self.spec.next_stage,
+                    next_stage=(
+                        next_stage or self.spec.next_stage
+                    ),
                     next_target=deepcopy(next_target),
                     updated_at=timestamp,
                     **transition_kwargs,

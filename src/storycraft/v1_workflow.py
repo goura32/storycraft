@@ -35,6 +35,9 @@ from .scene_prose_stage import SceneProseStageService
 from .series_contracts import ContractError, StoryModel
 from .series_plan_stage import SeriesPlanStageService
 from .stages import Stage
+from .volume_handoff_stage import (
+    VolumeHandoffStageService,
+)
 from .volume_plan_stage import VolumePlanStageService
 from .workspace import validate_workspace_layout
 from .workspace_lock import workspace_lock
@@ -59,6 +62,7 @@ _MODEL_STAGE_SERVICES = {
     Stage.SCENE_CARD: SceneCardStageService,
     Stage.SCENE_PROSE: SceneProseStageService,
     Stage.SCENE_CONTINUITY: SceneContinuityStageService,
+    Stage.VOLUME_HANDOFF: VolumeHandoffStageService,
 }
 
 

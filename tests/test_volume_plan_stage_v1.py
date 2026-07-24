@@ -28,6 +28,7 @@ from tests.test_series_plan_schema_v1 import (
 from tests.test_series_plan_stage_v1 import (
     create_series_plan_workspace,
 )
+from tests.test_chapter_plan_schema_v1 import chapter_plan_candidate
 from tests.test_volume_plan_schema_v1 import (
     volume_plan_candidate,
 )
@@ -115,9 +116,40 @@ def prepare_second_volume_workspace(
     temporary: str,
 ) -> Path:
     workspace = create_volume_plan_workspace(temporary)
+
+    # 第二巻開始試験では、第一巻を一章・一Sceneで
+    # 完了した最小構成として用意する。
+    first_volume_candidate = volume_plan_candidate()
+    first_volume_candidate["chapter_summaries"] = (
+        first_volume_candidate["chapter_summaries"][:1]
+    )
     VolumePlanStageService(workspace).run(
-        AcceptingModel(volume_plan_candidate()),
+        AcceptingModel(first_volume_candidate),
         updated_at=PLAN_AT,
+    )
+
+    first_chapter_candidate = chapter_plan_candidate()
+    first_chapter_candidate["scene_summaries"] = (
+        first_chapter_candidate["scene_summaries"][:1]
+    )
+    write_json(
+        workspace
+        / "design/chapter-plans"
+        / "v01-c001-v0001"
+        / "chapter-plan.json",
+        {
+            "schema_version": 1,
+            "chapter_plan_id": "chapter-plan-v01-c001",
+            "volume_number": 1,
+            "chapter_number": 1,
+            "version": 1,
+            "status": "accepted",
+            "basis_generation_id": "gen-000001",
+            "volume_plan_id": "volume-plan-v01",
+            "parent_plan_id": None,
+            **first_chapter_candidate,
+            "created_at": PLAN_AT,
+        },
     )
 
     source = workspace / "generations/gen-000001"
@@ -492,6 +524,7 @@ class VolumePlanStageV1Tests(unittest.TestCase):
             workspace = prepare_second_volume_workspace(
                 temporary
             )
+
             model = AcceptingModel(
                 volume_two_candidate()
             )
