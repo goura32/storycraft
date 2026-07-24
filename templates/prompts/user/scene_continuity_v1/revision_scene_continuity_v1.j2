@@ -1,0 +1,29 @@
+# V1 Scene継続性更新の修正
+
+Review issuesを解消した完全な置換Candidateを返す。
+
+## 修正方針
+
+- 問題のないoperationとEvidenceを保持する
+- old_valueはCurrent Stateの完全なfield値へ戻す
+- 本文に存在しない変化は削除する
+- allowed_updates外の変更を追加しない
+- 曖昧な変化を断定しない
+- Evidence quoteとoccurrenceを本文へ再照合する
+- 差分、説明、採用metadata、永続IDを返さない
+
+## 元Candidate
+
+{{ candidate | tojson }}
+
+## Review issues
+
+{{ critique | tojson }}
+
+## Continuity Context
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
