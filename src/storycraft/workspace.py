@@ -291,6 +291,10 @@ def validate_workspace_layout(
     _validate_scene_plan_artifacts(root)
     _validate_volume_handoff_artifacts(root)
     _validate_completion_artifacts(root)
+    _validate_publication_artifacts(
+        root,
+        run_state=run_state,
+    )
     _validate_scene_card_staging_artifacts(root, state=state)
 
     resolved_root = root.resolve()
@@ -1869,6 +1873,107 @@ def _validate_completion_artifacts(
             generation_id,
             adopted=True,
         )
+
+
+def _validate_publication_artifacts(
+    root: Path,
+    *,
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    """存在するimmutable Publicationを検証する。"""
+    from .publication_builder import (
+        validate_publication_directory,
+    )
+    from .run_state import RunStateStore
+
+    publications_root = root / "publications"
+    state = (
+        run_state
+        if run_state is not None
+        else RunStateStore(root).load()
+    )
+    entries = sorted(publications_root.iterdir())
+
+    publication_ids: set[str] = set()
+
+    for directory in entries:
+        if (
+            directory.is_symlink()
+            or not directory.is_dir()
+        ):
+            raise ContractError(
+                "Publication pathは通常directoryが必要です"
+            )
+        if re.fullmatch(
+            r"pub-[0-9]{6}",
+            directory.name,
+        ) is None:
+            raise ContractError(
+                "Publication directory名が不正です"
+            )
+
+        files = validate_publication_directory(directory)
+        metadata = files["metadata.json"]
+        completion = files["completion.json"]
+
+        if metadata["publication_id"] != directory.name:
+            raise ContractError(
+                "Publication IDがdirectory名と"
+                "一致しません"
+            )
+
+        completion_path = (
+            root
+            / "completion"
+            / metadata["completion_id"]
+            / "result.json"
+        )
+        if not completion_path.is_file():
+            raise ContractError(
+                "Publicationが参照する"
+                "Completion Resultが存在しません"
+            )
+        if _read_json(completion_path) != completion:
+            raise ContractError(
+                "Publication completion.jsonが"
+                "Completion Authorityと一致しません"
+            )
+
+        generation_root = (
+            root
+            / "generations"
+            / metadata["basis_generation_id"]
+        )
+        if not generation_root.is_dir():
+            raise ContractError(
+                "Publication basis Generationが"
+                "存在しません"
+            )
+
+        publication_ids.add(directory.name)
+
+    current_publication_id = state[
+        "current_publication_id"
+    ]
+    if (
+        current_publication_id is not None
+        and current_publication_id
+        not in publication_ids
+    ):
+        raise ContractError(
+            "current_publication_idが"
+            "確定済みPublicationを参照していません"
+        )
+
+    if state["status"] == "completed":
+        target_id = state["current_target"].get(
+            "publication_id"
+        )
+        if target_id != current_publication_id:
+            raise ContractError(
+                "completed runのPublication targetと"
+                "current_publication_idが一致しません"
+            )
 
 
 def _validate_workspace_destination(root: Path) -> None:

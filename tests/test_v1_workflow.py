@@ -349,7 +349,7 @@ class V1WorkflowTest(unittest.TestCase):
             self.assertEqual(model_calls, [])
             self.assertEqual(FakeService.calls[0][0], ())
 
-    def test_unimplemented_publication_does_not_create_model(
+    def test_publication_does_not_create_model(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -359,22 +359,30 @@ class V1WorkflowTest(unittest.TestCase):
             )
             model_calls: list[object] = []
 
-            with patch(
-                "storycraft.v1_workflow."
-                "validate_workspace_layout"
+            with (
+                patch(
+                    "storycraft.v1_workflow."
+                    "validate_workspace_layout"
+                ),
+                patch(
+                    "storycraft.v1_workflow."
+                    "PublicationStageService",
+                    FakeService,
+                ),
             ):
-                with self.assertRaisesRegex(
-                    ContractError,
-                    "まだ実装されていません",
-                ):
-                    V1WorkflowService(
-                        workspace,
-                        model_factory=lambda: model_calls.append(
-                            object()
-                        ),
-                    ).step()
+                result = V1WorkflowService(
+                    workspace,
+                    model_factory=lambda: model_calls.append(
+                        object()
+                    ),
+                ).step()
 
+            self.assertEqual(result, {"executed": True})
             self.assertEqual(model_calls, [])
+            self.assertEqual(
+                FakeService.calls[0][0],
+                (),
+            )
 
 
 if __name__ == "__main__":

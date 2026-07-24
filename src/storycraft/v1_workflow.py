@@ -9,6 +9,7 @@ from typing import Any
 from .chapter_plan_stage import ChapterPlanStageService
 from .completion_stage import CompletionStageService
 from .initial_accept_stage import InitialAcceptStageService
+from .publication_stage import PublicationStageService
 from .initial_characters_stage import (
     InitialCharactersStageService,
 )
@@ -134,6 +135,13 @@ class V1WorkflowService:
 
         if stage is Stage.SCENE_COMMIT:
             return SceneCommitStageService(
+                self.workspace_root
+            ).run(
+                updated_at=updated_at,
+            )
+
+        if stage is Stage.PUBLICATION:
+            return PublicationStageService(
                 self.workspace_root
             ).run(
                 updated_at=updated_at,
