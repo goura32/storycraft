@@ -59,7 +59,7 @@ class ReviewedProseStageRunner:
 
     def run(
         self,
-        model: ProseStoryModel,
+        model: ProseStoryModel | None,
         *,
         context: dict[str, Any],
         review_context: dict[str, Any],
@@ -82,14 +82,33 @@ class ReviewedProseStageRunner:
                 "Prose Candidate Stageを実行できる"
                 "run statusではありません"
             )
+
+        pending = state["pending_commit"]
+        if (
+            isinstance(pending, dict)
+            and pending.get("kind")
+            == "candidate_adoption"
+        ):
+            return self._complete_prose_adoption(
+                state,
+                validator=validator,
+                adopter=adopter,
+                next_target=next_target,
+            )
+
         if state["active_candidate"] is not None:
             raise ContractError(
                 "未処理のactive_candidateがあります"
             )
-        if state["pending_commit"] is not None:
+        if pending is not None:
             raise ContractError(
                 "pending_commitがあるため"
                 "Prose Candidate Stageを開始できません"
+            )
+        if model is None:
+            raise ContractError(
+                "Prose Candidate生成には"
+                "ProseStoryModelが必要です"
             )
 
         timestamp = updated_at or utc_now()
@@ -248,21 +267,12 @@ class ReviewedProseStageRunner:
             state = active_state
 
             if accepted:
-                adopter(candidate)
-                validate_workspace_layout(self.workspace_root)
-
-                adopted_state = deepcopy(state)
-                adopted_state["active_candidate"] = None
-                validate_run_state(adopted_state)
-
-                advanced = advance_run_state(
-                    adopted_state,
-                    next_stage=self.spec.next_stage,
-                    next_target=deepcopy(next_target),
-                    updated_at=timestamp,
+                return self._complete_prose_adoption(
+                    state,
+                    validator=validator,
+                    adopter=adopter,
+                    next_target=next_target,
                 )
-                self.state_store.save(advanced)
-                return advanced
 
             if exhausted:
                 blocked = stop_state(
@@ -345,6 +355,224 @@ class ReviewedProseStageRunner:
             candidate = revised
             version += 1
             revisions_used += 1
+
+
+    def _complete_prose_adoption(
+        self,
+        state: dict[str, Any],
+        *,
+        validator: ProseValidator,
+        adopter: ProseAdopter,
+        next_target: dict[str, Any],
+    ) -> dict[str, Any]:
+        """保存済みaccepted ProseをProviderなしで採用する。"""
+        active = state["active_candidate"]
+        if not isinstance(active, dict):
+            raise ContractError(
+                "Prose Adoptionには"
+                "active_candidateが必要です"
+            )
+
+        candidate_id = active.get("candidate_id")
+        version = active.get("version")
+
+        if (
+            active.get("kind") != self.spec.stage
+            or not isinstance(candidate_id, str)
+            or not isinstance(version, int)
+            or isinstance(version, bool)
+            or version < 1
+        ):
+            raise ContractError(
+                "active_candidateが"
+                "Prose Stageと一致しません"
+            )
+
+        timestamp = state["updated_at"]
+        pending = state["pending_commit"]
+
+        if pending is None:
+            prepared = deepcopy(state)
+            prepared["pending_commit"] = {
+                "kind": "candidate_adoption",
+                "target_id": candidate_id,
+                "stage": self.spec.stage,
+                "version": version,
+                "phase": "prepared",
+            }
+            validate_run_state(prepared)
+            self.state_store.save(prepared)
+        else:
+            prepared = deepcopy(state)
+
+        prose = load_accepted_prose_candidate_version(
+            self.workspace_root,
+            stage=self.spec.stage,
+            candidate_id=candidate_id,
+            version=version,
+        )
+        validator(prose)
+
+        recovering = pending is not None
+
+        try:
+            adopter(prose)
+        except Exception as exc:
+            if recovering:
+                raise ContractError(
+                    "Prose Adoption Recoveryは"
+                    "manual対応が必要です"
+                ) from exc
+            raise
+
+        validate_workspace_layout(
+            self.workspace_root,
+            run_state=prepared,
+        )
+
+        phase = prepared["pending_commit"]["phase"]
+
+        if phase == "prepared":
+            finalized = deepcopy(prepared)
+            finalized["pending_commit"] = {
+                "kind": "candidate_adoption",
+                "target_id": candidate_id,
+                "stage": self.spec.stage,
+                "version": version,
+                "phase": "artifact_finalized",
+            }
+            validate_run_state(finalized)
+            self.state_store.save(finalized)
+        elif phase == "artifact_finalized":
+            finalized = prepared
+        else:
+            raise ContractError(
+                "Prose Adoption phaseが不正です"
+            )
+
+        adopted_state = deepcopy(finalized)
+        adopted_state["active_candidate"] = None
+        adopted_state["pending_commit"] = None
+        validate_run_state(adopted_state)
+
+        advanced = advance_run_state(
+            adopted_state,
+            next_stage=self.spec.next_stage,
+            next_target=deepcopy(next_target),
+            updated_at=timestamp,
+        )
+        self.state_store.save(advanced)
+        return advanced
+
+
+def load_accepted_prose_candidate_version(
+    workspace_root: Path,
+    *,
+    stage: str,
+    candidate_id: str,
+    version: int,
+) -> str:
+    """accepted Prose Candidateを採用Authorityとして読む。"""
+    directory = (
+        workspace_root
+        / "runtime/candidates"
+        / stage
+        / candidate_id
+        / f"v{version:04d}"
+    )
+
+    if (
+        directory.is_symlink()
+        or not directory.is_dir()
+    ):
+        raise ContractError(
+            "Prose Candidate version directoryが"
+            "存在しません"
+        )
+
+    required = {
+        "candidate.json",
+        "candidate.md",
+        "context.json",
+        "review.json",
+        "status.json",
+    }
+    names = {
+        entry.name
+        for entry in directory.iterdir()
+    }
+
+    if not required.issubset(names):
+        raise ContractError(
+            "accepted Prose Candidateの"
+            "必須fileがありません"
+        )
+
+    metadata = read_json(
+        directory / "candidate.json"
+    )
+    review = read_json(
+        directory / "review.json"
+    )
+    status = read_json(
+        directory / "status.json"
+    )
+
+    if (
+        metadata.get("schema_version") != 1
+        or metadata.get("candidate_id")
+        != candidate_id
+        or metadata.get("kind") != stage
+        or metadata.get("version") != version
+        or metadata.get("content_path")
+        != "candidate.md"
+    ):
+        raise ContractError(
+            "Prose Candidate metadataが"
+            "pendingと一致しません"
+        )
+
+    if status.get("status") != "accepted":
+        raise ContractError(
+            "Prose Candidate statusが"
+            "acceptedではありません"
+        )
+
+    if (
+        review.get("decision") != "accept"
+        or review.get("target_id")
+        != candidate_id
+        or review.get("target_version")
+        != version
+    ):
+        raise ContractError(
+            "Prose Candidate Reviewが"
+            "採用を示していません"
+        )
+
+    try:
+        stored = (
+            directory / "candidate.md"
+        ).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ContractError(
+            "Prose Candidate本文を"
+            "読み込めません"
+        ) from exc
+
+    if not stored.endswith("\n"):
+        raise ContractError(
+            "Prose Candidate本文の"
+            "終端改行がありません"
+        )
+
+    prose = stored[:-1]
+    if not prose:
+        raise ContractError(
+            "Prose Candidate本文が空です"
+        )
+
+    return prose
 
 
 def publish_prose_candidate_version(
