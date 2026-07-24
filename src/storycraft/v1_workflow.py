@@ -23,6 +23,9 @@ from .initial_world_stage import InitialWorldStageService
 from .input_stage import InputStageService
 from .run_state import RunStateStore
 from .scene_card_stage import SceneCardStageService
+from .scene_commit_recovery_executor import (
+    execute_scene_commit_recovery,
+)
 from .scene_commit_stage import SceneCommitStageService
 from .scene_continuity_stage import (
     SceneContinuityStageService,
@@ -180,8 +183,16 @@ class V1WorkflowService:
         pending = state["pending_commit"]
         assert isinstance(pending, dict)
 
+        if pending.get("kind") == Stage.SCENE_COMMIT.value:
+            execute_scene_commit_recovery(
+                self.workspace_root,
+                state,
+            )
+            return
+
         raise ContractError(
-            "pending_commit Recoveryは未実装です: "
+            "pending_commit Recoveryはまだ"
+            "実装されていません: "
             f"kind={pending.get('kind')!r} "
             f"phase={pending.get('phase')!r}"
         )
