@@ -30,6 +30,31 @@ class StoryModel(Protocol):
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]: ...
 
 
+class ProseStoryModel(Protocol):
+    """Scene本文用のraw text生成・JSON Review interface。"""
+
+    def generate_prose(
+        self,
+        stage: str,
+        context: dict[str, Any],
+    ) -> str: ...
+
+    def critique_prose(
+        self,
+        stage: str,
+        candidate: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+    def revision_prose(
+        self,
+        stage: str,
+        candidate: str,
+        critique: dict[str, Any],
+        context: dict[str, Any],
+    ) -> str: ...
+
+
 @dataclass(frozen=True)
 class RunResult:
     completed: bool

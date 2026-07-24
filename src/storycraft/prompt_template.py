@@ -53,10 +53,20 @@ class PromptTemplate:
         schema = self.load_schema_object(category, stage)
         return json.dumps(schema, ensure_ascii=False, indent=2)
 
-    def render_system(self) -> str:
-        """システムプロンプト（共通・1つ）"""
-        template = self.env.get_template("system/common.j2")
-        return template.render()
+    def render_system(
+        self,
+        response_mode: str = "json",
+    ) -> str:
+        """応答形式に対応するシステムプロンプトを描画する。"""
+        if response_mode == "json":
+            name = "system/common.j2"
+        elif response_mode == "prose":
+            name = "system/prose.j2"
+        else:
+            raise ValueError(
+                f"未知のresponse modeです: {response_mode}"
+            )
+        return self.env.get_template(name).render()
 
     def render_user(self, kind: str, template_stage: str, **kwargs) -> str:
         """ユーザープロンプトをテンプレート名とレンダリング値から構築する。"""

@@ -1662,6 +1662,24 @@ def _validate_scene_card_staging_artifacts(
             adopted=True,
         )
 
+        prose_path = entry / "prose.md"
+        if prose_path.exists():
+            if not prose_path.is_file():
+                raise ContractError(
+                    "Scene stagingのprose.mdはfileが必要です"
+                )
+            from .scene_prose_stage import (
+                SceneProseStageService,
+            )
+
+            try:
+                prose = prose_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise ContractError(
+                    "Scene stagingのprose.mdを読めません"
+                ) from exc
+            SceneProseStageService._validate_prose_text(prose)
+
 
 def _create_directories(root: Path) -> None:
     for relative in REQUIRED_DIRECTORIES:

@@ -1,0 +1,34 @@
+# V1 Scene本文の批評
+
+本文候補をScene CardとWriter Contextへ照合し、修正可能で具体的な問題だけをissuesへ出す。
+問題がなければ空配列を返す。
+
+## Review観点
+
+- 自然な日本語散文である
+- 空または途中終了ではない
+- POV制約を守る
+- Scene Cardの目的、Conflict、必須beatを満たす
+- required_revelationsが自然に描かれている
+- forbidden_revelationsを開示していない
+- 非POV人物の内面を断定していない
+- 現在状態、人物、場所、Relationship、World Ruleと矛盾しない
+- JSON、内部ID、Review、metadata、執筆指示、箇条書きを本文に含めない
+- Scene Cardが許可しない重大な状態変化を新設していない
+- 冗長な説明だけでSceneが停滞していない
+- 台詞、動作、知覚、内面描写の因果が自然である
+
+issue.fieldには「第4段落」「該当台詞」など本文中の位置を指定する。
+本文を書き換えず、称賛や点数を出さない。
+
+## 本文候補
+
+{{ candidate }}
+
+## Writer Context
+
+{{ context | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}
