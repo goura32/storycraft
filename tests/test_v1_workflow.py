@@ -280,7 +280,7 @@ class V1WorkflowTest(unittest.TestCase):
                         ),
                     ).step()
 
-            validate.assert_not_called()
+            validate.assert_called_once_with(workspace)
             self.assertEqual(model_calls, [])
 
     def test_unimplemented_stage_does_not_create_model(
