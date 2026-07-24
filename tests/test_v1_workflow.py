@@ -283,6 +283,38 @@ class V1WorkflowTest(unittest.TestCase):
             validate.assert_called_once_with(workspace)
             self.assertEqual(model_calls, [])
 
+    def test_scene_commit_does_not_create_model(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = self.create_workspace(
+                temporary,
+                stage="scene_commit",
+            )
+            model_calls: list[object] = []
+
+            with (
+                patch(
+                    "storycraft.v1_workflow."
+                    "validate_workspace_layout"
+                ),
+                patch(
+                    "storycraft.v1_workflow."
+                    "SceneCommitStageService",
+                    FakeService,
+                ),
+            ):
+                result = V1WorkflowService(
+                    workspace,
+                    model_factory=lambda: model_calls.append(
+                        object()
+                    ),
+                ).step()
+
+            self.assertEqual(result, {"executed": True})
+            self.assertEqual(model_calls, [])
+            self.assertEqual(FakeService.calls[0][0], ())
+
     def test_unimplemented_stage_does_not_create_model(
         self,
     ) -> None:

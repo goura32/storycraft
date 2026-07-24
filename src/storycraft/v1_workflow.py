@@ -23,6 +23,7 @@ from .initial_world_stage import InitialWorldStageService
 from .input_stage import InputStageService
 from .run_state import RunStateStore
 from .scene_card_stage import SceneCardStageService
+from .scene_commit_stage import SceneCommitStageService
 from .scene_continuity_stage import (
     SceneContinuityStageService,
 )
@@ -114,6 +115,13 @@ class V1WorkflowService:
 
         if stage is Stage.INITIAL_ACCEPT:
             return InitialAcceptStageService(
+                self.workspace_root
+            ).run(
+                updated_at=updated_at,
+            )
+
+        if stage is Stage.SCENE_COMMIT:
+            return SceneCommitStageService(
                 self.workspace_root
             ).run(
                 updated_at=updated_at,
