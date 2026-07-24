@@ -3710,6 +3710,582 @@ class ContractValidator:
                 "next_volume_requirementsを空にしてください"
             )
 
+    @classmethod
+    def _validate_completion(
+        cls,
+        value: object,
+        current_generation: dict[str, Any],
+        initial_design: dict[str, Any],
+        series_plan: dict[str, Any],
+        handoffs: list[dict[str, Any]],
+        basis_generation_id: str,
+        *,
+        adopted: bool = False,
+    ) -> None:
+        """V1 Completion Candidateまたは採用版を検証する。"""
+        from datetime import datetime
+        import re
+
+        from jsonschema import Draft202012Validator
+
+        from .prompt_template import get_template_loader
+
+        if not isinstance(value, dict):
+            raise ContractError(
+                "CompletionはJSON objectが必要です"
+            )
+        if not isinstance(current_generation, dict):
+            raise ContractError(
+                "Completionには最終Generationが必要です"
+            )
+        if not isinstance(initial_design, dict):
+            raise ContractError(
+                "CompletionにはInitial Designが必要です"
+            )
+        if not isinstance(series_plan, dict):
+            raise ContractError(
+                "CompletionにはSeries Planが必要です"
+            )
+        if not isinstance(handoffs, list):
+            raise ContractError(
+                "CompletionにはVolume Handoff一覧が必要です"
+            )
+        if (
+            not isinstance(basis_generation_id, str)
+            or not basis_generation_id
+        ):
+            raise ContractError(
+                "Completionのbasis_generation_idが不正です"
+            )
+
+        candidate_fields = {
+            "status",
+            "summary",
+            "thread_checks",
+            "ending_checks",
+            "character_arc_checks",
+            "relationship_arc_checks",
+            "issues",
+        }
+        adopted_fields = {
+            *candidate_fields,
+            "schema_version",
+            "completion_id",
+            "basis_generation_id",
+            "precheck_summary",
+            "created_at",
+        }
+        expected_fields = (
+            adopted_fields if adopted else candidate_fields
+        )
+        if set(value) != expected_fields:
+            raise ContractError(
+                "Completionのfield構成が不正です"
+            )
+
+        candidate = deepcopy(value)
+
+        if adopted:
+            if candidate.pop("schema_version") != 1:
+                raise ContractError(
+                    "Completion.schema_versionは1が必要です"
+                )
+
+            completion_id = candidate.pop("completion_id")
+            if (
+                not isinstance(completion_id, str)
+                or re.fullmatch(
+                    r"completion-[0-9]{6}",
+                    completion_id,
+                )
+                is None
+            ):
+                raise ContractError(
+                    "Completion IDが不正です"
+                )
+
+            if (
+                candidate.pop("basis_generation_id")
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Completionのbasis Generationが"
+                    "最終Generationと一致しません"
+                )
+
+            precheck_summary = candidate.pop(
+                "precheck_summary"
+            )
+            if precheck_summary != {
+                "all_volumes_complete": True,
+                "all_planned_scenes_committed": True,
+                "unfinished_scene_work": False,
+            }:
+                raise ContractError(
+                    "Completionのprecheck_summaryが"
+                    "開始条件と一致しません"
+                )
+
+            created_at = candidate.pop("created_at")
+            if not isinstance(created_at, str):
+                raise ContractError(
+                    "Completion.created_atが不正です"
+                )
+            try:
+                parsed = datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise ContractError(
+                    "Completion.created_atが不正です"
+                ) from exc
+            if parsed.tzinfo is None:
+                raise ContractError(
+                    "Completion.created_atには"
+                    "timezoneが必要です"
+                )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "completion",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(candidate),
+            key=lambda error: (
+                tuple(
+                    str(part)
+                    for part in error.absolute_path
+                ),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part)
+                for part in error.absolute_path
+            )
+            target = location or "<root>"
+            raise ContractError(
+                "Completion契約違反: "
+                f"{target}: {error.message}"
+            )
+
+        for name in (
+            "canon.json",
+            "state.json",
+            "evidence.json",
+            "commit.json",
+        ):
+            record = current_generation.get(name)
+            if (
+                not isinstance(record, dict)
+                or record.get("generation_id")
+                != basis_generation_id
+            ):
+                raise ContractError(
+                    "Completionの最終Generationが不正です: "
+                    f"{name}"
+                )
+
+        volume_count = series_plan.get("volume_count")
+        if (
+            not isinstance(volume_count, int)
+            or isinstance(volume_count, bool)
+            or volume_count < 1
+        ):
+            raise ContractError(
+                "Series Plan.volume_countが不正です"
+            )
+        if len(handoffs) != volume_count:
+            raise ContractError(
+                "Completionには全Volumeの"
+                "Handoffが必要です"
+            )
+
+        completed_scene_ids: list[str] = []
+        seen_scene_ids: set[str] = set()
+
+        for volume_number, handoff in enumerate(
+            handoffs,
+            1,
+        ):
+            if not isinstance(handoff, dict):
+                raise ContractError(
+                    "Volume Handoffはobjectが必要です"
+                )
+            if (
+                handoff.get("handoff_id")
+                != f"handoff-v{volume_number:02d}"
+                or handoff.get("volume_number")
+                != volume_number
+            ):
+                raise ContractError(
+                    "Volume Handoffの順序またはIDが"
+                    "Series Planと一致しません"
+                )
+
+            scene_ids = handoff.get(
+                "completed_scene_ids"
+            )
+            if (
+                not isinstance(scene_ids, list)
+                or not scene_ids
+                or any(
+                    not isinstance(scene_id, str)
+                    or not scene_id
+                    for scene_id in scene_ids
+                )
+            ):
+                raise ContractError(
+                    "Volume Handoffのcompleted_scene_idsが"
+                    "不正です"
+                )
+
+            for scene_id in scene_ids:
+                if scene_id in seen_scene_ids:
+                    raise ContractError(
+                        "Completionの完了Sceneが"
+                        "複数Handoffで重複しています"
+                    )
+                seen_scene_ids.add(scene_id)
+                completed_scene_ids.append(scene_id)
+
+        if (
+            handoffs[-1].get("basis_generation_id")
+            != basis_generation_id
+        ):
+            raise ContractError(
+                "最終Handoffのbasis Generationが"
+                "最終Generationと一致しません"
+            )
+
+        state_file = current_generation["state.json"]
+        threads = state_file.get("threads")
+        characters = state_file.get("characters")
+        relationships = state_file.get("relationships")
+
+        if not isinstance(threads, dict):
+            raise ContractError(
+                "最終Generation.threadsが不正です"
+            )
+        if not isinstance(characters, dict):
+            raise ContractError(
+                "最終Generation.charactersが不正です"
+            )
+        if not isinstance(relationships, dict):
+            raise ContractError(
+                "最終Generation.relationshipsが不正です"
+            )
+
+        ending = initial_design.get("ending")
+        if not isinstance(ending, dict):
+            raise ContractError(
+                "Initial Design.endingが不正です"
+            )
+
+        required_thread_ids = ending.get(
+            "thread_requirements"
+        )
+        if (
+            not isinstance(required_thread_ids, list)
+            or not required_thread_ids
+            or any(
+                not isinstance(thread_id, str)
+                or not thread_id
+                for thread_id in required_thread_ids
+            )
+            or len(required_thread_ids)
+            != len(set(required_thread_ids))
+        ):
+            raise ContractError(
+                "Ending.thread_requirementsが不正です"
+            )
+
+        thread_checks = candidate["thread_checks"]
+        if [
+            check["thread_id"]
+            for check in thread_checks
+        ] != required_thread_ids:
+            raise ContractError(
+                "Completionは全完結必須Threadを"
+                "Ending Design順に一度ずつ評価する"
+                "必要があります"
+            )
+
+        for check in thread_checks:
+            thread_id = check["thread_id"]
+            thread_state = threads.get(thread_id)
+            if not isinstance(thread_state, dict):
+                raise ContractError(
+                    "Completionが未知のThreadを"
+                    "参照しています"
+                )
+            if (
+                check["required_for_completion"]
+                is not True
+            ):
+                raise ContractError(
+                    "CompletionのThread Checkは"
+                    "完結必須Threadだけを対象にします"
+                )
+            if (
+                check["status"]
+                != thread_state.get("status")
+            ):
+                raise ContractError(
+                    "CompletionのThread statusが"
+                    "最終Generationと一致しません"
+                )
+
+        ending_requirement_ids = [
+            "ending-desired-effect",
+        ]
+        for index, _ in enumerate(
+            ending.get("required_outcomes", []),
+            1,
+        ):
+            ending_requirement_ids.append(
+                f"ending-required-outcome-{index:03d}"
+            )
+        for index, _ in enumerate(
+            ending.get("forbidden_outcomes", []),
+            1,
+        ):
+            ending_requirement_ids.append(
+                f"ending-forbidden-outcome-{index:03d}"
+            )
+        for index, _ in enumerate(
+            ending.get("final_revelations", []),
+            1,
+        ):
+            ending_requirement_ids.append(
+                f"ending-final-revelation-{index:03d}"
+            )
+
+        ending_checks = candidate["ending_checks"]
+        if [
+            check["requirement_id"]
+            for check in ending_checks
+        ] != ending_requirement_ids:
+            raise ContractError(
+                "Completionは全Ending条件を"
+                "決定的ID順に一度ずつ評価する"
+                "必要があります"
+            )
+
+        character_end_states = ending.get(
+            "character_end_states"
+        )
+        relationship_end_states = ending.get(
+            "relationship_end_states"
+        )
+        if (
+            not isinstance(character_end_states, dict)
+            or not character_end_states
+        ):
+            raise ContractError(
+                "Ending.character_end_statesが不正です"
+            )
+        if (
+            not isinstance(relationship_end_states, dict)
+            or not relationship_end_states
+        ):
+            raise ContractError(
+                "Ending.relationship_end_statesが不正です"
+            )
+
+        character_checks = candidate[
+            "character_arc_checks"
+        ]
+        if [
+            check["character_id"]
+            for check in character_checks
+        ] != list(character_end_states):
+            raise ContractError(
+                "Completionは全Character End Stateを"
+                "一度ずつ評価する必要があります"
+            )
+
+        for check in character_checks:
+            character_id = check["character_id"]
+            if character_id not in characters:
+                raise ContractError(
+                    "Completionが最終Generationにない"
+                    "Characterを参照しています"
+                )
+            if (
+                check["planned_end_state"]
+                != character_end_states[character_id]
+            ):
+                raise ContractError(
+                    "Character Arcのplanned_end_stateが"
+                    "Ending Designと一致しません"
+                )
+
+        relationship_checks = candidate[
+            "relationship_arc_checks"
+        ]
+        if [
+            check["relationship_id"]
+            for check in relationship_checks
+        ] != list(relationship_end_states):
+            raise ContractError(
+                "Completionは全Relationship End Stateを"
+                "一度ずつ評価する必要があります"
+            )
+
+        for check in relationship_checks:
+            relationship_id = check["relationship_id"]
+            if relationship_id not in relationships:
+                raise ContractError(
+                    "Completionが最終Generationにない"
+                    "Relationshipを参照しています"
+                )
+            if (
+                check["planned_end_state"]
+                != relationship_end_states[
+                    relationship_id
+                ]
+            ):
+                raise ContractError(
+                    "Relationship Arcのplanned_end_stateが"
+                    "Ending Designと一致しません"
+                )
+
+        valid_scene_ids = set(completed_scene_ids)
+
+        def validate_evidence(
+            checks: list[dict[str, Any]],
+            *,
+            label: str,
+        ) -> None:
+            for check in checks:
+                evidence_scene_ids = check[
+                    "evidence_scene_ids"
+                ]
+                if any(
+                    scene_id not in valid_scene_ids
+                    for scene_id in evidence_scene_ids
+                ):
+                    raise ContractError(
+                        f"{label}が未確定Sceneを"
+                        "Evidenceとして参照しています"
+                    )
+                if (
+                    check["status"]
+                    in {
+                        "resolved",
+                        "satisfied",
+                        "partially_satisfied",
+                    }
+                    and not evidence_scene_ids
+                ):
+                    raise ContractError(
+                        f"{label}の達成判定には"
+                        "Evidence Sceneが必要です"
+                    )
+
+        validate_evidence(
+            thread_checks,
+            label="Thread Check",
+        )
+        validate_evidence(
+            ending_checks,
+            label="Ending Check",
+        )
+        validate_evidence(
+            character_checks,
+            label="Character Arc Check",
+        )
+        validate_evidence(
+            relationship_checks,
+            label="Relationship Arc Check",
+        )
+
+        thread_blocking = any(
+            check["status"] != "resolved"
+            for check in thread_checks
+        )
+        ending_blocking = any(
+            check["status"] != "satisfied"
+            for check in ending_checks
+        )
+
+        arc_checks = [
+            *character_checks,
+            *relationship_checks,
+        ]
+        arc_blocking = any(
+            check["status"] == "not_satisfied"
+            for check in arc_checks
+        )
+        arc_partial = any(
+            check["status"]
+            in {
+                "partially_satisfied",
+                "not_applicable",
+            }
+            for check in arc_checks
+        )
+
+        nested_issues = any(
+            check["issues"]
+            for check in [
+                *thread_checks,
+                *ending_checks,
+            ]
+        )
+        top_level_issues = bool(candidate["issues"])
+        blocking = (
+            thread_blocking
+            or ending_blocking
+            or arc_blocking
+        )
+
+        status = candidate["status"]
+
+        if status == "complete":
+            if (
+                blocking
+                or arc_partial
+                or nested_issues
+                or top_level_issues
+            ):
+                raise ContractError(
+                    "Completion status completeと"
+                    "Checkまたはissuesが矛盾しています"
+                )
+
+        elif status == "complete_with_issues":
+            if blocking:
+                raise ContractError(
+                    "重大な未完了条件を"
+                    "complete_with_issuesにできません"
+                )
+            if not (
+                arc_partial
+                or nested_issues
+                or top_level_issues
+            ):
+                raise ContractError(
+                    "complete_with_issuesには"
+                    "具体的な注意事項が必要です"
+                )
+
+        elif status == "incomplete":
+            if not (blocking or arc_partial):
+                raise ContractError(
+                    "incompleteには未達または"
+                    "部分達成の条件が必要です"
+                )
+            if not top_level_issues:
+                raise ContractError(
+                    "incompleteには不足内容を示す"
+                    "issuesが必要です"
+                )
+
     @staticmethod
     def _validate_volume_summary(value: dict[str, Any], state: dict[str, Any]) -> None:
         if not isinstance(value.get("volume_summary"), str) or not value["volume_summary"].strip() or not isinstance(value.get("unresolved_thread_ids"), list):

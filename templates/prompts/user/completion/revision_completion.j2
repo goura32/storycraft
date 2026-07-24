@@ -1,0 +1,28 @@
+# Storycraft V1 Completion Candidate Revision
+
+批評で指摘されたfieldだけを修正し、Completion Candidate全体をJSONで返してください。
+
+## Candidate
+
+{{ candidate | tojson }}
+
+## Critique
+
+{{ critique | tojson }}
+
+## Context
+
+{{ context | tojson }}
+
+## 制約
+
+- 批評で指摘されていないfieldを変更しないでください。
+- 新しい出来事、解決、Evidenceを創作しないでください。
+- Evidenceは確定済みScene IDだけを使用してください。
+- 確定状態がincompleteなら、根拠なくcompleteへ変更しないでください。
+- precheck_summaryや採用metadataを追加しないでください。
+- JSON Schemaにないfieldを追加しないでください。
+
+## 出力スキーマ
+
+{{ output_schema }}

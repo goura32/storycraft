@@ -1,0 +1,54 @@
+# Storycraft V1 Completion判定
+
+次の確定済み作品状態を評価し、Completion CandidateだけをJSONで返してください。
+
+## Context
+
+{{ context | tojson }}
+
+## 判定対象
+
+- current_generationは最終Generationです。
+- handoffsは全Volumeの確定済みHandoffです。
+- completed_scene_ids以外をEvidenceとして参照してはいけません。
+- Initial Designの完結必須Threadを漏れなく評価してください。
+- Ending条件を次のID規則で漏れなく評価してください。
+  - desired_effect:
+    `ending-desired-effect`
+  - required_outcomes:
+    `ending-required-outcome-001`から順番
+  - forbidden_outcomes:
+    `ending-forbidden-outcome-001`から順番
+  - final_revelations:
+    `ending-final-revelation-001`から順番
+- character_end_statesとrelationship_end_statesの全対象を評価してください。
+
+## status
+
+`complete`:
+- 全完結必須Threadがresolved
+- 全Ending条件がsatisfied
+- Character／Relationship Arcに未達や注意がない
+- issuesが空
+
+`complete_with_issues`:
+- Publicationへ進める主要条件は満たす
+- 軽微なArc上の注意や品質上のissuesが残る
+- 必須Thread未解決やEnding条件未達には使用しない
+
+`incomplete`:
+- 必須Thread、Ending条件、重要Arcのいずれかが不足
+- 正当な意味評価結果であり、無理にcompleteへ変更しない
+- 不足内容をissuesへ明記する
+## 制約
+
+- 新しい出来事、解決、Evidenceを創作しないでください。
+- Planだけを根拠に達成済みと判定しないでください。
+- Evidenceは確定済みScene IDだけを使用してください。
+- precheck_summary、completion_id、basis_generation_id、
+  schema_version、created_atは出力しないでください。
+- JSON Schemaにないfieldを追加しないでください。
+
+## 出力スキーマ
+
+{{ output_schema }}
