@@ -322,7 +322,7 @@ class V1CliTests(unittest.TestCase):
                 brief=_brief(),
             )
 
-            # rootの無関係なfile名を旧版markerとして解釈しない。
+            # rootの無関係なfile名をworkspace markerとして解釈しない。
             (
                 workspace / "state.json"
             ).write_text(

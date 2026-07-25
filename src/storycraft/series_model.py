@@ -1,4 +1,4 @@
-"""次世代実行系のOpenAI互換JSONモデル。"""
+"""Storycraft V1のOpenAI互換JSON Model実装。"""
 from __future__ import annotations
 
 import json

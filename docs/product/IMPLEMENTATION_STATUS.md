@@ -116,7 +116,7 @@ publication
 |---|---|---|
 | V1 Stage Registry | `部分実装` | Stage enumと個別Serviceは存在するが、全Stage dispatchは未完成 |
 | V1 Workflow Orchestrator | `未実装` | Recovery、遅延Provider生成、Stage dispatchを統合する実行境界がない |
-| 公開`run` | `部分実装` | CLIは存在するが、現在は旧`SeriesService`経路を使用 |
+| 公開`run` | `実装済み` | CLIは`V1WorkflowService`経路を使用する |
 | 公開`resume` | `部分実装` | CLIは存在するが、V1 Recoveryへ未接続 |
 | 公開`step` | `部分実装` | CLIは存在するが、V1の一意味Stage境界へ未接続 |
 | Workspace Lock | `未確認` | V1公開経路での取得・解放・競合動作を未確認 |
@@ -248,6 +248,6 @@ Path traversal／symlink拒否
 
 ## 更新規則
 
-状態を上げる場合は、production file、対応test、実行結果を確認する。名前だけ存在するStage、fixtureだけ存在する試験、legacy経路の成功を根拠にしない。
+状態を上げる場合は、production file、対応test、実行結果を確認する。名前だけ存在するStage、fixtureだけ存在する試験、製品経路外の成功を根拠にしない。
 
 状態を下げる必要が判明した場合は、理由と不足をこの文書へ反映する。正本文書の契約は、実装状況へ合わせて弱めない。

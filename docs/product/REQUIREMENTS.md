@@ -225,7 +225,7 @@ Publication
 ```text
 設計書へ記載した
 似た名前のfieldが存在する
-legacy testが通る
+V1の正規test suiteが通る
 正常系だけ動く
 手動確認だけを行った
 ```
