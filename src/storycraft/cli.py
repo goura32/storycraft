@@ -21,7 +21,11 @@ from .run_state import RunStateStore
 from .series_contracts import ContractError, StoryModel
 from .series_model import OpenAIStoryModel
 from .v1_workflow import V1WorkflowService
-from .workspace import create_workspace
+from .workspace import (
+    create_workspace,
+    validate_workspace_layout,
+)
+from .workspace_lock import workspace_lock
 
 
 ModelFactory = Callable[[], StoryModel]
@@ -363,6 +367,17 @@ def _report(
     )
 
 
+def _print_json(value: object) -> None:
+    """CLIの機械可読JSONをUTF-8で出力する。"""
+    print(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
 def cmd_run(
     args: argparse.Namespace,
 ) -> None:
@@ -478,6 +493,54 @@ def cmd_step(
     _report(state, workspace)
 
 
+def cmd_status(
+    args: argparse.Namespace,
+) -> None:
+    """Recovery状態を含む現在のrun-stateを表示する。"""
+    workspace = Path(args.out).expanduser()
+
+    _require_existing_v1_workspace(
+        workspace
+    )
+
+    state = RunStateStore(
+        workspace
+    ).load_recovery()
+
+    _print_json(state)
+
+
+def cmd_validate(
+    args: argparse.Namespace,
+) -> None:
+    """V1 workspace全体の整合性を検証する。"""
+    workspace = Path(args.out).expanduser()
+
+    _require_existing_v1_workspace(
+        workspace
+    )
+
+    with workspace_lock(workspace):
+        state = RunStateStore(
+            workspace
+        ).load_recovery()
+
+        validate_workspace_layout(
+            workspace,
+            run_state=state,
+        )
+
+    _print_json({
+        "schema_version": 1,
+        "valid": True,
+        "workspace_id": state["workspace_id"],
+        "run_id": state["run_id"],
+        "status": state["status"],
+        "current_stage": state["current_stage"],
+        "pending_commit": state["pending_commit"],
+    })
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="storycraft",
@@ -565,6 +628,31 @@ def _build_parser() -> argparse.ArgumentParser:
             "--config",
             default=None,
             help="設定YAML",
+        )
+        command.set_defaults(
+            handler=handler
+        )
+
+    for name, handler, help_text in (
+        (
+            "status",
+            cmd_status,
+            "V1 workspaceのrun-stateをJSON表示",
+        ),
+        (
+            "validate",
+            cmd_validate,
+            "V1 workspace全体の整合性を検証",
+        ),
+    ):
+        command = subcommands.add_parser(
+            name,
+            help=help_text,
+        )
+        command.add_argument(
+            "--out",
+            required=True,
+            help="既存V1 workspace",
         )
         command.set_defaults(
             handler=handler

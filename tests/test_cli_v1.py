@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 from copy import deepcopy
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -10,18 +12,24 @@ import unittest
 from unittest.mock import patch
 
 from storycraft.cli import (
+    _build_parser,
     _default_workspace_id,
     _keywords_payload,
     _require_existing_v1_workspace,
     _workspace_config,
     cmd_resume,
     cmd_run,
+    cmd_status,
     cmd_step,
+    cmd_validate,
 )
 from storycraft.config import Settings
 from storycraft.run_state import RunStateStore
 from storycraft.series_contracts import ContractError
-from storycraft.workspace import create_workspace
+from storycraft.workspace import (
+    create_workspace,
+    validate_workspace_layout,
+)
 
 
 def _brief() -> dict:
@@ -57,6 +65,23 @@ def _existing_args(
         out=str(workspace),
         config=None,
     )
+
+
+def _capture_json(
+    command,
+    args: argparse.Namespace,
+) -> dict:
+    output = io.StringIO()
+
+    with redirect_stdout(output):
+        command(args)
+
+    value = json.loads(output.getvalue())
+    if not isinstance(value, dict):
+        raise AssertionError(
+            "CLI JSON outputはobjectが必要です"
+        )
+    return value
 
 
 class V1CliTests(unittest.TestCase):
@@ -398,6 +423,210 @@ class V1CliTests(unittest.TestCase):
         self.assertNotIn("..", first)
         self.assertNotIn("/", first)
         self.assertNotIn("\\", first)
+
+
+
+    def test_status_reads_run_state_without_full_layout_validation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = (
+                Path(temporary)
+                / "workspace"
+            )
+
+            create_workspace(
+                workspace,
+                workspace_id="ws-cli-status",
+                config=_workspace_config(
+                    Settings.load()
+                ),
+                brief=_brief(),
+            )
+
+            expected = RunStateStore(
+                workspace
+            ).load_recovery()
+            state_bytes = (
+                workspace
+                / "runtime/run-state.json"
+            ).read_bytes()
+
+            # statusは診断用なので、run-state以外の破損が
+            # あっても現在状態を表示できる。
+            (workspace / "scenes").rmdir()
+
+            with (
+                patch(
+                    "storycraft.cli.Settings.load",
+                    side_effect=AssertionError(
+                        "statusがSettingsを読み込みました"
+                    ),
+                ),
+                patch(
+                    "storycraft.cli.OpenAIStoryModel",
+                    side_effect=AssertionError(
+                        "statusがProviderを生成しました"
+                    ),
+                ),
+                patch(
+                    "storycraft.cli._setup_logging",
+                    side_effect=AssertionError(
+                        "statusがlogを変更しました"
+                    ),
+                ),
+            ):
+                actual = _capture_json(
+                    cmd_status,
+                    _existing_args(workspace),
+                )
+
+            self.assertEqual(actual, expected)
+            self.assertEqual(
+                (
+                    workspace
+                    / "runtime/run-state.json"
+                ).read_bytes(),
+                state_bytes,
+            )
+
+    def test_validate_checks_complete_workspace_without_model(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = (
+                Path(temporary)
+                / "workspace"
+            )
+
+            create_workspace(
+                workspace,
+                workspace_id="ws-cli-validate",
+                config=_workspace_config(
+                    Settings.load()
+                ),
+                brief=_brief(),
+            )
+
+            state = RunStateStore(
+                workspace
+            ).load_recovery()
+            state_bytes = (
+                workspace
+                / "runtime/run-state.json"
+            ).read_bytes()
+
+            with (
+                patch(
+                    "storycraft.cli.Settings.load",
+                    side_effect=AssertionError(
+                        "validateがSettingsを読み込みました"
+                    ),
+                ),
+                patch(
+                    "storycraft.cli.OpenAIStoryModel",
+                    side_effect=AssertionError(
+                        "validateがProviderを生成しました"
+                    ),
+                ),
+                patch(
+                    "storycraft.cli._setup_logging",
+                    side_effect=AssertionError(
+                        "validateがlogを変更しました"
+                    ),
+                ),
+                patch(
+                    "storycraft.cli."
+                    "validate_workspace_layout",
+                    wraps=validate_workspace_layout,
+                ) as validator,
+            ):
+                actual = _capture_json(
+                    cmd_validate,
+                    _existing_args(workspace),
+                )
+
+            validator.assert_called_once_with(
+                workspace,
+                run_state=state,
+            )
+
+            self.assertEqual(
+                actual,
+                {
+                    "schema_version": 1,
+                    "valid": True,
+                    "workspace_id": (
+                        "ws-cli-validate"
+                    ),
+                    "run_id": "run-000001",
+                    "status": "initializing",
+                    "current_stage": "input",
+                    "pending_commit": None,
+                },
+            )
+            self.assertEqual(
+                (
+                    workspace
+                    / "runtime/run-state.json"
+                ).read_bytes(),
+                state_bytes,
+            )
+
+    def test_validate_rejects_broken_workspace(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = (
+                Path(temporary)
+                / "workspace"
+            )
+
+            create_workspace(
+                workspace,
+                workspace_id=(
+                    "ws-cli-invalid-validate"
+                ),
+                config=_workspace_config(
+                    Settings.load()
+                ),
+                brief=_brief(),
+            )
+
+            (workspace / "scenes").rmdir()
+
+            with self.assertRaisesRegex(
+                ContractError,
+                "scenes",
+            ):
+                cmd_validate(
+                    _existing_args(workspace)
+                )
+
+    def test_parser_registers_status_and_validate(
+        self,
+    ) -> None:
+        parser = _build_parser()
+
+        for name, handler in (
+            ("status", cmd_status),
+            ("validate", cmd_validate),
+        ):
+            with self.subTest(command=name):
+                args = parser.parse_args([
+                    name,
+                    "--out",
+                    "/tmp/storycraft-workspace",
+                ])
+
+                self.assertIs(
+                    args.handler,
+                    handler,
+                )
+                self.assertEqual(
+                    args.out,
+                    "/tmp/storycraft-workspace",
+                )
 
 
 if __name__ == "__main__":
