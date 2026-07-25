@@ -209,7 +209,7 @@ def _keywords_payload(
 def _workspace_kind(
     workspace: Path,
 ) -> str:
-    """pathをV1、旧形式、混在、未知へ分類する。"""
+    """pathを未作成、有効なV1、無効へ分類する。"""
     if (
         not workspace.exists()
         and not workspace.is_symlink()
@@ -222,21 +222,12 @@ def _workspace_kind(
     ):
         return "invalid"
 
-    v1 = (
+    if (
         workspace / "runtime/run-state.json"
-    ).is_file()
-    legacy = (
-        workspace / "state.json"
-    ).exists()
-
-    if v1 and legacy:
-        return "mixed"
-    if v1:
+    ).is_file():
         return "v1"
-    if legacy:
-        return "legacy"
 
-    return "unknown"
+    return "invalid"
 
 
 def _require_new_workspace(
@@ -247,32 +238,15 @@ def _require_new_workspace(
     if kind == "absent":
         return
 
-    if kind == "mixed":
-        raise ContractError(
-            "旧state.jsonとV1 runtime/run-state.jsonが"
-            "混在しています"
-        )
-
-    if kind == "legacy":
-        raise ContractError(
-            "旧形式workspaceには"
-            "V1 runを実行できません"
-        )
-
     if kind == "v1":
         raise ContractError(
             "V1 workspaceが既に存在します。"
             "resumeまたはstepを使用してください"
         )
 
-    if kind == "invalid":
-        raise ContractError(
-            "workspace出力先は"
-            "通常directory pathが必要です"
-        )
-
     raise ContractError(
-        "既存directoryはV1 workspaceではありません"
+        "workspace出力先は未作成の"
+        "通常directory pathが必要です"
     )
 
 
@@ -284,32 +258,14 @@ def _require_existing_v1_workspace(
     if kind == "v1":
         return
 
-    if kind == "mixed":
-        raise ContractError(
-            "旧state.jsonとV1 runtime/run-state.jsonが"
-            "混在しています"
-        )
-
-    if kind == "legacy":
-        raise ContractError(
-            "旧形式workspaceは"
-            "V1 CLIで再開できません"
-        )
-
     if kind == "absent":
         raise ContractError(
             "V1 workspaceが存在しません。"
             "runを使用してください"
         )
 
-    if kind == "invalid":
-        raise ContractError(
-            "workspace pathは"
-            "通常directoryが必要です"
-        )
-
     raise ContractError(
-        "指定directoryはV1 workspaceではありません"
+        "指定pathは有効なV1 workspaceではありません"
     )
 
 

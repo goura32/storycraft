@@ -60,7 +60,7 @@ def _existing_args(
 
 
 class V1CliTests(unittest.TestCase):
-    def test_run_creates_v1_workspace_without_legacy_state(
+    def test_run_creates_v1_workspace_without_root_state_file(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,49 +279,50 @@ class V1CliTests(unittest.TestCase):
                 2,
             )
 
-    def test_legacy_workspace_is_rejected(
+    def test_directory_without_v1_state_is_rejected(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = (
                 Path(temporary)
-                / "legacy"
+                / "invalid"
             )
             workspace.mkdir()
 
             (
-                workspace / "state.json"
+                workspace / "notes.txt"
             ).write_text(
-                "{}\n",
+                "not a Storycraft workspace\n",
                 encoding="utf-8",
             )
 
             with self.assertRaisesRegex(
                 ContractError,
-                "旧形式workspace",
+                "有効なV1 workspace",
             ):
                 _require_existing_v1_workspace(
                     workspace
                 )
 
-    def test_mixed_workspace_is_rejected(
+    def test_v1_workspace_detection_uses_run_state_only(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = (
                 Path(temporary)
-                / "mixed"
+                / "workspace"
             )
 
             create_workspace(
                 workspace,
-                workspace_id="ws-cli-mixed",
+                workspace_id="ws-cli-detection",
                 config=_workspace_config(
                     Settings.load()
                 ),
                 brief=_brief(),
             )
 
+            # rootの無関係なfile名を旧版markerとして解釈しない。
             (
                 workspace / "state.json"
             ).write_text(
@@ -329,13 +330,9 @@ class V1CliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(
-                ContractError,
-                "混在",
-            ):
-                _require_existing_v1_workspace(
-                    workspace
-                )
+            _require_existing_v1_workspace(
+                workspace
+            )
 
     def test_direct_keywords_build_v1_payload(
         self,

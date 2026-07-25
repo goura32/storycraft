@@ -68,7 +68,7 @@ class _TemplateLoader:
         return "JINJAでレンダリングされたbriefプロンプト"
 
 
-class SeriesEngineModelTemplateTests(unittest.TestCase):
+class StoryModelTemplateTests(unittest.TestCase):
     def test_generate_brief_renders_stage_template_as_sent_user_prompt(self) -> None:
         client = _CapturingClient()
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)
