@@ -114,6 +114,7 @@ class ReviewedCandidateStageRunner:
                 next_stage=next_stage,
                 after_adoption=after_adoption,
                 active_scene_id=active_scene_id,
+                recovering=True,
             )
 
         if state["active_candidate"] is not None:
@@ -279,6 +280,19 @@ class ReviewedCandidateStageRunner:
             active_state["stop_reason"] = None
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
+
+            if (
+                accepted
+                and self.spec.recoverable_adoption
+            ):
+                active_state["pending_commit"] = {
+                    "kind": "candidate_adoption",
+                    "target_id": candidate_id,
+                    "stage": self.spec.stage,
+                    "version": version,
+                    "phase": "prepared",
+                }
+
             validate_run_state(active_state)
             self.state_store.save(active_state)
             state = active_state
@@ -293,6 +307,7 @@ class ReviewedCandidateStageRunner:
                         next_stage=next_stage,
                         after_adoption=after_adoption,
                         active_scene_id=active_scene_id,
+                        recovering=False,
                     )
 
                 return self._complete_legacy_adoption(
@@ -396,6 +411,7 @@ class ReviewedCandidateStageRunner:
         next_stage: str | None,
         after_adoption: CandidateAfterAdoption | None,
         active_scene_id: str | None | object,
+        recovering: bool,
     ) -> dict[str, Any]:
         """保存済みaccepted CandidateをProviderなしで採用する。"""
         active = state["active_candidate"]
@@ -422,19 +438,13 @@ class ReviewedCandidateStageRunner:
         timestamp = state["updated_at"]
         pending = state["pending_commit"]
 
-        if pending is None:
-            prepared = deepcopy(state)
-            prepared["pending_commit"] = {
-                "kind": "candidate_adoption",
-                "target_id": candidate_id,
-                "stage": self.spec.stage,
-                "version": version,
-                "phase": "prepared",
-            }
-            validate_run_state(prepared)
-            self.state_store.save(prepared)
-        else:
-            prepared = deepcopy(state)
+        if not isinstance(pending, dict):
+            raise ContractError(
+                "Candidate Adoptionには"
+                "pending_commit=preparedが必要です"
+            )
+
+        prepared = deepcopy(state)
 
         candidate = load_accepted_candidate_version(
             self.workspace_root,
@@ -443,8 +453,6 @@ class ReviewedCandidateStageRunner:
             version=version,
         )
         validator(candidate)
-
-        recovering = pending is not None
 
         try:
             adopter(deepcopy(candidate))
@@ -465,13 +473,9 @@ class ReviewedCandidateStageRunner:
 
         if phase == "prepared":
             finalized = deepcopy(prepared)
-            finalized["pending_commit"] = {
-                "kind": "candidate_adoption",
-                "target_id": candidate_id,
-                "stage": self.spec.stage,
-                "version": version,
-                "phase": "artifact_finalized",
-            }
+            finalized["pending_commit"]["phase"] = (
+                "artifact_finalized"
+            )
             validate_run_state(finalized)
             self.state_store.save(finalized)
         elif phase == "artifact_finalized":

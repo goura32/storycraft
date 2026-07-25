@@ -94,6 +94,7 @@ class ReviewedProseStageRunner:
                 validator=validator,
                 adopter=adopter,
                 next_target=next_target,
+                recovering=True,
             )
 
         if state["active_candidate"] is not None:
@@ -262,6 +263,16 @@ class ReviewedProseStageRunner:
             active_state["stop_reason"] = None
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
+
+            if accepted:
+                active_state["pending_commit"] = {
+                    "kind": "candidate_adoption",
+                    "target_id": candidate_id,
+                    "stage": self.spec.stage,
+                    "version": version,
+                    "phase": "prepared",
+                }
+
             validate_run_state(active_state)
             self.state_store.save(active_state)
             state = active_state
@@ -272,6 +283,7 @@ class ReviewedProseStageRunner:
                     validator=validator,
                     adopter=adopter,
                     next_target=next_target,
+                    recovering=False,
                 )
 
             if exhausted:
@@ -364,6 +376,7 @@ class ReviewedProseStageRunner:
         validator: ProseValidator,
         adopter: ProseAdopter,
         next_target: dict[str, Any],
+        recovering: bool,
     ) -> dict[str, Any]:
         """保存済みaccepted ProseをProviderなしで採用する。"""
         active = state["active_candidate"]
@@ -391,19 +404,13 @@ class ReviewedProseStageRunner:
         timestamp = state["updated_at"]
         pending = state["pending_commit"]
 
-        if pending is None:
-            prepared = deepcopy(state)
-            prepared["pending_commit"] = {
-                "kind": "candidate_adoption",
-                "target_id": candidate_id,
-                "stage": self.spec.stage,
-                "version": version,
-                "phase": "prepared",
-            }
-            validate_run_state(prepared)
-            self.state_store.save(prepared)
-        else:
-            prepared = deepcopy(state)
+        if not isinstance(pending, dict):
+            raise ContractError(
+                "Prose Adoptionには"
+                "pending_commit=preparedが必要です"
+            )
+
+        prepared = deepcopy(state)
 
         prose = load_accepted_prose_candidate_version(
             self.workspace_root,
@@ -412,8 +419,6 @@ class ReviewedProseStageRunner:
             version=version,
         )
         validator(prose)
-
-        recovering = pending is not None
 
         try:
             adopter(prose)
@@ -434,13 +439,9 @@ class ReviewedProseStageRunner:
 
         if phase == "prepared":
             finalized = deepcopy(prepared)
-            finalized["pending_commit"] = {
-                "kind": "candidate_adoption",
-                "target_id": candidate_id,
-                "stage": self.spec.stage,
-                "version": version,
-                "phase": "artifact_finalized",
-            }
+            finalized["pending_commit"]["phase"] = (
+                "artifact_finalized"
+            )
             validate_run_state(finalized)
             self.state_store.save(finalized)
         elif phase == "artifact_finalized":

@@ -243,5 +243,62 @@ class CandidateAdoptionRecoveryV1Tests(
             self.assertEqual(model_calls, [])
 
 
+    def test_active_candidate_and_pending_are_saved_together(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_series_plan_workspace(
+                temporary
+            )
+            service = SeriesPlanStageService(workspace)
+            original_save = (
+                service.runner.state_store.save
+            )
+            observed_phases: list[str] = []
+
+            def checking_save(state: dict) -> None:
+                if (
+                    state["current_stage"]
+                    == "series_plan"
+                    and state["active_candidate"]
+                    is not None
+                ):
+                    pending = state["pending_commit"]
+
+                    self.assertIsInstance(
+                        pending,
+                        dict,
+                    )
+                    self.assertEqual(
+                        pending["kind"],
+                        "candidate_adoption",
+                    )
+                    observed_phases.append(
+                        pending["phase"]
+                    )
+
+                original_save(state)
+
+            with patch.object(
+                service.runner.state_store,
+                "save",
+                side_effect=checking_save,
+            ):
+                service.run(
+                    AcceptingModel(
+                        series_plan_candidate()
+                    ),
+                    updated_at=PLAN_AT,
+                )
+
+            self.assertEqual(
+                observed_phases,
+                [
+                    "prepared",
+                    "artifact_finalized",
+                ],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

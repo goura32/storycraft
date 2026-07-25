@@ -240,5 +240,62 @@ class ProseAdoptionRecoveryV1Tests(
             self.assertEqual(model_calls, [])
 
 
+    def test_active_candidate_and_pending_are_saved_together(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = create_scene_prose_workspace(
+                temporary
+            )
+            service = SceneProseStageService(
+                workspace
+            )
+            original_save = (
+                service.runner.state_store.save
+            )
+            observed_phases: list[str] = []
+
+            def checking_save(state: dict) -> None:
+                if (
+                    state["current_stage"]
+                    == "scene_prose"
+                    and state["active_candidate"]
+                    is not None
+                ):
+                    pending = state["pending_commit"]
+
+                    self.assertIsInstance(
+                        pending,
+                        dict,
+                    )
+                    self.assertEqual(
+                        pending["kind"],
+                        "candidate_adoption",
+                    )
+                    observed_phases.append(
+                        pending["phase"]
+                    )
+
+                original_save(state)
+
+            with patch.object(
+                service.runner.state_store,
+                "save",
+                side_effect=checking_save,
+            ):
+                service.run(
+                    AcceptingProseModel(PROSE),
+                    updated_at=PROSE_AT,
+                )
+
+            self.assertEqual(
+                observed_phases,
+                [
+                    "prepared",
+                    "artifact_finalized",
+                ],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
