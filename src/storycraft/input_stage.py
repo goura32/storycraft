@@ -11,6 +11,7 @@ import tempfile
 from typing import Any
 
 from .run_state import RunStateStore, validate_run_state
+from .error_sanitizer import safe_exception_message
 from .series_contracts import (
     ContractError,
     ContractValidator,
@@ -19,6 +20,9 @@ from .series_contracts import (
 from .review_contracts import (
     validate_critique_fields,
     validate_revision_scope,
+)
+from .reviewed_candidate_stage import (
+    load_accepted_candidate_version,
 )
 from .stage_transition import advance_run_state
 from .workspace import validate_workspace_layout
@@ -47,6 +51,27 @@ class InputStageService:
         if state["status"] not in {"initializing", "running"}:
             raise ContractError(
                 "input Stageを実行できるrun statusではありません"
+            )
+
+        pending = state["pending_commit"]
+        if (
+            isinstance(pending, dict)
+            and pending.get("kind")
+            == "candidate_adoption"
+        ):
+            return self._complete_generated_brief_adoption(
+                state,
+                recovering=True,
+            )
+
+        if pending is not None:
+            raise ContractError(
+                "pending_commitがあるため"
+                "input Stageを開始できません"
+            )
+        if state["active_candidate"] is not None:
+            raise ContractError(
+                "未処理のactive_candidateがあります"
             )
 
         timestamp = updated_at or _utc_now()
@@ -106,7 +131,7 @@ class InputStageService:
                 stop_reason="manual_review_required",
                 last_error={
                     "code": "BRIEF_GENERATION_INVALID",
-                    "message": str(exc),
+                    "message": safe_exception_message(exc),
                 },
                 updated_at=timestamp,
             )
@@ -143,7 +168,7 @@ class InputStageService:
                     stop_reason="manual_review_required",
                     last_error={
                         "code": "BRIEF_REVIEW_INVALID",
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
@@ -205,31 +230,25 @@ class InputStageService:
             active_state["stop_reason"] = None
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
+
+            if accepted:
+                active_state["pending_commit"] = {
+                    "kind": "candidate_adoption",
+                    "target_id": candidate_id,
+                    "stage": "input",
+                    "version": version,
+                    "phase": "prepared",
+                }
+
             validate_run_state(active_state)
             self.state_store.save(active_state)
             state = active_state
 
             if accepted:
-                _adopt_generated_brief(
-                    self.workspace_root,
-                    candidate,
+                return self._complete_generated_brief_adoption(
+                    state,
+                    recovering=False,
                 )
-                validate_workspace_layout(self.workspace_root)
-
-                adopted_state = deepcopy(state)
-                adopted_state["active_candidate"] = None
-                validate_run_state(adopted_state)
-
-                advanced = advance_run_state(
-                    adopted_state,
-                    next_stage="initial_concept",
-                    next_target={
-                        "series": state["workspace_id"],
-                    },
-                    updated_at=timestamp,
-                )
-                self.state_store.save(advanced)
-                return advanced
 
             if exhausted:
                 blocked = _stop_state(
@@ -279,7 +298,7 @@ class InputStageService:
                     stop_reason="manual_review_required",
                     last_error={
                         "code": "BRIEF_REVISION_INVALID",
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
@@ -303,6 +322,120 @@ class InputStageService:
             candidate = revised
             version += 1
             revisions_used += 1
+
+
+    def _complete_generated_brief_adoption(
+        self,
+        state: dict[str, Any],
+        *,
+        recovering: bool,
+    ) -> dict[str, Any]:
+        """accepted Brief CandidateをProviderなしで採用する。"""
+        pending = state["pending_commit"]
+        active = state["active_candidate"]
+
+        if not isinstance(pending, dict):
+            raise ContractError(
+                "Keywords Brief Adoptionには"
+                "pending_commitが必要です"
+            )
+        if not isinstance(active, dict):
+            raise ContractError(
+                "Keywords Brief Adoptionには"
+                "active_candidateが必要です"
+            )
+
+        candidate_id = active.get("candidate_id")
+        version = active.get("version")
+
+        if (
+            pending.get("kind")
+            != "candidate_adoption"
+            or pending.get("stage") != "input"
+            or pending.get("target_id")
+            != candidate_id
+            or pending.get("version") != version
+            or active.get("kind") != "input"
+            or not isinstance(candidate_id, str)
+            or not isinstance(version, int)
+            or isinstance(version, bool)
+            or version < 1
+        ):
+            raise ContractError(
+                "Keywords Brief Adoptionの"
+                "pendingとactive_candidateが"
+                "一致しません"
+            )
+
+        candidate = load_accepted_candidate_version(
+            self.workspace_root,
+            stage="input",
+            candidate_id=candidate_id,
+            version=version,
+        )
+
+        keywords = _read_json(
+            self.workspace_root / "input/keywords.json"
+        )
+        _validate_generated_brief(
+            candidate,
+            keywords,
+        )
+
+        try:
+            _adopt_generated_brief(
+                self.workspace_root,
+                candidate,
+            )
+        except Exception as exc:
+            if recovering:
+                raise ContractError(
+                    "Keywords Brief Adoption Recoveryは"
+                    "manual対応が必要です"
+                ) from exc
+            raise
+
+        validate_workspace_layout(
+            self.workspace_root,
+            run_state=state,
+        )
+
+        phase = pending.get("phase")
+
+        if phase == "prepared":
+            finalized = deepcopy(state)
+            finalized["pending_commit"] = {
+                "kind": "candidate_adoption",
+                "target_id": candidate_id,
+                "stage": "input",
+                "version": version,
+                "phase": "artifact_finalized",
+            }
+            validate_run_state(finalized)
+            self.state_store.save(finalized)
+        elif phase == "artifact_finalized":
+            finalized = deepcopy(state)
+        else:
+            raise ContractError(
+                "Keywords Brief Adoption phaseが"
+                "不正です"
+            )
+
+        adopted_state = deepcopy(finalized)
+        adopted_state["active_candidate"] = None
+        adopted_state["pending_commit"] = None
+        validate_run_state(adopted_state)
+
+        advanced = advance_run_state(
+            adopted_state,
+            next_stage="initial_concept",
+            next_target={
+                "series": state["workspace_id"],
+            },
+            updated_at=state["updated_at"],
+        )
+        self.state_store.save(advanced)
+        return advanced
 
 
 def _validate_generated_brief(

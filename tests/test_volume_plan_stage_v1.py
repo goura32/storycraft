@@ -52,6 +52,7 @@ def write_json(path: Path, value: dict) -> None:
 
 def volume_two_candidate() -> dict:
     return {
+        "title": "欠けた記録",
         "starting_state_summary": (
             "第一巻の調査を経て、澪と凪は限定的に対話を再開し、"
             "火災記録と町の証言の不一致を追える状態にある。"

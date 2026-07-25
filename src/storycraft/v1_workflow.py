@@ -71,6 +71,11 @@ _MODEL_STAGE_SERVICES = {
     Stage.COMPLETION: CompletionStageService,
 }
 
+_CANDIDATE_ADOPTION_RECOVERY_STAGES = frozenset(
+    set(_MODEL_STAGE_SERVICES)
+)
+
+
 
 class V1WorkflowService:
     """V1 workspaceをLockして現在Stageを一回だけ実行する。"""
@@ -202,6 +207,37 @@ class V1WorkflowService:
     ) -> None:
         pending = state["pending_commit"]
         assert isinstance(pending, dict)
+
+        if pending.get("kind") == "candidate_adoption":
+            stage = Stage(state["current_stage"])
+
+            if stage is Stage.INPUT:
+                InputStageService(
+                    self.workspace_root
+                ).run(
+                    None,
+                    updated_at=state["updated_at"],
+                )
+                return
+
+            if (
+                stage
+                not in _CANDIDATE_ADOPTION_RECOVERY_STAGES
+            ):
+                raise ContractError(
+                    "このStageのCandidate Adoption Recoveryは"
+                    "まだ有効ではありません: "
+                    f"{stage.value}"
+                )
+
+            service_type = _MODEL_STAGE_SERVICES[stage]
+            service_type(
+                self.workspace_root
+            ).run(
+                None,
+                updated_at=state["updated_at"],
+            )
+            return
 
         if pending.get("kind") == Stage.SCENE_COMMIT.value:
             execute_scene_commit_recovery(

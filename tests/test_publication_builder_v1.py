@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -10,6 +11,7 @@ import unittest
 from storycraft.publication_builder import (
     build_publication_files,
     validate_publication_directory,
+    validate_publication_files,
 )
 from storycraft.series_contracts import ContractError
 
@@ -297,3 +299,190 @@ class PublicationBuilderV1Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublicationManuscriptContractV1Tests(
+    unittest.TestCase
+):
+    def _build(
+        self,
+        volumes: list[dict],
+    ) -> dict:
+        return build_publication_files(
+            publication_id="pub-000001",
+            title="潮騒の記憶",
+            language="ja",
+            basis_generation_id="gen-000240",
+            completion=read_json(
+                FIXTURE_ROOT / "completion.json"
+            ),
+            volumes=volumes,
+            created_at=CREATED_AT,
+        )
+
+    def test_multiple_scenes_use_one_separator(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"][0]["scenes"].append({
+            "scene_number": 2,
+            "prose": "澪は灯台の階段を上った。",
+        })
+
+        files = self._build(volumes)
+        markdown = files["v01.md"]
+        metadata = files["metadata.json"]
+
+        self.assertEqual(
+            markdown.count("\n\n* * *\n\n"),
+            1,
+        )
+        self.assertEqual(
+            metadata["volume_entries"][0][
+                "scene_count"
+            ],
+            2,
+        )
+
+    def test_crlf_is_normalized_deterministically(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"][0]["scenes"][0][
+            "prose"
+        ] = "第一段落。\r\n\r\n第二段落。\r\n"
+
+        files = self._build(volumes)
+
+        self.assertIn(
+            "第一段落。\n\n第二段落。\n",
+            files["v01.md"],
+        )
+        self.assertNotIn(
+            "\r",
+            files["v01.md"],
+        )
+
+    def test_heading_newline_is_rejected(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["title"] = (
+            "帰郷\n# 注入見出し"
+        )
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "改行",
+        ):
+            self._build(volumes)
+
+    def test_control_character_is_rejected(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"][0]["scenes"][0][
+            "prose"
+        ] = "本文\x01改変"
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "制御文字",
+        ):
+            self._build(volumes)
+
+    def test_scene_separator_collision_is_rejected(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"][0]["scenes"][0][
+            "prose"
+        ] = "第一段落。\n\n* * *\n\n第二段落。"
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "Scene区切り",
+        ):
+            self._build(volumes)
+
+    def test_markdown_heading_in_prose_is_rejected(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"][0]["scenes"][0][
+            "prose"
+        ] = "本文。\n\n## 内部見出し"
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "Markdown見出し",
+        ):
+            self._build(volumes)
+
+    def test_metadata_hashes_match_output(
+        self,
+    ) -> None:
+        files = self._build(
+            fixture_volumes()
+        )
+        metadata = files["metadata.json"]
+
+        series = files["series.md"]
+        self.assertEqual(
+            metadata["series_character_count"],
+            len(series),
+        )
+        self.assertEqual(
+            metadata["series_sha256"],
+            hashlib.sha256(
+                series.encode("utf-8")
+            ).hexdigest(),
+        )
+
+        for entry in metadata["volume_entries"]:
+            markdown = files[
+                entry["output_name"]
+            ]
+            self.assertEqual(
+                entry["character_count"],
+                len(markdown),
+            )
+            self.assertEqual(
+                entry["sha256"],
+                hashlib.sha256(
+                    markdown.encode("utf-8")
+                ).hexdigest(),
+            )
+
+    def test_metadata_hash_mutation_is_rejected(
+        self,
+    ) -> None:
+        files = self._build(
+            fixture_volumes()
+        )
+        mutated = deepcopy(files)
+        mutated["metadata.json"][
+            "series_sha256"
+        ] = "0" * 64
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "SHA-256",
+        ):
+            validate_publication_files(mutated)
+
+    def test_manuscripts_end_with_one_lf(
+        self,
+    ) -> None:
+        files = self._build(
+            fixture_volumes()
+        )
+
+        for name, value in files.items():
+            if not name.endswith(".md"):
+                continue
+
+            self.assertTrue(value.endswith("\n"))
+            self.assertFalse(
+                value.endswith("\n\n")
+            )

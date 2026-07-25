@@ -321,7 +321,10 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         messages = [{"__kind": "generate", "__phase": "brief", "__ref": "brief", "__attempt": 1}]
         with self.assertNoLogs("storycraft", level="ERROR"):
             record = client.call_once(messages, {"type": "json_object"}, 1)
-        self.assertEqual(record.error, "ConnectionError: secret-token\\nFORGED")
+        self.assertEqual(
+            record.error,
+            "ConnectionError: [REDACTED]",
+        )
 
     def test_cli_logs_safe_exhausted_transport_error_once_per_layer(self) -> None:
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)

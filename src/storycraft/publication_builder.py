@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -14,6 +15,16 @@ from .series_contracts import ContractError
 _PUBLICATION_ID = re.compile(r"^pub-[0-9]{6}$")
 _GENERATION_ID = re.compile(r"^gen-[0-9]{6}$")
 _COMPLETION_ID = re.compile(r"^completion-[0-9]{6}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+_SCENE_SEPARATOR = "* * *"
+
+_FORBIDDEN_CONTROL = re.compile(
+    r"[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]"
+)
+_MARKDOWN_HEADING = re.compile(
+    r"^#{1,6}(?:[ \t]|$)"
+)
 
 _METADATA_FIELDS = {
     "schema_version",
@@ -25,6 +36,8 @@ _METADATA_FIELDS = {
     "basis_generation_id",
     "completion_id",
     "completion_status",
+    "series_character_count",
+    "series_sha256",
     "created_at",
 }
 
@@ -34,6 +47,8 @@ _VOLUME_ENTRY_FIELDS = {
     "chapter_count",
     "scene_count",
     "output_name",
+    "character_count",
+    "sha256",
 }
 
 _VOLUME_FIELDS = {
@@ -75,7 +90,7 @@ def build_publication_files(
         _PUBLICATION_ID,
         "Publication ID",
     )
-    normalized_title = _required_text(
+    normalized_title = _required_heading_text(
         title,
         "Publication title",
     )
@@ -104,7 +119,10 @@ def build_publication_files(
     for volume in normalized_volumes:
         volume_number = volume["volume_number"]
         output_name = f"v{volume_number:02d}.md"
-        markdown = _build_volume_markdown(volume)
+        markdown = _build_volume_markdown(
+            normalized_title,
+            volume,
+        )
 
         volume_files[output_name] = markdown
         volume_entries.append({
@@ -116,20 +134,21 @@ def build_publication_files(
                 for chapter in volume["chapters"]
             ),
             "output_name": output_name,
+            "character_count": len(markdown),
+            "sha256": _sha256_text(markdown),
         })
 
-    series_markdown = (
-        f"# {normalized_title}\n\n"
-        + "\n\n".join(
+    series_markdown = _build_series_markdown(
+        normalized_title,
+        [
             volume_files[
                 f"v{volume_number:02d}.md"
-            ].rstrip("\n")
+            ]
             for volume_number in range(
                 1,
                 len(normalized_volumes) + 1,
             )
-        )
-        + "\n"
+        ],
     )
 
     metadata = {
@@ -142,6 +161,12 @@ def build_publication_files(
         "basis_generation_id": basis_generation_id,
         "completion_id": completion["completion_id"],
         "completion_status": completion["status"],
+        "series_character_count": len(
+            series_markdown
+        ),
+        "series_sha256": _sha256_text(
+            series_markdown
+        ),
         "created_at": created_at,
     }
 
@@ -191,7 +216,7 @@ def validate_publication_files(
         )
 
     publication_id = metadata["publication_id"]
-    title = _required_text(
+    title = _required_heading_text(
         metadata["title"],
         "Publication title",
     )
@@ -218,6 +243,35 @@ def validate_publication_files(
         metadata["created_at"],
         "Publication created_at",
     )
+
+    _validate_manuscript_text(
+        series_markdown,
+        "Publication series.md",
+    )
+
+    series_character_count = _positive_integer(
+        metadata["series_character_count"],
+        "Publication series_character_count",
+    )
+    if series_character_count != len(
+        series_markdown
+    ):
+        raise ContractError(
+            "Publication series.mdの文字数が"
+            "metadataと一致しません"
+        )
+
+    _validate_sha256(
+        metadata["series_sha256"],
+        "Publication series_sha256",
+    )
+    if metadata["series_sha256"] != (
+        _sha256_text(series_markdown)
+    ):
+        raise ContractError(
+            "Publication series.mdのSHA-256が"
+            "metadataと一致しません"
+        )
 
     status = metadata["completion_status"]
     if status not in _PUBLISHABLE_COMPLETION_STATUSES:
@@ -263,7 +317,7 @@ def validate_publication_files(
                 "1からの連番でなければなりません"
             )
 
-        entry_title = _required_text(
+        entry_title = _required_heading_text(
             entry["title"],
             "Publication Volume title",
         )
@@ -271,9 +325,17 @@ def validate_publication_files(
             entry["chapter_count"],
             "Publication chapter_count",
         )
-        _positive_integer(
+        scene_count = _positive_integer(
             entry["scene_count"],
             "Publication scene_count",
+        )
+        character_count = _positive_integer(
+            entry["character_count"],
+            "Publication character_count",
+        )
+        _validate_sha256(
+            entry["sha256"],
+            "Publication Volume sha256",
         )
 
         output_name = f"v{expected_number:02d}.md"
@@ -289,27 +351,53 @@ def validate_publication_files(
             raise ContractError(
                 f"Publication巻本文がありません: {output_name}"
             )
-        if not markdown.endswith("\n"):
-            raise ContractError(
-                f"Publication巻本文の終端改行がありません: "
-                f"{output_name}"
-            )
+        _validate_manuscript_text(
+            markdown,
+            f"Publication {output_name}",
+        )
 
         expected_heading = (
-            f"# 第{_japanese_number(expected_number)}巻"
+            f"# {title}\n\n"
+            f"## 第{_japanese_number(expected_number)}巻"
             f"　{entry_title}\n\n"
         )
         if not markdown.startswith(expected_heading):
             raise ContractError(
                 f"Publication巻見出しが不正です: {output_name}"
             )
-        if markdown.count("\n## ") != chapter_count:
+        if markdown.count("\n### ") != chapter_count:
             raise ContractError(
                 f"Publication章数がmetadataと一致しません: "
                 f"{output_name}"
             )
 
-        volume_markdowns.append(markdown.rstrip("\n"))
+        separator_count = markdown.count(
+            f"\n\n{_SCENE_SEPARATOR}\n\n"
+        )
+        if (
+            chapter_count + separator_count
+            != scene_count
+        ):
+            raise ContractError(
+                f"Publication Scene数がmetadataと"
+                f"一致しません: {output_name}"
+            )
+
+        if character_count != len(markdown):
+            raise ContractError(
+                f"Publication巻本文の文字数が"
+                f"metadataと一致しません: {output_name}"
+            )
+
+        if entry["sha256"] != _sha256_text(
+            markdown
+        ):
+            raise ContractError(
+                f"Publication巻本文のSHA-256が"
+                f"metadataと一致しません: {output_name}"
+            )
+
+        volume_markdowns.append(markdown)
 
     if set(files) != expected_names:
         raise ContractError(
@@ -331,10 +419,9 @@ def validate_publication_files(
             "Publication MetadataとCompletion statusが一致しません"
         )
 
-    expected_series = (
-        f"# {title}\n\n"
-        + "\n\n".join(volume_markdowns)
-        + "\n"
+    expected_series = _build_series_markdown(
+        title,
+        volume_markdowns,
     )
     if series_markdown != expected_series:
         raise ContractError(
@@ -445,7 +532,7 @@ def _validate_volumes(
                 "1からの連番でなければなりません"
             )
 
-        volume_title = _required_text(
+        volume_title = _required_heading_text(
             volume["title"],
             "Publication Volume title",
         )
@@ -476,7 +563,7 @@ def _validate_volumes(
                     "1からの連番でなければなりません"
                 )
 
-            chapter_title = _required_text(
+            chapter_title = _required_heading_text(
                 chapter["title"],
                 "Publication Chapter title",
             )
@@ -505,7 +592,7 @@ def _validate_volumes(
                         "1からの連番でなければなりません"
                     )
 
-                prose = _required_text(
+                prose = _normalize_prose(
                     scene["prose"],
                     "Publication Scene prose",
                 )
@@ -530,26 +617,77 @@ def _validate_volumes(
 
 
 def _build_volume_markdown(
+    series_title: str,
     volume: dict[str, Any],
 ) -> str:
     parts = [
+        f"# {series_title}",
         (
-            f"# 第{_japanese_number(volume['volume_number'])}巻"
+            f"## 第{_japanese_number(volume['volume_number'])}巻"
             f"　{volume['title']}"
         ),
     ]
 
     for chapter in volume["chapters"]:
         parts.append(
-            f"## 第{_japanese_number(chapter['chapter_number'])}章"
+            f"### 第{_japanese_number(chapter['chapter_number'])}章"
             f"　{chapter['title']}"
         )
-        parts.extend(
-            scene["prose"]
-            for scene in chapter["scenes"]
+
+        for index, scene in enumerate(
+            chapter["scenes"]
+        ):
+            if index > 0:
+                parts.append(_SCENE_SEPARATOR)
+            parts.append(scene["prose"])
+
+    markdown = "\n\n".join(parts) + "\n"
+    _validate_manuscript_text(
+        markdown,
+        "Publication Volume Markdown",
+    )
+    return markdown
+
+
+def _build_series_markdown(
+    title: str,
+    volume_markdowns: list[str],
+) -> str:
+    if not volume_markdowns:
+        raise ContractError(
+            "Publication series.mdには"
+            "1巻以上が必要です"
         )
 
-    return "\n\n".join(parts) + "\n"
+    prefix = f"# {title}\n\n"
+    bodies: list[str] = []
+
+    for markdown in volume_markdowns:
+        if not markdown.startswith(prefix):
+            raise ContractError(
+                "Publication巻本文のシリーズ題名が"
+                "一致しません"
+            )
+
+        body = markdown[
+            len(prefix):
+        ].rstrip("\n")
+        if not body:
+            raise ContractError(
+                "Publication巻本文が空です"
+            )
+        bodies.append(body)
+
+    series = (
+        prefix
+        + "\n\n".join(bodies)
+        + "\n"
+    )
+    _validate_manuscript_text(
+        series,
+        "Publication series.md",
+    )
+    return series
 
 
 def _validate_completion(
@@ -631,19 +769,140 @@ def _japanese_number(value: int) -> str:
     return "".join(parts)
 
 
+def _normalize_newlines(
+    value: str,
+) -> str:
+    return value.replace(
+        "\r\n",
+        "\n",
+    ).replace(
+        "\r",
+        "\n",
+    )
+
+
+def _reject_control_characters(
+    value: str,
+    label: str,
+) -> None:
+    if _FORBIDDEN_CONTROL.search(value):
+        raise ContractError(
+            f"{label}に不正な制御文字を含められません"
+        )
+
+
 def _required_text(
     value: object,
     label: str,
 ) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
         raise ContractError(
             f"{label}は空でない文字列が必要です"
         )
-    if "\x00" in value:
+
+    normalized = _normalize_newlines(value)
+    _reject_control_characters(
+        normalized,
+        label,
+    )
+    normalized = normalized.strip()
+
+    if not normalized:
         raise ContractError(
-            f"{label}にNULを含められません"
+            f"{label}は空でない文字列が必要です"
         )
-    return value.strip()
+
+    return normalized
+
+
+def _required_heading_text(
+    value: object,
+    label: str,
+) -> str:
+    normalized = _required_text(
+        value,
+        label,
+    )
+
+    if "\n" in normalized:
+        raise ContractError(
+            f"{label}に改行を含められません"
+        )
+
+    return normalized
+
+
+def _normalize_prose(
+    value: object,
+    label: str,
+) -> str:
+    normalized = _required_text(
+        value,
+        label,
+    )
+
+    for line in normalized.split("\n"):
+        if line == _SCENE_SEPARATOR:
+            raise ContractError(
+                f"{label}にPublication用Scene区切りを"
+                "含められません"
+            )
+        if _MARKDOWN_HEADING.match(line):
+            raise ContractError(
+                f"{label}にMarkdown見出しを"
+                "含められません"
+            )
+
+    return normalized
+
+
+def _validate_manuscript_text(
+    value: object,
+    label: str,
+) -> str:
+    if not isinstance(value, str) or not value:
+        raise ContractError(
+            f"{label}は空でない文字列が必要です"
+        )
+
+    if "\r" in value:
+        raise ContractError(
+            f"{label}の改行はLFでなければなりません"
+        )
+
+    _reject_control_characters(
+        value,
+        label,
+    )
+
+    if (
+        not value.endswith("\n")
+        or value.endswith("\n\n")
+    ):
+        raise ContractError(
+            f"{label}の終端はLF一つでなければなりません"
+        )
+
+    return value
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(
+        value.encode("utf-8")
+    ).hexdigest()
+
+
+def _validate_sha256(
+    value: object,
+    label: str,
+) -> None:
+    if (
+        not isinstance(value, str)
+        or _SHA256.fullmatch(value) is None
+    ):
+        raise ContractError(
+            f"{label}が不正です"
+        )
 
 
 def _positive_integer(

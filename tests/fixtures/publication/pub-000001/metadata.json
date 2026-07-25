@@ -10,32 +10,42 @@
       "title": "帰郷",
       "chapter_count": 1,
       "scene_count": 1,
-      "output_name": "v01.md"
+      "output_name": "v01.md",
+      "character_count": 88,
+      "sha256": "cd335e936885042a163cbb9910ad564f8176be30b0dd38419bbce89387fca35b"
     },
     {
       "volume_number": 2,
       "title": "欠けた記録",
       "chapter_count": 1,
       "scene_count": 1,
-      "output_name": "v02.md"
+      "output_name": "v02.md",
+      "character_count": 84,
+      "sha256": "a1802bae3d3adf4d065033be18fe01c86c4b98fa2936ea8f518566badf8269a0"
     },
     {
       "volume_number": 3,
       "title": "火の記憶",
       "chapter_count": 1,
       "scene_count": 1,
-      "output_name": "v03.md"
+      "output_name": "v03.md",
+      "character_count": 88,
+      "sha256": "401b61b63e5eaa43fb2b6116a8a37870c34be93bd96d8e3b010fac4c5d2500ab"
     },
     {
       "volume_number": 4,
       "title": "同じ灯",
       "chapter_count": 1,
       "scene_count": 1,
-      "output_name": "v04.md"
+      "output_name": "v04.md",
+      "character_count": 86,
+      "sha256": "6ae7d2cf5c36eb1d026577a6df58286274aac3f159faa8bcc0b19acdefb45a15"
     }
   ],
   "basis_generation_id": "gen-000240",
   "completion_id": "completion-000001",
   "completion_status": "complete",
+  "series_character_count": 322,
+  "series_sha256": "5a4a6ca0b109cfe890dff37b6e7758812898d7e9cb63f7f1649039aa20e4e8a2",
   "created_at": "2026-07-23T12:10:00Z"
 }

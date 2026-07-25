@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "title",
     "chapter_purpose",
     "starting_conditions",
     "ending_changes",
@@ -12,6 +13,13 @@
     "constraints"
   ],
   "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
+      "description": "読者向け章題。章番号や「第N章」は含めず、本文内容を簡潔に示す題名だけを書く。"
+    },
     "chapter_purpose": {
       "type": "string",
       "minLength": 1,
