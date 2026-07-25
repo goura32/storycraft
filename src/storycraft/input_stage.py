@@ -11,6 +11,7 @@ import tempfile
 from typing import Any
 
 from .run_state import RunStateStore, validate_run_state
+from .error_sanitizer import safe_exception_message
 from .series_contracts import (
     ContractError,
     ContractValidator,
@@ -130,7 +131,7 @@ class InputStageService:
                 stop_reason="manual_review_required",
                 last_error={
                     "code": "BRIEF_GENERATION_INVALID",
-                    "message": str(exc),
+                    "message": safe_exception_message(exc),
                 },
                 updated_at=timestamp,
             )
@@ -167,7 +168,7 @@ class InputStageService:
                     stop_reason="manual_review_required",
                     last_error={
                         "code": "BRIEF_REVIEW_INVALID",
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
@@ -297,7 +298,7 @@ class InputStageService:
                     stop_reason="manual_review_required",
                     last_error={
                         "code": "BRIEF_REVISION_INVALID",
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={

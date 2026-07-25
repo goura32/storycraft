@@ -13,6 +13,7 @@ import tempfile
 from typing import Any
 
 from .run_state import RunStateStore, validate_run_state
+from .error_sanitizer import safe_exception_message
 from .series_contracts import (
     ContractError,
     ContractValidator,
@@ -161,7 +162,7 @@ class ReviewedCandidateStageRunner:
                     "code": (
                         f"{self.spec.stage.upper()}_GENERATION_INVALID"
                     ),
-                    "message": str(exc),
+                    "message": safe_exception_message(exc),
                 },
                 updated_at=timestamp,
             )
@@ -218,7 +219,7 @@ class ReviewedCandidateStageRunner:
                         "code": (
                             f"{self.spec.stage.upper()}_REVIEW_INVALID"
                         ),
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
@@ -385,7 +386,7 @@ class ReviewedCandidateStageRunner:
                         "code": (
                             f"{self.spec.stage.upper()}_REVISION_INVALID"
                         ),
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={

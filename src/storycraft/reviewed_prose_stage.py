@@ -21,6 +21,7 @@ from .reviewed_candidate_stage import (
     write_json_new,
 )
 from .run_state import RunStateStore, validate_run_state
+from .error_sanitizer import safe_exception_message
 from .series_contracts import (
     ContractError,
     ContractValidator,
@@ -145,7 +146,7 @@ class ReviewedProseStageRunner:
                         f"{self.spec.stage.upper()}"
                         "_GENERATION_INVALID"
                     ),
-                    "message": str(exc),
+                    "message": safe_exception_message(exc),
                 },
                 updated_at=timestamp,
             )
@@ -199,7 +200,7 @@ class ReviewedProseStageRunner:
                             f"{self.spec.stage.upper()}"
                             "_REVIEW_INVALID"
                         ),
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
@@ -338,7 +339,7 @@ class ReviewedProseStageRunner:
                             f"{self.spec.stage.upper()}"
                             "_REVISION_INVALID"
                         ),
-                        "message": str(exc),
+                        "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
                     active_candidate={
