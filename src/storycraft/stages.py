@@ -34,27 +34,12 @@ class Stage(StrEnum):
     PUBLICATION = "publication"
 
 
-# Version 1移行中に既存workflowが使用する旧テンプレート工程。
-# 新工程用テンプレートへの置換が完了するまで、定義元をここへ集約する。
-LEGACY_TEMPLATE_STAGES = (
-    "brief",
-    "characters",
-    "relationships",
-    "world",
-    "timeline",
-    "threads",
-    "volume_map",
-    "volume_chapters",
-    "scene_card",
-    "scene",
-    "continuity",
-    "volume_summary",
-    "closure",
-)
-
-
-# Version 1 Pipelineで専用prompt／schemaを実装済みの工程。
+# OpenAIStoryModelが描画できるVersion 1の全Template工程。
+#
+# briefはStage enum上ではinputに属するが、Keywords入力から
+# Briefを生成・批評・修正する際のmodel stageとして使用する。
 V1_TEMPLATE_STAGES = (
+    "brief",
     Stage.INITIAL_CONCEPT.value,
     Stage.INITIAL_CHARACTERS.value,
     Stage.INITIAL_RELATIONSHIPS.value,
@@ -74,11 +59,7 @@ V1_TEMPLATE_STAGES = (
     Stage.COMPLETION.value,
 )
 
-# OpenAIStoryModelが現在描画できる全template工程。
-ACTIVE_TEMPLATE_STAGES = (
-    *LEGACY_TEMPLATE_STAGES,
-    *V1_TEMPLATE_STAGES,
-)
+ACTIVE_TEMPLATE_STAGES = V1_TEMPLATE_STAGES
 
 
 INPUT_STAGES = (
