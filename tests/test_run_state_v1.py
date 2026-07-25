@@ -340,3 +340,82 @@ class CandidateAdoptionPendingStateV1Tests(
             "active_candidate",
         ):
             validate_run_state(state)
+
+
+class ReservedCandidateAdoptionStateV1Tests(
+    unittest.TestCase
+):
+    def _candidate_state(
+        self,
+        stage: str,
+        reserved: dict,
+    ) -> dict:
+        state = load_fixture(
+            "workspace/run-state-running.json"
+        )
+        state["current_stage"] = stage
+        state["active_scene_id"] = (
+            "scene-v01-c001-s001"
+            if stage == "scene_continuity"
+            else None
+        )
+        state["active_candidate"] = {
+            "kind": stage,
+            "candidate_id": "candidate-000001",
+            "version": 1,
+        }
+        state["pending_commit"] = {
+            "kind": "candidate_adoption",
+            "target_id": "candidate-000001",
+            "stage": stage,
+            "version": 1,
+            "phase": "prepared",
+            "reserved": reserved,
+        }
+        return state
+
+    def test_continuity_reserved_generation_is_valid(
+        self,
+    ) -> None:
+        state = self._candidate_state(
+            "scene_continuity",
+            {
+                "result_generation_id": (
+                    "gen-000002"
+                ),
+            },
+        )
+
+        validate_run_state(state)
+
+    def test_completion_reserved_id_is_valid(
+        self,
+    ) -> None:
+        state = self._candidate_state(
+            "completion",
+            {
+                "completion_id": (
+                    "completion-000001"
+                ),
+            },
+        )
+
+        validate_run_state(state)
+
+    def test_reserved_metadata_rejected_for_other_stage(
+        self,
+    ) -> None:
+        state = self._candidate_state(
+            "series_plan",
+            {
+                "completion_id": (
+                    "completion-000001"
+                ),
+            },
+        )
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "reserved",
+        ):
+            validate_run_state(state)

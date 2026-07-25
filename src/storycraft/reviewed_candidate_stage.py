@@ -78,6 +78,7 @@ class ReviewedCandidateStageRunner:
         active_scene_id: str | None | object = (
             _PRESERVE_ACTIVE_SCENE
         ),
+        adoption_metadata: dict[str, Any] | None = None,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
         validate_workspace_layout(self.workspace_root)
@@ -114,6 +115,7 @@ class ReviewedCandidateStageRunner:
                 next_stage=next_stage,
                 after_adoption=after_adoption,
                 active_scene_id=active_scene_id,
+                adoption_metadata=adoption_metadata,
                 recovering=True,
             )
 
@@ -285,13 +287,20 @@ class ReviewedCandidateStageRunner:
                 accepted
                 and self.spec.recoverable_adoption
             ):
-                active_state["pending_commit"] = {
+                pending_adoption = {
                     "kind": "candidate_adoption",
                     "target_id": candidate_id,
                     "stage": self.spec.stage,
                     "version": version,
                     "phase": "prepared",
                 }
+                if adoption_metadata is not None:
+                    pending_adoption["reserved"] = (
+                        deepcopy(adoption_metadata)
+                    )
+                active_state["pending_commit"] = (
+                    pending_adoption
+                )
 
             validate_run_state(active_state)
             self.state_store.save(active_state)
@@ -307,6 +316,7 @@ class ReviewedCandidateStageRunner:
                         next_stage=next_stage,
                         after_adoption=after_adoption,
                         active_scene_id=active_scene_id,
+                        adoption_metadata=adoption_metadata,
                         recovering=False,
                     )
 
@@ -411,6 +421,7 @@ class ReviewedCandidateStageRunner:
         next_stage: str | None,
         after_adoption: CandidateAfterAdoption | None,
         active_scene_id: str | None | object,
+        adoption_metadata: dict[str, Any] | None,
         recovering: bool,
     ) -> dict[str, Any]:
         """保存済みaccepted CandidateをProviderなしで採用する。"""
@@ -442,6 +453,21 @@ class ReviewedCandidateStageRunner:
             raise ContractError(
                 "Candidate Adoptionには"
                 "pending_commit=preparedが必要です"
+            )
+
+        if adoption_metadata is None:
+            if "reserved" in pending:
+                raise ContractError(
+                    "Candidate Adoptionの予約metadataが"
+                    "呼出し内容と一致しません"
+                )
+        elif (
+            pending.get("reserved")
+            != adoption_metadata
+        ):
+            raise ContractError(
+                "Candidate Adoptionの予約metadataが"
+                "pending_commitと一致しません"
             )
 
         prepared = deepcopy(state)

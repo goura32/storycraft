@@ -35,7 +35,6 @@ _SPEC = ReviewedCandidateSpec(
     artifact_type="completion",
     review_category="completion_quality",
     next_stage=Stage.PUBLICATION.value,
-    recoverable_adoption=False,
 )
 
 _SCENE_FILES = {
@@ -71,7 +70,7 @@ class CompletionStageService:
 
     def run(
         self,
-        model: StoryModel,
+        model: StoryModel | None,
         *,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
@@ -102,13 +101,46 @@ class CompletionStageService:
         generation_id = state["current_generation_id"]
         assert isinstance(generation_id, str)
 
-        timestamp = updated_at or utc_now()
-        completion_id = reserve_identifier(
-            self.workspace_root,
-            "next_completion",
-            "completion",
-            timestamp,
+        pending = state["pending_commit"]
+        recovering = (
+            isinstance(pending, dict)
+            and pending.get("kind")
+            == "candidate_adoption"
         )
+
+        if pending is not None and not recovering:
+            raise ContractError(
+                "pending_commitがあるため"
+                "completionを開始できません"
+            )
+
+        timestamp = (
+            state["updated_at"]
+            if recovering
+            else updated_at or utc_now()
+        )
+
+        if recovering:
+            reserved = pending.get("reserved")
+            if not isinstance(reserved, dict):
+                raise ContractError(
+                    "completion Recoveryに"
+                    "予約metadataがありません"
+                )
+            completion_id = reserved.get(
+                "completion_id"
+            )
+            if not isinstance(completion_id, str):
+                raise ContractError(
+                    "予約completion_idが不正です"
+                )
+        else:
+            completion_id = reserve_identifier(
+                self.workspace_root,
+                "next_completion",
+                "completion",
+                timestamp,
+            )
 
         def validate(candidate: object) -> None:
             ContractValidator._validate_completion(
@@ -173,6 +205,9 @@ class CompletionStageService:
             next_stage=Stage.PUBLICATION.value,
             next_target=publication_target,
             after_adoption=after_adoption,
+            adoption_metadata={
+                "completion_id": completion_id,
+            },
             updated_at=timestamp,
         )
 

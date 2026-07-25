@@ -251,14 +251,23 @@ def _validate_pending_commit(state: dict[str, Any]) -> None:
         )
 
     if kind == "candidate_adoption":
-        expected_fields = {
+        base_fields = {
             "kind",
             "target_id",
             "stage",
             "version",
             "phase",
         }
-        if set(pending) != expected_fields:
+        allowed_fields = (
+            base_fields
+            | {"reserved"}
+        )
+        if (
+            not base_fields.issubset(pending)
+            or not set(pending).issubset(
+                allowed_fields
+            )
+        ):
             raise ContractError(
                 "candidate_adoption pending_commitの"
                 "field構成が不正です"
@@ -299,6 +308,59 @@ def _validate_pending_commit(state: dict[str, Any]) -> None:
             raise ContractError(
                 "candidate_adoption中のstatusは"
                 "runningでなければなりません"
+            )
+
+        reserved = pending.get("reserved")
+
+        if stage == Stage.SCENE_CONTINUITY.value:
+            if (
+                not isinstance(reserved, dict)
+                or set(reserved)
+                != {"result_generation_id"}
+            ):
+                raise ContractError(
+                    "scene_continuity adoptionには"
+                    "result_generation_id予約が必要です"
+                )
+            generation_id = reserved.get(
+                "result_generation_id"
+            )
+            if (
+                not isinstance(generation_id, str)
+                or not generation_id.startswith(
+                    "gen-"
+                )
+            ):
+                raise ContractError(
+                    "予約result_generation_idが"
+                    "不正です"
+                )
+        elif stage == Stage.COMPLETION.value:
+            if (
+                not isinstance(reserved, dict)
+                or set(reserved)
+                != {"completion_id"}
+            ):
+                raise ContractError(
+                    "completion adoptionには"
+                    "completion_id予約が必要です"
+                )
+            completion_id = reserved.get(
+                "completion_id"
+            )
+            if (
+                not isinstance(completion_id, str)
+                or not completion_id.startswith(
+                    "completion-"
+                )
+            ):
+                raise ContractError(
+                    "予約completion_idが不正です"
+                )
+        elif reserved is not None:
+            raise ContractError(
+                "このCandidate Stageには"
+                "reserved metadataを指定できません"
             )
 
         active = state["active_candidate"]

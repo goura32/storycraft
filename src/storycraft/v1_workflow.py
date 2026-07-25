@@ -73,10 +73,6 @@ _MODEL_STAGE_SERVICES = {
 
 _CANDIDATE_ADOPTION_RECOVERY_STAGES = frozenset(
     set(_MODEL_STAGE_SERVICES)
-    - {
-        Stage.SCENE_CONTINUITY,
-        Stage.COMPLETION,
-    }
 )
 
 

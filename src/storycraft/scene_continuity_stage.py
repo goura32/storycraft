@@ -42,7 +42,6 @@ _SPEC = ReviewedCandidateSpec(
     review_category="scene_continuity_accuracy",
     next_stage="scene_commit",
     model_stage="scene_continuity_v1",
-    recoverable_adoption=False,
 )
 
 
@@ -58,7 +57,7 @@ class SceneContinuityStageService:
 
     def run(
         self,
-        model: StoryModel,
+        model: StoryModel | None,
         *,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
@@ -74,11 +73,21 @@ class SceneContinuityStageService:
             raise ContractError(
                 "scene_continuityを実行できるrun statusではありません"
             )
-        if state["active_candidate"] is not None:
+        pending = state["pending_commit"]
+        recovering = (
+            isinstance(pending, dict)
+            and pending.get("kind")
+            == "candidate_adoption"
+        )
+
+        if (
+            state["active_candidate"] is not None
+            and not recovering
+        ):
             raise ContractError(
                 "未処理のactive_candidateがあります"
             )
-        if state["pending_commit"] is not None:
+        if pending is not None and not recovering:
             raise ContractError(
                 "pending_commitがあるためscene_continuityを"
                 "開始できません"
@@ -229,13 +238,37 @@ class SceneContinuityStageService:
             scene_card,
             current_generation,
         )
-        timestamp = updated_at or utc_now()
-        result_generation_id = reserve_identifier(
-            self.workspace_root,
-            "next_generation",
-            "gen",
-            timestamp,
+        timestamp = (
+            state["updated_at"]
+            if recovering
+            else updated_at or utc_now()
         )
+
+        if recovering:
+            reserved = pending.get("reserved")
+            if not isinstance(reserved, dict):
+                raise ContractError(
+                    "scene_continuity Recoveryに"
+                    "予約metadataがありません"
+                )
+            result_generation_id = reserved.get(
+                "result_generation_id"
+            )
+            if not isinstance(
+                result_generation_id,
+                str,
+            ):
+                raise ContractError(
+                    "予約result_generation_idが"
+                    "不正です"
+                )
+        else:
+            result_generation_id = reserve_identifier(
+                self.workspace_root,
+                "next_generation",
+                "gen",
+                timestamp,
+            )
 
         validator = lambda candidate: self._validate_candidate(
             candidate,
@@ -267,6 +300,11 @@ class SceneContinuityStageService:
                 **deepcopy(target),
                 "continuity_version": 1,
                 "result_generation_id": result_generation_id,
+            },
+            adoption_metadata={
+                "result_generation_id": (
+                    result_generation_id
+                ),
             },
             updated_at=timestamp,
         )
@@ -1048,6 +1086,110 @@ class SceneContinuityStageService:
         )
 
         path = staging_root / "continuity.json"
+
+        if path.exists():
+            existing = read_json(path)
+            self._validate_adopted(
+                existing,
+                prose=prose,
+                scene_card=scene_card,
+                current_generation=current_generation,
+                initial_design=initial_design,
+                scene_id=scene_id,
+                basis_generation_id=(
+                    basis_generation_id
+                ),
+            )
+
+            if (
+                existing.get(
+                    "result_generation_id"
+                )
+                != result_generation_id
+                or existing.get("summary")
+                != candidate["summary"]
+                or existing.get(
+                    "unchanged_assertions"
+                )
+                != candidate[
+                    "unchanged_assertions"
+                ]
+            ):
+                raise ContractError(
+                    "採用済みContinuityが"
+                    "accepted Candidateまたは"
+                    "予約Generationと一致しません"
+                )
+
+            existing_evidence = [
+                {
+                    key: deepcopy(value)
+                    for key, value in record.items()
+                    if key not in {
+                        "evidence_id",
+                        "scene_id",
+                    }
+                }
+                for record in existing["evidence"]
+            ]
+            if existing_evidence != candidate["evidence"]:
+                raise ContractError(
+                    "採用済みContinuity Evidenceが"
+                    "accepted Candidateと一致しません"
+                )
+
+            evidence_index = {
+                record["evidence_id"]: index
+                for index, record in enumerate(
+                    existing["evidence"]
+                )
+            }
+            existing_operations = []
+            for record in existing["operations"]:
+                try:
+                    indices = [
+                        evidence_index[identifier]
+                        for identifier
+                        in record["evidence_ids"]
+                    ]
+                except KeyError as exc:
+                    raise ContractError(
+                        "採用済みContinuityの"
+                        "Evidence参照が不正です"
+                    ) from exc
+
+                existing_operations.append({
+                    key: deepcopy(record[key])
+                    for key in (
+                        "target_type",
+                        "target_id",
+                        "field",
+                        "operation",
+                        "old_value",
+                        "new_value",
+                        "reason",
+                    )
+                } | {
+                    "evidence_indices": indices,
+                })
+
+            if (
+                existing_operations
+                != candidate["operations"]
+            ):
+                raise ContractError(
+                    "採用済みContinuity Operationが"
+                    "accepted Candidateと一致しません"
+                )
+
+            publish_scene_adoption_record(
+                self.workspace_root,
+                scene_id=scene_id,
+                scene_card=scene_card,
+                prose=prose,
+                continuity=existing,
+            )
+            return
 
         evidence_ids = [
             reserve_identifier(
