@@ -42,6 +42,7 @@ def adopted_series_plan() -> dict:
 
 def volume_plan_candidate() -> dict:
     return {
+        "title": "帰郷",
         "starting_state_summary": (
             "澪が海辺の町へ戻り、凪とは疎遠なまま、"
             "灯台火災の真相を調べ始める。"
@@ -137,6 +138,49 @@ class VolumePlanSchemaV1Tests(unittest.TestCase):
             **deepcopy(self.candidate),
             "created_at": CREATED_AT,
         }
+
+
+    def test_title_is_required(self) -> None:
+        value = deepcopy(self.candidate)
+        del value["title"]
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_newline(self) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "帰郷\n第二部"
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_whitespace_only(self) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "   "
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_more_than_80_characters(
+        self,
+    ) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "巻" * 81
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
 
     def test_valid_candidate(self) -> None:
         self.validate(self.candidate)
@@ -325,6 +369,20 @@ class VolumePlanSchemaV1Tests(unittest.TestCase):
             critique={"issues": []},
             context=context,
         )
+
+        for rendered in (
+            generated,
+            reviewed,
+            revised,
+        ):
+            self.assertIn(
+                "読者向け巻題",
+                rendered,
+            )
+            self.assertIn(
+                '"title"',
+                rendered,
+            )
 
         self.assertIn("starting_state_summary", generated)
         self.assertIn("current Generation", reviewed)

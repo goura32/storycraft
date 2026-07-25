@@ -51,6 +51,7 @@ def write_json(path: Path, value: dict) -> None:
 
 def chapter_two_candidate() -> dict:
     return {
+        "title": "再会",
         "chapter_purpose": (
             "灯台で凪と再会し、沈黙の理由を探る。"
         ),

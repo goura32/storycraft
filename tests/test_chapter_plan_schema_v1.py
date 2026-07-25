@@ -46,6 +46,7 @@ def adopted_volume_plan() -> dict:
 
 def chapter_plan_candidate() -> dict:
     return {
+        "title": "灯台",
         "chapter_purpose": (
             "澪を町へ帰郷させ、姉妹と灯台火災をめぐる"
             "現在の距離を読者へ示す。"
@@ -130,6 +131,49 @@ class ChapterPlanSchemaV1Tests(unittest.TestCase):
             **deepcopy(self.candidate),
             "created_at": CREATED_AT,
         }
+
+
+    def test_title_is_required(self) -> None:
+        value = deepcopy(self.candidate)
+        del value["title"]
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_newline(self) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "灯台\n再会"
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_whitespace_only(self) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "   "
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
+
+    def test_title_rejects_more_than_80_characters(
+        self,
+    ) -> None:
+        value = deepcopy(self.candidate)
+        value["title"] = "章" * 81
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "title",
+        ):
+            self.validate(value)
 
     def test_valid_candidate(self) -> None:
         self.validate(self.candidate)
@@ -271,6 +315,14 @@ class ChapterPlanSchemaV1Tests(unittest.TestCase):
                 kind,
                 "chapter_plan",
                 **kwargs,
+            )
+            self.assertIn(
+                "読者向け章題",
+                rendered,
+            )
+            self.assertIn(
+                '"title"',
+                rendered,
             )
             self.assertIn("## 出力スキーマ", rendered)
             self.assertNotIn("{{", rendered)
