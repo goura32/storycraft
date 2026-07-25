@@ -51,7 +51,6 @@ class ReviewedCandidateSpec:
     review_category: str
     next_stage: str
     model_stage: str | None = None
-    recoverable_adoption: bool = True
 
 
 class ReviewedCandidateStageRunner:
@@ -102,12 +101,6 @@ class ReviewedCandidateStageRunner:
             and pending.get("kind")
             == "candidate_adoption"
         ):
-            if not self.spec.recoverable_adoption:
-                raise ContractError(
-                    "このStageのCandidate Adoption Recoveryは"
-                    "まだ有効ではありません"
-                )
-
             return self._complete_candidate_adoption(
                 state,
                 validator=validator,
@@ -284,10 +277,7 @@ class ReviewedCandidateStageRunner:
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
 
-            if (
-                accepted
-                and self.spec.recoverable_adoption
-            ):
+            if accepted:
                 pending_adoption = {
                     "kind": "candidate_adoption",
                     "target_id": candidate_id,
@@ -308,28 +298,16 @@ class ReviewedCandidateStageRunner:
             state = active_state
 
             if accepted:
-                if self.spec.recoverable_adoption:
-                    return self._complete_candidate_adoption(
-                        state,
-                        validator=validator,
-                        adopter=adopter,
-                        next_target=next_target,
-                        next_stage=next_stage,
-                        after_adoption=after_adoption,
-                        active_scene_id=active_scene_id,
-                        adoption_metadata=adoption_metadata,
-                        recovering=False,
-                    )
-
-                return self._complete_legacy_adoption(
+                return self._complete_candidate_adoption(
                     state,
-                    candidate=deepcopy(candidate),
+                    validator=validator,
                     adopter=adopter,
                     next_target=next_target,
                     next_stage=next_stage,
                     after_adoption=after_adoption,
                     active_scene_id=active_scene_id,
-                    timestamp=timestamp,
+                    adoption_metadata=adoption_metadata,
+                    recovering=False,
                 )
 
             if exhausted:
@@ -545,54 +523,6 @@ class ReviewedCandidateStageRunner:
         self.state_store.save(advanced)
         return advanced
 
-    def _complete_legacy_adoption(
-        self,
-        state: dict[str, Any],
-        *,
-        candidate: dict[str, Any],
-        adopter: CandidateAdopter,
-        next_target: dict[str, Any],
-        next_stage: str | None,
-        after_adoption: CandidateAfterAdoption | None,
-        active_scene_id: str | None | object,
-        timestamp: str,
-    ) -> dict[str, Any]:
-        """ID予約を伴うStage用の従来採用経路。"""
-        adopter(deepcopy(candidate))
-        validate_workspace_layout(self.workspace_root)
-
-        adopted_state = deepcopy(state)
-        adopted_state["active_candidate"] = None
-        validate_run_state(adopted_state)
-
-        if after_adoption is not None:
-            completed = after_adoption(
-                deepcopy(candidate),
-                deepcopy(adopted_state),
-                timestamp,
-            )
-            validate_run_state(completed)
-            self.state_store.save(completed)
-            return completed
-
-        transition_kwargs: dict[str, Any] = {}
-        if active_scene_id is not _PRESERVE_ACTIVE_SCENE:
-            transition_kwargs["active_scene_id"] = (
-                active_scene_id
-            )
-
-        advanced = advance_run_state(
-            adopted_state,
-            next_stage=(
-                next_stage or self.spec.next_stage
-            ),
-            next_target=deepcopy(next_target),
-            updated_at=timestamp,
-            **transition_kwargs,
-        )
-        self.state_store.save(advanced)
-        return advanced
-
 
 def load_accepted_candidate_version(
     workspace_root: Path,
@@ -691,7 +621,7 @@ def normalize_review(
     decision: str,
     created_at: str,
 ) -> dict[str, Any]:
-    """Legacy critique shapeをV1 Review記録へ正規化する。"""
+    """Model critiqueをV1 Review記録へ正規化する。"""
     issues = []
     for index, issue in enumerate(critique["issues"], 1):
         issues.append({
