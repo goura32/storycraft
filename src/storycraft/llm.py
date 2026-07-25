@@ -1,4 +1,4 @@
-"""Ollama (OpenAI互換) 呼び出し層。§5 に従う。
+"""OpenAI互換Provider呼び出し層。
 
 - POST /v1/chat/completions をストリームで呼ぶ
 - thinking と streaming を常に有効 (extra_body={"think": true})
@@ -22,6 +22,7 @@ from typing import Any
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
+from .config import resolve_llm_credentials
 from .error_sanitizer import (
     safe_exception_message,
     sanitize_text,
@@ -144,14 +145,26 @@ class LLMClient:
             600,
         )
 
-        self.client = OpenAI(
-            base_url=base_url,
-            api_key="ollama",
-            timeout=max(
+        api_key, default_headers = (
+            resolve_llm_credentials(llm)
+        )
+
+        client_options: dict[str, Any] = {
+            "base_url": base_url,
+            "api_key": api_key,
+            "timeout": max(
                 first_event_timeout,
                 idle_timeout,
             ),
-            max_retries=0,
+            "max_retries": 0,
+        }
+        if default_headers:
+            client_options["default_headers"] = (
+                default_headers
+            )
+
+        self.client = OpenAI(
+            **client_options
         )
 
         safe_base_url = sanitize_text(

@@ -439,7 +439,11 @@ def cmd_run(
     _setup_logging(workspace)
 
     logger.info(
-        "モデル設定: %s",
+        "LLM設定: provider=%s model=%s",
+        settings.llm.get(
+            "provider",
+            "ollama",
+        ),
         settings.llm.get(
             "model",
             "unknown",
@@ -467,7 +471,11 @@ def cmd_resume(
     _setup_logging(workspace)
 
     logger.info(
-        "モデル設定: %s",
+        "LLM設定: provider=%s model=%s",
+        settings.llm.get(
+            "provider",
+            "ollama",
+        ),
         settings.llm.get(
             "model",
             "unknown",
@@ -495,7 +503,11 @@ def cmd_step(
     _setup_logging(workspace)
 
     logger.info(
-        "モデル設定: %s",
+        "LLM設定: provider=%s model=%s",
+        settings.llm.get(
+            "provider",
+            "ollama",
+        ),
         settings.llm.get(
             "model",
             "unknown",
