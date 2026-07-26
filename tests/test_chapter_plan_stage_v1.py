@@ -28,6 +28,9 @@ from tests.test_initial_world_stage_v1 import (
 from tests.test_volume_plan_schema_v1 import (
     volume_plan_candidate,
 )
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
 from tests.test_volume_plan_stage_v1 import (
     create_volume_plan_workspace,
 )
@@ -83,14 +86,33 @@ def chapter_two_candidate() -> dict:
     }
 
 
-def create_chapter_plan_workspace(
+def _build_chapter_plan_workspace(
     temporary: str,
 ) -> Path:
-    workspace = create_volume_plan_workspace(temporary)
+    workspace = create_volume_plan_workspace(
+        temporary
+    )
     VolumePlanStageService(workspace).run(
         AcceptingModel(volume_plan_candidate()),
         updated_at="2026-07-24T06:10:00Z",
     )
+    return workspace
+
+
+def create_chapter_plan_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="chapter-plan-v1",
+        temporary=temporary,
+        builder=_build_chapter_plan_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "chapter plan fixture payloadが不正です"
+        )
+
     return workspace
 
 

@@ -13,6 +13,10 @@ from storycraft.scene_plan_stage import ScenePlanStageService
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import validate_workspace_layout
 
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
+
 from tests.test_initial_world_stage_v1 import (
     AcceptingModel,
     load_json_from,
@@ -39,12 +43,29 @@ def write_json(path: Path, value: dict) -> None:
     )
 
 
-def create_scene_card_workspace(temporary: str) -> Path:
+def _build_scene_card_workspace(temporary: str) -> Path:
     workspace = create_scene_plan_workspace(temporary)
     ScenePlanStageService(workspace).run(
         AcceptingModel(scene_plan_candidate()),
         updated_at="2026-07-24T08:19:00Z",
     )
+    return workspace
+
+
+def create_scene_card_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="scene-card-v1",
+        temporary=temporary,
+        builder=_build_scene_card_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "scene card fixture payloadが不正です"
+        )
+
     return workspace
 
 

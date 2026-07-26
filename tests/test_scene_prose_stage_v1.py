@@ -13,6 +13,10 @@ from storycraft.scene_prose_stage import SceneProseStageService
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import validate_workspace_layout
 
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
+
 from tests.test_initial_world_stage_v1 import (
     AcceptingModel,
     load_json_from,
@@ -30,12 +34,29 @@ PROSE = Path(
 ).read_text(encoding="utf-8").strip()
 
 
-def create_scene_prose_workspace(temporary: str) -> Path:
+def _build_scene_prose_workspace(temporary: str) -> Path:
     workspace = create_scene_card_workspace(temporary)
     SceneCardStageService(workspace).run(
         AcceptingModel(matching_card()),
         updated_at=CARD_AT,
     )
+    return workspace
+
+
+def create_scene_prose_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="scene-prose-v1",
+        temporary=temporary,
+        builder=_build_scene_prose_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "scene prose fixture payloadが不正です"
+        )
+
     return workspace
 
 

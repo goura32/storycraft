@@ -20,6 +20,10 @@ from storycraft.series_contracts import ContractError
 from storycraft.stages import Stage
 from storycraft.workspace import validate_workspace_layout
 
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
+
 from tests.test_initial_world_stage_v1 import (
     load_json_from,
 )
@@ -34,7 +38,7 @@ from tests.test_scene_continuity_stage_v1 import (
 COMMIT_AT = "2026-07-24T10:11:00Z"
 
 
-def create_scene_commit_workspace(
+def _build_scene_commit_workspace(
     temporary: str,
 ) -> Path:
     workspace = create_scene_continuity_workspace(
@@ -44,6 +48,23 @@ def create_scene_commit_workspace(
         AcceptingContinuityModel(matching_continuity()),
         updated_at=CONTINUITY_AT,
     )
+    return workspace
+
+
+def create_scene_commit_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="scene-commit-v1",
+        temporary=temporary,
+        builder=_build_scene_commit_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "scene commit fixture payloadが不正です"
+        )
+
     return workspace
 
 

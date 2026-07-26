@@ -45,6 +45,12 @@ from tests.test_initial_ending_stage_v1 import (
     NeverAcceptingModel,
     RevisingModel,
 )
+from tests.support.initial_integrate_fixture import (
+    build_pre_integrate_workspace,
+)
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
 from tests.test_initial_integrate_schema_v1 import (
     integrated_candidate,
 )
@@ -99,46 +105,17 @@ class InitialIntegrateStageV1Tests(unittest.TestCase):
         self.integrated = integrated_candidate()
 
     def create_workspace(self, temporary: str) -> Path:
-        workspace = Path(temporary) / "novel"
-        create_workspace_from_brief(
-            workspace,
-            workspace_id="ws-test-0001",
-            brief=self.brief,
-            config=self.config,
-            created_at=CREATED_AT,
+        workspace, payload = clone_cached_workspace(
+            key="initial-pre-integrate-v1",
+            temporary=temporary,
+            builder=build_pre_integrate_workspace,
         )
-        InputStageService(workspace).run(
-            NeverCalledModel(),
-            updated_at=INPUT_AT,
-        )
-        InitialConceptStageService(workspace).run(
-            AcceptingModel(self.concept),
-            updated_at=CONCEPT_AT,
-        )
-        InitialCharactersStageService(workspace).run(
-            AcceptingModel(self.characters_candidate),
-            updated_at=CHARACTERS_AT,
-        )
-        InitialRelationshipsStageService(workspace).run(
-            AcceptingModel(self.relationships_candidate),
-            updated_at=RELATIONSHIPS_AT,
-        )
-        InitialWorldStageService(workspace).run(
-            AcceptingModel(self.world_candidate),
-            updated_at=WORLD_AT,
-        )
-        InitialKnowledgeStageService(workspace).run(
-            AcceptingModel(self.knowledge_candidate),
-            updated_at=KNOWLEDGE_AT,
-        )
-        InitialThreadsStageService(workspace).run(
-            AcceptingModel(self.threads_candidate),
-            updated_at=THREADS_AT,
-        )
-        InitialEndingStageService(workspace).run(
-            AcceptingModel(self.ending_candidate),
-            updated_at=ENDING_AT,
-        )
+
+        if not isinstance(payload, dict):
+            raise AssertionError(
+                "pre-integrate fixture payloadが不正です"
+            )
+
         return workspace
 
     def test_generate_review_adopt_and_advance(self) -> None:

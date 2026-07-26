@@ -46,9 +46,14 @@ class VolumePlanStageService:
         self,
         model: StoryModel,
         *,
+        workspace_already_validated: bool = False,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
-        validate_workspace_layout(self.workspace_root)
+        if not workspace_already_validated:
+            validate_workspace_layout(
+                self.workspace_root
+            )
+
         state = self.runner.state_store.load()
 
         target = state["current_target"]
@@ -162,6 +167,7 @@ class VolumePlanStageService:
                 "basis_generation_id": generation_id,
             },
             updated_at=timestamp,
+            workspace_already_validated=True,
         )
 
     def _read_generation(

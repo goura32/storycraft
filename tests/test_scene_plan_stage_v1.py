@@ -18,6 +18,10 @@ from storycraft.scene_plan_stage import (
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import validate_workspace_layout
 
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
+
 from tests.test_chapter_plan_schema_v1 import (
     chapter_plan_candidate,
 )
@@ -79,7 +83,7 @@ def scene_two_candidate() -> dict:
     }
 
 
-def create_scene_plan_workspace(
+def _build_scene_plan_workspace(
     temporary: str,
     *,
     chapter_candidate: dict | None = None,
@@ -91,6 +95,31 @@ def create_scene_plan_workspace(
         ),
         updated_at="2026-07-24T07:18:00Z",
     )
+    return workspace
+
+
+def create_scene_plan_workspace(
+    temporary: str,
+    *,
+    chapter_candidate: dict | None = None,
+) -> Path:
+    if chapter_candidate is not None:
+        return _build_scene_plan_workspace(
+            temporary,
+            chapter_candidate=chapter_candidate,
+        )
+
+    workspace, payload = clone_cached_workspace(
+        key="scene-plan-v1",
+        temporary=temporary,
+        builder=_build_scene_plan_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "scene plan fixture payloadが不正です"
+        )
+
     return workspace
 
 

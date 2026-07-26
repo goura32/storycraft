@@ -18,6 +18,10 @@ from storycraft.volume_plan_stage import (
 )
 from storycraft.workspace import validate_workspace_layout
 
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
+
 from tests.test_initial_world_stage_v1 import (
     AcceptingModel,
     load_json_from,
@@ -236,14 +240,33 @@ def prepare_second_volume_workspace(
     return workspace
 
 
-def create_volume_plan_workspace(
+def _build_volume_plan_workspace(
     temporary: str,
 ) -> Path:
-    workspace = create_series_plan_workspace(temporary)
+    workspace = create_series_plan_workspace(
+        temporary
+    )
     SeriesPlanStageService(workspace).run(
         AcceptingModel(series_plan_candidate()),
         updated_at="2026-07-23T10:12:00Z",
     )
+    return workspace
+
+
+def create_volume_plan_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="volume-plan-v1",
+        temporary=temporary,
+        builder=_build_volume_plan_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "volume plan fixture payloadが不正です"
+        )
+
     return workspace
 
 

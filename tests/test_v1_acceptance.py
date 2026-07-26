@@ -50,6 +50,9 @@ from tests.test_series_plan_schema_v1 import (
 from tests.test_volume_plan_schema_v1 import (
     volume_plan_candidate,
 )
+from tests.support.validation_controls import (
+    defer_workspace_validation,
+)
 
 
 ROOT = Path(__file__).parent.parent
@@ -676,6 +679,7 @@ class AcceptanceModel:
 
 
 class V1AcceptanceTests(unittest.TestCase):
+    @defer_workspace_validation()
     def test_brief_to_publication_completes(
         self,
     ) -> None:

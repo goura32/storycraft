@@ -16,8 +16,11 @@ from storycraft.run_state import RunStateStore
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import validate_workspace_layout
 
-from tests.test_initial_integrate_stage_v1 import (
-    InitialIntegrateStageV1Tests,
+from tests.support.initial_integrate_fixture import (
+    build_integrated_workspace,
+)
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
 )
 from tests.test_initial_world_stage_v1 import (
     AcceptingModel,
@@ -29,19 +32,27 @@ ACCEPT_AT = "2026-07-23T10:10:00Z"
 RECOVERY_AT = "2026-07-23T10:11:00Z"
 
 
+def _build_integrated_workspace(
+    temporary: str,
+) -> tuple[Path, dict]:
+    return build_integrated_workspace(temporary)
+
+
 def create_integrated_workspace(
     temporary: str,
 ) -> tuple[Path, dict]:
-    helper = InitialIntegrateStageV1Tests(
-        "test_generate_review_adopt_and_advance"
+    workspace, integrated = clone_cached_workspace(
+        key="initial-integrated-v1",
+        temporary=temporary,
+        builder=_build_integrated_workspace,
     )
-    helper.setUp()
-    workspace = helper.create_workspace(temporary)
-    InitialIntegrateStageService(workspace).run(
-        AcceptingModel(helper.integrated),
-        updated_at="2026-07-23T10:09:00Z",
-    )
-    return workspace, helper.integrated
+
+    if not isinstance(integrated, dict):
+        raise AssertionError(
+            "integrated fixture payloadが不正です"
+        )
+
+    return workspace, integrated
 
 
 class InitialAcceptStageV1Tests(unittest.TestCase):
