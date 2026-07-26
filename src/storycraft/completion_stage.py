@@ -72,9 +72,14 @@ class CompletionStageService:
         self,
         model: StoryModel | None,
         *,
+        workspace_already_validated: bool = False,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
-        validate_workspace_layout(self.workspace_root)
+        if not workspace_already_validated:
+            validate_workspace_layout(
+                self.workspace_root
+            )
+
         state = self.runner.state_store.load()
 
         if (
@@ -209,6 +214,7 @@ class CompletionStageService:
                 "completion_id": completion_id,
             },
             updated_at=timestamp,
+            workspace_already_validated=True,
         )
 
     def _prepare_inputs(

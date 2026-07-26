@@ -27,18 +27,40 @@ from tests.test_initial_world_stage_v1 import (
 from tests.test_series_plan_schema_v1 import (
     series_plan_candidate,
 )
+from tests.support.workspace_fixtures import (
+    clone_cached_workspace,
+)
 
 
 PLAN_AT = "2026-07-23T10:12:00Z"
 
 
-def create_series_plan_workspace(
+def _build_series_plan_workspace(
     temporary: str,
 ) -> Path:
-    workspace, _ = create_integrated_workspace(temporary)
+    workspace, _ = create_integrated_workspace(
+        temporary
+    )
     InitialAcceptStageService(workspace).run(
         updated_at="2026-07-23T10:10:00Z",
     )
+    return workspace
+
+
+def create_series_plan_workspace(
+    temporary: str,
+) -> Path:
+    workspace, payload = clone_cached_workspace(
+        key="series-plan-v1",
+        temporary=temporary,
+        builder=_build_series_plan_workspace,
+    )
+
+    if payload is not None:
+        raise AssertionError(
+            "series plan fixture payloadが不正です"
+        )
+
     return workspace
 
 

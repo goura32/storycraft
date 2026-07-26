@@ -25,6 +25,12 @@ class PromptTemplate:
             "ensure_ascii": False,
             "indent": 2,
         }
+        # Schemaは読み取り専用として共有する。
+        # 呼び出し側で変更してはならない。
+        self._schema_cache: dict[
+            Path,
+            dict[str, object],
+        ] = {}
 
     def load_schema_object(
         self,
@@ -56,14 +62,22 @@ class PromptTemplate:
                 / f"{stage}.json"
             )
 
-        with schema_path.open(encoding="utf-8") as file:
+        cache_key = schema_path.resolve()
+        cached = self._schema_cache.get(cache_key)
+
+        if cached is not None:
+            return cached
+
+        with cache_key.open(encoding="utf-8") as file:
             schema = json.load(file)
 
         if not isinstance(schema, dict):
             raise ValueError(
-                f"Schema rootはobjectでなければなりません: {schema_path}"
+                f"Schema rootはobjectでなければなりません: "
+                f"{cache_key}"
             )
 
+        self._schema_cache[cache_key] = schema
         return schema
 
     def load_schema(self, category: str, stage: str) -> str:

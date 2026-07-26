@@ -43,6 +43,7 @@ class InitialKnowledgeStageService:
         self,
         model: StoryModel,
         *,
+        workspace_already_validated: bool = False,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
         version_root = (
@@ -100,6 +101,7 @@ class InitialKnowledgeStageService:
             next_target={
                 "series": state["workspace_id"],
             },
+            workspace_already_validated=workspace_already_validated,
             updated_at=updated_at,
         )
 

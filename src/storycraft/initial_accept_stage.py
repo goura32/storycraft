@@ -36,9 +36,11 @@ class InitialAcceptStageService:
     def run(
         self,
         *,
+        workspace_already_validated: bool = False,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
-        validate_workspace_layout(self.workspace_root)
+        if not workspace_already_validated:
+            validate_workspace_layout(self.workspace_root)
         state = self.state_store.load()
 
         if state["current_stage"] != "initial_accept":

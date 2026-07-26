@@ -59,9 +59,13 @@ class SceneContinuityStageService:
         self,
         model: StoryModel | None,
         *,
+        workspace_already_validated: bool = False,
         updated_at: str | None = None,
     ) -> dict[str, Any]:
-        validate_workspace_layout(self.workspace_root)
+        if not workspace_already_validated:
+            validate_workspace_layout(
+                self.workspace_root
+            )
         state = self.runner.state_store.load()
         target = state["current_target"]
 
@@ -307,6 +311,7 @@ class SceneContinuityStageService:
                 ),
             },
             updated_at=timestamp,
+            workspace_already_validated=True,
         )
 
     @staticmethod

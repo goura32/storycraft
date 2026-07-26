@@ -75,6 +75,10 @@ _CANDIDATE_ADOPTION_RECOVERY_STAGES = frozenset(
     set(_MODEL_STAGE_SERVICES)
 )
 
+_WORKFLOW_PREVALIDATED_MODEL_STAGES = frozenset(
+    _MODEL_STAGE_SERVICES
+)
+
 
 
 class V1WorkflowService:
@@ -129,15 +133,20 @@ class V1WorkflowService:
             if self._input_requires_model():
                 return service.run(
                     self._create_model(),
+                    workspace_already_validated=True,
                     updated_at=updated_at,
                 )
 
-            return service.run(updated_at=updated_at)
+            return service.run(
+                workspace_already_validated=True,
+                updated_at=updated_at,
+            )
 
         if stage is Stage.INITIAL_ACCEPT:
             return InitialAcceptStageService(
                 self.workspace_root
             ).run(
+                workspace_already_validated=True,
                 updated_at=updated_at,
             )
 
@@ -145,6 +154,7 @@ class V1WorkflowService:
             return SceneCommitStageService(
                 self.workspace_root
             ).run(
+                workspace_already_validated=True,
                 updated_at=updated_at,
             )
 
@@ -165,6 +175,7 @@ class V1WorkflowService:
 
         return service_type(self.workspace_root).run(
             self._create_model(),
+            workspace_already_validated=True,
             updated_at=updated_at,
         )
 
@@ -216,6 +227,7 @@ class V1WorkflowService:
                     self.workspace_root
                 ).run(
                     None,
+                    workspace_already_validated=True,
                     updated_at=state["updated_at"],
                 )
                 return
@@ -235,6 +247,7 @@ class V1WorkflowService:
                 self.workspace_root
             ).run(
                 None,
+                workspace_already_validated=True,
                 updated_at=state["updated_at"],
             )
             return

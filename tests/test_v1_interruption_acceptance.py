@@ -23,6 +23,9 @@ from tests.test_v1_acceptance import (
     AcceptanceModel,
     CREATED_AT,
 )
+from tests.support.validation_controls import (
+    defer_workspace_validation,
+)
 
 
 ROOT = Path(__file__).parent.parent
@@ -161,6 +164,7 @@ def _run_to_completion(
 class V1InterruptionAcceptanceTests(
     unittest.TestCase
 ):
+    @defer_workspace_validation()
     def test_scene_commit_crash_recovers_to_identical_publication(
         self,
     ) -> None:
