@@ -76,7 +76,7 @@ Publication時の物語本文再生成
 
 V1の全Stage Serviceと公開CLIは、BriefまたはKeywords入力からMarkdown Publicationまで統合済みです。`run`、`resume`、`step`に加え、現在状態をJSON表示する`status`と、workspace全体の整合性を検証する`validate`を提供します。
 
-Candidate Adoption、Scene Commit、PublicationのCrash RecoveryはV1 Workflowへ接続されています。決定的Fake Modelによる正常系・中断復旧Acceptanceを含む512件の自動試験と、隔離wheel build／install smokeが成功しています。外部Providerを使う実LLM smokeはRelease前の最終確認として実施します。
+Candidate Adoption、Scene Commit、PublicationのCrash RecoveryはV1 Workflowへ接続されています。決定的Fake Modelによる正常系・中断復旧Acceptanceを含む527件の自動試験と、隔離wheel build／install smokeが成功しています。Initial Conceptでは実LLMを使ってStructured Outputs、批評・改稿ループ、変更範囲制約を確認済みです。Stage別critique Schema追加後の最終実LLM再試験は意図的に省略しています。
 
 [`docs/product/IMPLEMENTATION_STATUS.md`](docs/product/IMPLEMENTATION_STATUS.md)
 

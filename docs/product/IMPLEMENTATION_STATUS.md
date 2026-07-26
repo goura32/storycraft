@@ -7,9 +7,7 @@
 
 ## 判定
 
-V1 production経路は、BriefまたはKeywords入力からMarkdown Publicationまで実装済みである。
-
-Release前の残作業は、外部Providerを使用した最小実LLM smokeと、main統合後の最終確認である。
+V1 production経路は、BriefまたはKeywords入力からMarkdown Publicationまで実装され、mainへ統合済みである。527件の自動試験と隔離wheel build／install smokeが成功している。Initial Conceptの実LLM smokeではStructured Outputs、批評・改稿ループ、変更範囲制約まで確認済みである。Stage別critique Schema追加後の最終実LLM再試験は意図的に省略した。
 
 ## Pipeline
 
@@ -96,7 +94,7 @@ wheelへPromptとSchemaを同梱し、隔離環境へのinstall後に読み込�
 
 自動試験:
 
-- `Ran 512 tests`
+- `Ran 527 tests`
 - `OK`
 
 主要な検証対象:
@@ -119,6 +117,32 @@ wheel smokeでは以下を確認済みである。
 - `run / resume / step / status / validate`の登録
 - package内Prompt／Schemaの読み込み
 
+## LLM Structured Outputsと品質契約
+
+以下を実装済みである。
+
+- Generate／Critique／RevisionへStage別production JSON Schemaを送信
+- OpenAI互換APIのstrict `json_schema` response formatを使用
+- Scene Prose批評は互換性のため`json_object` modeを維持
+- Stage専用critique Schemaが存在する場合は共通Schemaより優先
+- Stage専用Schemaが存在しない場合は共通`critique.json`へfallback
+- Initial Conceptのcritique `field`を8つのトップレベルfieldへ限定
+- Briefの`tone`を完全一致で保持
+- critiqueの指摘を候補内の実在する根拠へ限定
+- revisionで批評対象外fieldを変更することを禁止
+- `quality.max_critique_passes`をV1 Candidate runnerへ正しく反映
+
+Initial Conceptの実LLM smokeでは、次を確認した。
+
+- Stage JSON Schemaによる構造制約
+- Brief toneの完全一致
+- 批評から改稿へのfield限定
+- `max_critique_passes: 2`による2回のRevision実行
+- 不正なcritique fieldをValidatorが拒否すること
+
+この実LLM確認を根拠にStage専用critique Schemaを追加した。
+追加後の最終実LLM再試験は実施していない。
+
 ## 最終静的監査
 
 以下を確認済みである。
@@ -133,10 +157,17 @@ wheel smokeでは以下を確認済みである。
 
 `characters`、`continuity`、`world`などの一般名はV1 Data Modelでも使用するため、単純な文字列一致はlegacy残存を意味しない。
 
-## Release前の残作業
+## Release確認結果
 
-1. 外部Providerを使用した最小実LLM smoke
+以下を完了した。
+
+1. Initial Conceptを対象とした実LLM smoke
 2. 実LLM workspaceに対する`status`／`validate`
 3. 最終差分監査
-4. mainへの統合
-5. 統合後の全テストとwheel smoke
+4. PR #24によるmainへの統合
+5. 統合前の全527件の自動試験
+6. wheel build／隔離install／package asset smoke
+
+Stage別critique Schema追加後の最終実LLM再試験は、
+費用と実行時間を考慮して意図的に省略した。
+この未実施項目は、自動試験またはwheel smokeの失敗を意味しない。
