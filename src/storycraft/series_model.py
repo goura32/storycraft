@@ -101,10 +101,48 @@ class OpenAIStoryModel:
         safe_type = "".join(char if char.isalnum() or char in "._-" else "_" for char in raw_type)
         return safe_type[:80] or "unknown"
 
+    @staticmethod
+    def _response_format(
+        kind: str,
+        stage: str,
+    ) -> dict[str, Any]:
+        """工程に応じたOpenAI互換response formatを返す。"""
+        if (
+            kind == "critique"
+            and stage == "scene_prose_v1"
+        ):
+            return {
+                "type": "json_object",
+            }
+
+        schema = (
+            get_template_loader()
+            .load_schema_object(
+                kind,
+                stage,
+            )
+        )
+
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": (
+                    f"storycraft_{kind}_{stage}"
+                ),
+                "strict": True,
+                "schema": schema,
+            },
+        }
+
     def _call(self, kind: str, stage: str, user_prompt: str) -> dict[str, Any]:
         failure_reason = "unknown"
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
         ref = getattr(self, "_log_ref", stage)
+        response_format = self._response_format(
+            kind,
+            stage,
+        )
+
         for retry_attempt in range(1, attempts + 1):
             self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1
             seed = self._seed_sequence
@@ -117,7 +155,11 @@ class OpenAIStoryModel:
                     "__quality_pass": getattr(self, "_log_quality_pass", ""),
                 },
             ]
-            record = self.client.call_once(messages, {"type": "json_object"}, seed)
+            record = self.client.call_once(
+                messages,
+                response_format,
+                seed,
+            )
             self.client.save_raw(record, messages)
             if record.error:
                 failure_reason = f"transport:{self._safe_error_type(record.error)}"

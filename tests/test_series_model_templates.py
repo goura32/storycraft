@@ -60,6 +60,18 @@ class _TemplateLoader:
     def render_system(self) -> str:
         return "JINJAでレンダリングされたsystemプロンプト"
 
+    def load_schema_object(
+        self,
+        category: str,
+        stage: str,
+    ) -> dict[str, object]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [],
+            "properties": {},
+        }
+
     def load_schema_text(self, category: str, stage: str) -> str:
         return f"外部スキーマ:{category}/{stage}"
 

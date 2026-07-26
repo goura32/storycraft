@@ -759,20 +759,25 @@ def reserve_identifier(
 
 
 def revision_limit_from_config(config: dict[str, Any]) -> int:
-    """V1 Revision上限をWorkspace configから取得する。"""
-    retry = config.get("retry")
-    if not isinstance(retry, dict):
+    """V1 Revision上限をWorkspace quality設定から取得する。"""
+    quality = config.get("quality")
+    if not isinstance(quality, dict):
         return 1
 
-    value = retry.get("revision", 1)
+    value = quality.get(
+        "max_critique_passes",
+        1,
+    )
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or value < 0
+        or value < 1
     ):
         raise ContractError(
-            "config.retry.revisionは0以上の整数が必要です"
+            "config.quality.max_critique_passesは"
+            "1以上の整数が必要です"
         )
+
     return value
 
 

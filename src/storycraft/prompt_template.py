@@ -33,10 +33,28 @@ class PromptTemplate:
     ) -> dict[str, object]:
         """Schema fileをJSON objectとして読み込む。"""
         if category == "critique":
-            schema_path = self.template_dir / "schemas" / "critique.json"
+            stage_schema = (
+                self.template_dir
+                / "schemas"
+                / f"critique_{stage}.json"
+            )
+            common_schema = (
+                self.template_dir
+                / "schemas"
+                / "critique.json"
+            )
+            schema_path = (
+                stage_schema
+                if stage_schema.is_file()
+                else common_schema
+            )
         else:
             # GenerateとRevisionはStage別Schemaを共有する。
-            schema_path = self.template_dir / "schemas" / f"{stage}.json"
+            schema_path = (
+                self.template_dir
+                / "schemas"
+                / f"{stage}.json"
+            )
 
         with schema_path.open(encoding="utf-8") as file:
             schema = json.load(file)
