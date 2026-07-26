@@ -419,6 +419,92 @@ class PublicationManuscriptContractV1Tests(
         ):
             self._build(volumes)
 
+    def test_volume_and_series_include_deterministic_toc(
+        self,
+    ) -> None:
+        volumes = fixture_volumes()
+        volumes[0]["chapters"].append({
+            "chapter_number": 2,
+            "title": "残照",
+            "scenes": [{
+                "scene_number": 1,
+                "prose": "澪は夕暮れの灯台を見上げた。",
+            }],
+        })
+
+        files = self._build(volumes)
+
+        self.assertIn(
+            "**目次**\n\n"
+            "- 第一章　灯台\n"
+            "- 第二章　残照\n\n"
+            "### 第一章　灯台",
+            files["v01.md"],
+        )
+        self.assertIn(
+            "## 目次\n\n"
+            "- 第一巻　帰郷\n"
+            "  - 第一章　灯台\n"
+            "  - 第二章　残照\n"
+            "- 第二巻　欠けた記録\n"
+            "  - 第一章　保管庫",
+            files["series.md"],
+        )
+
+    def test_volume_toc_mutation_is_rejected(
+        self,
+    ) -> None:
+        mutated = deepcopy(
+            self._build(fixture_volumes())
+        )
+        markdown = mutated["v01.md"].replace(
+            "- 第一章　灯台",
+            "- 第一章　改変",
+            1,
+        )
+        mutated["v01.md"] = markdown
+
+        entry = mutated["metadata.json"][
+            "volume_entries"
+        ][0]
+        entry["character_count"] = len(markdown)
+        entry["sha256"] = hashlib.sha256(
+            markdown.encode("utf-8")
+        ).hexdigest()
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "目次",
+        ):
+            validate_publication_files(mutated)
+
+    def test_series_toc_mutation_is_rejected(
+        self,
+    ) -> None:
+        mutated = deepcopy(
+            self._build(fixture_volumes())
+        )
+        markdown = mutated["series.md"].replace(
+            "- 第一巻　帰郷",
+            "- 第一巻　改変",
+            1,
+        )
+        mutated["series.md"] = markdown
+        mutated["metadata.json"][
+            "series_character_count"
+        ] = len(markdown)
+        mutated["metadata.json"][
+            "series_sha256"
+        ] = hashlib.sha256(
+            markdown.encode("utf-8")
+        ).hexdigest()
+
+        with self.assertRaisesRegex(
+            ContractError,
+            "巻別本文",
+        ):
+            validate_publication_files(mutated)
+
     def test_metadata_hashes_match_output(
         self,
     ) -> None:

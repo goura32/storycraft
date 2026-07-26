@@ -68,11 +68,13 @@ def _raw_filename(rec: "CallRecord", index: int) -> str:
     """生データ名へ工程を常に含め、工程に属さない座標は出力しない。"""
     parts = [f"{index:04d}", _raw_filename_component(rec.kind), _raw_filename_component(rec.phase)]
     scope_by_stage = {
-        "volume_chapters": ("v",),
-        "volume_summary": ("v",),
-        "scene_card": ("v", "c", "s"),
-        "scene": ("v", "c", "s"),
-        "continuity": ("v", "c", "s"),
+        "volume_plan": ("v",),
+        "chapter_plan": ("v", "c"),
+        "scene_plan": ("v", "c", "s"),
+        "scene_card_v1": ("v", "c", "s"),
+        "scene_prose_v1": ("v", "c", "s"),
+        "scene_continuity_v1": ("v", "c", "s"),
+        "volume_handoff": ("v",),
     }
     for coordinate in scope_by_stage.get(rec.phase, ()):
         match = re.search(rf"\b{coordinate}:\s*(\d+)", rec.ref)

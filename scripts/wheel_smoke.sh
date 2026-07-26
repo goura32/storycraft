@@ -11,10 +11,27 @@ python -m venv "$work/venv"
 "$work/venv/bin/pip" install "$work"/dist/*.whl
 "$work/venv/bin/storycraft" --help
 "$work/venv/bin/python" - <<'PY'
-from storycraft.series_model import OpenAIStoryModel
 from storycraft.prompt_template import get_template_loader
+from storycraft.series_model import OpenAIStoryModel
 
-assert "source_scene_id" in get_template_loader().load_schema_text("generate", "continuity")
-assert "# closure の生成" in OpenAIStoryModel._render("generate", "closure", context={})
+loader = get_template_loader()
+
+schema = loader.load_schema_object(
+    "generate",
+    "scene_continuity_v1",
+)
+assert isinstance(schema, dict)
+assert schema.get("type") == "object"
+assert isinstance(schema.get("properties"), dict)
+assert schema["properties"]
+
+prompt = OpenAIStoryModel._render(
+    "generate",
+    "scene_continuity_v1",
+    context={},
+)
+assert isinstance(prompt, str)
+assert prompt.strip()
+
 print("packaged active templates and schemas: OK")
 PY

@@ -62,4 +62,3 @@ minimum_python = "3.11"
 canonical_test_command = 'python -m unittest discover -s tests -p "test_*.py"'
 canonical_wheel_smoke_command = "bash scripts/wheel_smoke.sh"
 prompt_asset_root = "templates/prompts"
-legacy_prompt_fallback = false

@@ -11,8 +11,8 @@
       "chapter_count": 1,
       "scene_count": 1,
       "output_name": "v01.md",
-      "character_count": 88,
-      "sha256": "cd335e936885042a163cbb9910ad564f8176be30b0dd38419bbce89387fca35b"
+      "character_count": 106,
+      "sha256": "363bdbc418a3f98c982996b1bae1e0c3d0ec837257c7d44efacd780e0767f0a4"
     },
     {
       "volume_number": 2,
@@ -20,8 +20,8 @@
       "chapter_count": 1,
       "scene_count": 1,
       "output_name": "v02.md",
-      "character_count": 84,
-      "sha256": "a1802bae3d3adf4d065033be18fe01c86c4b98fa2936ea8f518566badf8269a0"
+      "character_count": 103,
+      "sha256": "9d1042b85448be980fae95f05b8f2c44260b908decec8ea1d63ba6c8af82bd5e"
     },
     {
       "volume_number": 3,
@@ -29,8 +29,8 @@
       "chapter_count": 1,
       "scene_count": 1,
       "output_name": "v03.md",
-      "character_count": 88,
-      "sha256": "401b61b63e5eaa43fb2b6116a8a37870c34be93bd96d8e3b010fac4c5d2500ab"
+      "character_count": 106,
+      "sha256": "f70d1246e30d12da83c8c1331c316940d2e23b61283bd79acad7db1940ee3622"
     },
     {
       "volume_number": 4,
@@ -38,14 +38,14 @@
       "chapter_count": 1,
       "scene_count": 1,
       "output_name": "v04.md",
-      "character_count": 86,
-      "sha256": "6ae7d2cf5c36eb1d026577a6df58286274aac3f159faa8bcc0b19acdefb45a15"
+      "character_count": 106,
+      "sha256": "ba4a0d8df293f8666af22e58d021e33bdbb0359d984c5b63721e81b103ae6c56"
     }
   ],
   "basis_generation_id": "gen-000240",
   "completion_id": "completion-000001",
   "completion_status": "complete",
-  "series_character_count": 322,
-  "series_sha256": "5a4a6ca0b109cfe890dff37b6e7758812898d7e9cb63f7f1649039aa20e4e8a2",
+  "series_character_count": 494,
+  "series_sha256": "5cdc1d2bf81c588dacc31ae2f3c398ade5fe17bf76d30a24aae9af8b7fb3c6e5",
   "created_at": "2026-07-23T12:10:00Z"
 }

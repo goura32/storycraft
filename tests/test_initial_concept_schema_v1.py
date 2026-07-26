@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import unittest
 
+from storycraft.prompt_template import get_template_loader
+
 from storycraft.series_contracts import (
     ContractError,
     ContractValidator,
@@ -105,6 +107,41 @@ class InitialConceptSchemaV1Tests(unittest.TestCase):
         self.assertIn(
             "引用されたfieldだけを変更",
             revised,
+        )
+
+
+    def test_critique_field_is_limited_to_concept_fields(
+        self,
+    ) -> None:
+        schema = get_template_loader().load_schema_object(
+            "critique",
+            "initial_concept",
+        )
+
+        field_schema = (
+            schema["properties"]
+            ["issues"]
+            ["items"]
+            ["properties"]
+            ["field"]
+        )
+
+        self.assertEqual(
+            field_schema["enum"],
+            [
+                "logline",
+                "premise",
+                "central_question",
+                "themes",
+                "dramatic_engine",
+                "tone",
+                "reader_promise",
+                "ending_direction",
+            ],
+        )
+        self.assertNotIn(
+            "candidate.dramatic_engine",
+            field_schema["enum"],
         )
 
 

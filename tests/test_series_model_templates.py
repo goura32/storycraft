@@ -1,4 +1,4 @@
-"""実送信promptがbrief/Canon/volume_map契約を使うことを確認する。"""
+"""Version 1のModel、Prompt、LLM通信契約を確認する。"""
 from __future__ import annotations
 
 import contextlib
@@ -60,6 +60,18 @@ class _TemplateLoader:
     def render_system(self) -> str:
         return "JINJAでレンダリングされたsystemプロンプト"
 
+    def load_schema_object(
+        self,
+        category: str,
+        stage: str,
+    ) -> dict[str, object]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [],
+            "properties": {},
+        }
+
     def load_schema_text(self, category: str, stage: str) -> str:
         return f"外部スキーマ:{category}/{stage}"
 
@@ -68,7 +80,7 @@ class _TemplateLoader:
         return "JINJAでレンダリングされたbriefプロンプト"
 
 
-class SeriesEngineModelTemplateTests(unittest.TestCase):
+class StoryModelTemplateTests(unittest.TestCase):
     def test_generate_brief_renders_stage_template_as_sent_user_prompt(self) -> None:
         client = _CapturingClient()
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)
@@ -85,109 +97,21 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         )
         self.assertEqual(client.messages[1]["content"], "JINJAでレンダリングされたbriefプロンプト")
 
-    def test_continuity_evidence_contract_requires_verbatim_scene_substrings(self) -> None:
-        prompt = (Path("templates/prompts/user/continuity/generate_continuity.j2").read_text(encoding="utf-8"))
-        schema = (Path("templates/prompts/schemas/continuity.json").read_text(encoding="utf-8"))
-        self.assertIn("evidence in scene.content", prompt)
-        self.assertNotIn("引用または要約", prompt)
-        self.assertIn("scene.content からそのままコピーした連続文字列", schema)
 
     def test_brief_critique_prompt_requires_one_complete_issue_object(self) -> None:
         prompt = Path("templates/prompts/user/brief/critique_brief.j2").read_text(encoding="utf-8")
         self.assertIn("issueごとに必ず4キーを同じobject内に置く", prompt)
         self.assertIn("閉じる前に各issue objectの4キー", prompt)
 
-    def test_scene_card_prompt_requires_the_context_time_floor(self) -> None:
-        prompt = Path("templates/prompts/user/scene_card/generate_scene_card.j2").read_text(encoding="utf-8")
-        self.assertIn("same_volume_time_floor", prompt)
-        self.assertIn("allowed_start_time_ids", prompt)
 
-    def test_scene_card_templates_bind_events_to_input_facts_and_prior_scene(self) -> None:
-        generate = Path("templates/prompts/user/scene_card/generate_scene_card.j2").read_text(encoding="utf-8")
-        critique = Path("templates/prompts/user/scene_card/critique_scene_card.j2").read_text(encoding="utf-8")
-        revision = Path("templates/prompts/user/scene_card/revision_scene_card.j2").read_text(encoding="utf-8")
-        for prompt in (generate, critique, revision):
-            self.assertIn("previous_scene_content", prompt)
-            self.assertIn("入力に根拠のない", prompt)
-        self.assertIn("required_thread_actions", critique)
 
-    def test_continuity_templates_prohibit_future_handoff_forecasts(self) -> None:
-        for path in (
-            "templates/prompts/user/continuity/generate_continuity.j2",
-            "templates/prompts/user/continuity/critique_continuity.j2",
-        ):
-            prompt = Path(path).read_text(encoding="utf-8")
-            self.assertIn("将来の出来事の予告", prompt)
-            self.assertIn("そのままコピー", prompt)
 
-    def test_scene_templates_forbid_unrooted_details_and_require_candidate_grounding(self) -> None:
-        generate = Path("templates/prompts/user/scene/generate_scene.j2").read_text(encoding="utf-8")
-        critique = Path("templates/prompts/user/scene/critique_scene.j2").read_text(encoding="utf-8")
-        self.assertIn("入力に根拠のない固有の制度", generate)
-        self.assertIn("候補本文に実在する文字列", critique)
 
-    def test_initial_ledger_prompts_prohibit_unsupported_state_expansion_and_require_detection(self) -> None:
-        brief_critique = Path("templates/prompts/user/brief/critique_brief.j2").read_text(encoding="utf-8")
-        characters_generate = Path("templates/prompts/user/characters/generate_characters.j2").read_text(encoding="utf-8")
-        characters_critique = Path("templates/prompts/user/characters/critique_characters.j2").read_text(encoding="utf-8")
-        relationships_generate = Path("templates/prompts/user/relationships/generate_relationships.j2").read_text(encoding="utf-8")
-        relationships_critique = Path("templates/prompts/user/relationships/critique_relationships.j2").read_text(encoding="utf-8")
-        self.assertIn("居住状態・継続行為・頻度", brief_critique)
-        self.assertIn("入力にない具体的な事実を補わない", characters_generate)
-        self.assertIn("入力にない固有の事実", characters_critique)
-        self.assertIn("双方に共通する内面・共同目的", relationships_generate)
-        self.assertIn("双方に共通する内面・共同目的", relationships_critique)
 
-    def test_world_critique_prompt_forbids_input_state_field_paths(self) -> None:
-        prompt = Path("templates/prompts/user/world/critique_world.j2").read_text(encoding="utf-8")
-        self.assertIn("候補のrootは `entities`", prompt)
-        self.assertIn("入力状態の `brief` / `characters` / `relationships` をfieldに使わない", prompt)
 
-    def test_threads_critique_prompt_documents_quoted_id_key_paths(self) -> None:
-        prompt = Path("templates/prompts/user/threads/critique_threads.j2").read_text(encoding="utf-8")
-        self.assertIn('character_knowledge["char-0004"]', prompt)
-        self.assertIn('"field": "threads[0].character_knowledge[\\"char-0004\\"]"', prompt)
-        self.assertIn("ハイフンを含む辞書キー", prompt)
 
-    def test_initial_ledger_critique_and_revision_templates_are_evidence_bounded(self) -> None:
-        stages = ("brief", "characters", "relationships", "world", "timeline", "threads")
-        for stage in stages:
-            with self.subTest(stage=stage):
-                generate = Path(f"templates/prompts/user/{stage}/generate_{stage}.j2").read_text(encoding="utf-8")
-                critique = Path(f"templates/prompts/user/{stage}/critique_{stage}.j2").read_text(encoding="utf-8")
-                revision = Path(f"templates/prompts/user/{stage}/revision_{stage}.j2").read_text(encoding="utf-8")
-                if stage != "brief":
-                    self.assertIn("入力に根拠のない", generate)
-                self.assertIn("候補に実在する文字列", critique)
-                self.assertIn("全string field", critique)
-                self.assertIn("引用されたfieldだけを修正", revision)
 
-    def test_volume_chapter_templates_preserve_volume_action_allocation(self) -> None:
-        templates = [
-            Path("templates/prompts/user/volume_chapters/generate_volume_chapters.j2").read_text(encoding="utf-8"),
-            Path("templates/prompts/user/volume_chapters/critique_volume_chapters.j2").read_text(encoding="utf-8"),
-            Path("templates/prompts/user/volume_chapters/revision_volume_chapters.j2").read_text(encoding="utf-8"),
-        ]
-        for prompt in templates:
-            self.assertIn("thread_targets", prompt)
-            self.assertIn("作者真実", prompt)
 
-    def test_scene_card_templates_allow_updates_only_for_characters_and_major_threads(self) -> None:
-        templates = [
-            Path("templates/prompts/user/scene_card/generate_scene_card.j2"),
-            Path("templates/prompts/user/scene_card/revision_scene_card.j2"),
-            Path("templates/prompts/user/scene_card/critique_scene_card.j2"),
-        ]
-        for template in templates:
-            with self.subTest(template=template.name):
-                contents = template.read_text(encoding="utf-8")
-                self.assertIn("char-XXXX", contents)
-                self.assertIn("thread-XXXX", contents)
-                self.assertIn("entity-XXXX", contents)
-        schema = Path("templates/prompts/schemas/scene_card.json").read_text(encoding="utf-8")
-        self.assertIn("char-XXXX", schema)
-        self.assertIn("thread-XXXX", schema)
-        self.assertIn("entity/time/relationship IDは含めない", schema)
 
     def test_attempt_counter_restarts_for_each_llm_operation(self) -> None:
         client = _SequenceClient([
@@ -359,15 +283,6 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         self.assertNotIn("secret-token", stderr_output)
         self.assertNotIn("FORGED", stderr_output)
 
-    def test_real_brief_and_volume_map_prompts_express_ownership_boundaries(self) -> None:
-        brief = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島", "4巻"]})
-        volume_map = OpenAIStoryModel._render("generate", "volume_map", context={})
-        self.assertIn("keywords", brief)
-        self.assertIn("自動レビュー", brief)
-        self.assertIn("Canon", volume_map)
-        self.assertIn("新しい人物、世界設定、因果、秘密、出来事、回収条件を作らない", volume_map)
-        self.assertIn("`thread_targets`", volume_map)
-        self.assertIn("`brief.ending` は結末の唯一の正本", volume_map)
 
     def test_brief_quality_templates_enforce_reviewed_adoption_boundaries(self) -> None:
         generate = OpenAIStoryModel._render("generate", "brief", context={"keywords": ["霧の島"]})
@@ -469,12 +384,6 @@ class SeriesEngineModelTemplateTests(unittest.TestCase):
         for stage in STAGES:
             self.assertTrue((root / "schemas" / f"{stage}.json").is_file(), stage)
 
-    def test_threads_revision_preserves_author_truth_while_removing_only_unsupported_future_claims(self) -> None:
-        prompt = OpenAIStoryModel._render(
-            "revision", "threads", candidate={}, critique={"issues": []}, context={},
-        )
-        self.assertIn("`author_truth` はCanonの作者真実であり、削除・空文化しない", prompt)
-        self.assertIn("`initial_state` に混入した未確定の将来変化", prompt)
 
     def test_every_current_stage_has_renderable_generation_critique_and_revision_contract(self) -> None:
         for stage in STAGES:

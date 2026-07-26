@@ -12,8 +12,7 @@
   },
   "retry": {
     "transport": 2,
-    "format": 1,
-    "revision": 2
+    "format": 1
   },
   "timeout": {
     "connect_seconds": 5,
@@ -27,5 +26,8 @@
     "max_estimated_cost": 100.0,
     "currency": "USD"
   },
-  "created_at": "2026-07-23T10:00:00Z"
+  "created_at": "2026-07-23T10:00:00Z",
+  "quality": {
+    "max_critique_passes": 2
+  }
 }

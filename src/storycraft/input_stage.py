@@ -677,19 +677,24 @@ def _reserve_identifier(
 
 
 def _revision_limit(config: dict[str, Any]) -> int:
-    retry = config.get("retry")
-    if not isinstance(retry, dict):
+    quality = config.get("quality")
+    if not isinstance(quality, dict):
         return 1
 
-    value = retry.get("revision", 1)
+    value = quality.get(
+        "max_critique_passes",
+        1,
+    )
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or value < 0
+        or value < 1
     ):
         raise ContractError(
-            "config.retry.revisionは0以上の整数が必要です"
+            "config.quality.max_critique_passesは"
+            "1以上の整数が必要です"
         )
+
     return value
 
 

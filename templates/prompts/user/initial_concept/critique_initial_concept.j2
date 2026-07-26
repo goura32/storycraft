@@ -4,6 +4,12 @@
 修正可能で候補内に根拠のある問題だけをissuesへ出す。
 問題がなければ `issues: []` を返す。
 
+## Brief toneの完全一致確認
+
+- Candidateの`tone`配列に、Briefの`tone`の全要素が完全一致で含まれることを確認する
+- 「静かな緊張」を「静かな緊張感」のように言い換えた場合も契約違反として指摘する
+- Briefのtoneを説明文へ展開しただけでは保持したことにならない
+
 ## Review観点
 
 1. **スキーマ適合**
@@ -41,6 +47,33 @@
 ## 採用済みBrief
 
 {{ context | tojson }}
+
+## 全field一括レビュー
+
+一つの問題を見つけても終了せず、次の全fieldをそれぞれ確認する。
+
+- `logline`
+- `premise`
+- `central_question`
+- `themes`
+- `dramatic_engine`
+- `tone`
+- `reader_promise`
+- `ending_direction`
+
+このreview passで検出できる問題は、Schemaの許す範囲ですべて報告する。
+
+## 指摘根拠の規則
+
+- `field`には候補のトップレベルfield名だけを書く
+- `candidate.dramatic_engine`のような`candidate.`接頭辞を付けない
+- `field`へ引用文、説明文、配列添字、Markdown記法を入れない
+- 問題箇所を引用する場合、candidateに実在する連続文字列を一字一句そのまま引用する
+- 引用内の漢字、仮名、助詞、語順を変更してはならない
+- candidateにない誤記や表現を作って指摘してはならない
+- Briefにない事実の追加を指摘する場合、candidateの実際の語句とBriefの入力内容を照合する
+- 問題のないfieldを、推測や一般論だけで問題扱いしない
+- `issues`を空にするのは、全fieldの確認後に問題がない場合だけとする
 
 ## 出力スキーマ
 

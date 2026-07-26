@@ -56,7 +56,7 @@ Publication
 ローカルfilesystem
 外部LLM Provider
 Brief入力またはKeywords入力
-run / resume / step
+run / resume / step / status / validate
 Markdown Publication
 ```
 
@@ -74,9 +74,9 @@ Publication時の物語本文再生成
 
 ## 現在の実装状態
 
-V1の個別Stage Serviceは、入力から`scene_continuity`まで段階的に実装されています。一方、公開CLIはまだV1 Workflowへ完全統合されておらず、`scene_commit`、`volume_handoff`、`completion`、`publication`、V1 Crash Recoveryは未実装です。
+V1の全Stage Serviceと公開CLIは、BriefまたはKeywords入力からMarkdown Publicationまで統合済みです。`run`、`resume`、`step`に加え、現在状態をJSON表示する`status`と、workspace全体の整合性を検証する`validate`を提供します。
 
-そのため、READMEに記載したV1フロー全体を現時点のCLIで完走できるとはみなしません。正確な実装済み範囲、試験状況、次の作業順は次を参照してください。
+Candidate Adoption、Scene Commit、PublicationのCrash RecoveryはV1 Workflowへ接続されています。決定的Fake Modelによる正常系・中断復旧Acceptanceを含む512件の自動試験と、隔離wheel build／install smokeが成功しています。外部Providerを使う実LLM smokeはRelease前の最終確認として実施します。
 
 [`docs/product/IMPLEMENTATION_STATUS.md`](docs/product/IMPLEMENTATION_STATUS.md)
 

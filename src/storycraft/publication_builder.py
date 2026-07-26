@@ -371,6 +371,12 @@ def validate_publication_files(
                 f"{output_name}"
             )
 
+        _validate_volume_toc(
+            markdown,
+            chapter_count=chapter_count,
+            label=f"Publication {output_name}",
+        )
+
         separator_count = markdown.count(
             f"\n\n{_SCENE_SEPARATOR}\n\n"
         )
@@ -620,19 +626,38 @@ def _build_volume_markdown(
     series_title: str,
     volume: dict[str, Any],
 ) -> str:
-    parts = [
-        f"# {series_title}",
+    volume_heading = (
+        f"## 第{_japanese_number(volume['volume_number'])}巻"
+        f"　{volume['title']}"
+    )
+    chapter_headings = [
         (
-            f"## 第{_japanese_number(volume['volume_number'])}巻"
-            f"　{volume['title']}"
-        ),
-    ]
-
-    for chapter in volume["chapters"]:
-        parts.append(
             f"### 第{_japanese_number(chapter['chapter_number'])}章"
             f"　{chapter['title']}"
         )
+        for chapter in volume["chapters"]
+    ]
+
+    volume_toc = (
+        "**目次**\n\n"
+        + "\n".join(
+            f"- {heading[4:]}"
+            for heading in chapter_headings
+        )
+    )
+
+    parts = [
+        f"# {series_title}",
+        volume_heading,
+        volume_toc,
+    ]
+
+    for chapter, chapter_heading in zip(
+        volume["chapters"],
+        chapter_headings,
+        strict=True,
+    ):
+        parts.append(chapter_heading)
 
         for index, scene in enumerate(
             chapter["scenes"]
@@ -661,8 +686,12 @@ def _build_series_markdown(
 
     prefix = f"# {title}\n\n"
     bodies: list[str] = []
+    toc_lines = ["## 目次"]
 
-    for markdown in volume_markdowns:
+    for index, markdown in enumerate(
+        volume_markdowns,
+        1,
+    ):
         if not markdown.startswith(prefix):
             raise ContractError(
                 "Publication巻本文のシリーズ題名が"
@@ -676,10 +705,32 @@ def _build_series_markdown(
             raise ContractError(
                 "Publication巻本文が空です"
             )
+
+        volume_heading, chapter_headings = (
+            _extract_volume_headings(
+                markdown,
+                label=(
+                    "Publication "
+                    f"Volume {index}"
+                ),
+            )
+        )
+
+        toc_lines.append(
+            f"- {volume_heading[3:]}"
+        )
+        toc_lines.extend(
+            f"  - {heading[4:]}"
+            for heading in chapter_headings
+        )
         bodies.append(body)
 
     series = (
         prefix
+        + toc_lines[0]
+        + "\n\n"
+        + "\n".join(toc_lines[1:])
+        + "\n\n"
         + "\n\n".join(bodies)
         + "\n"
     )
@@ -688,6 +739,90 @@ def _build_series_markdown(
         "Publication series.md",
     )
     return series
+
+
+def _extract_volume_headings(
+    markdown: str,
+    *,
+    label: str,
+) -> tuple[str, list[str]]:
+    """巻原稿から巻見出しと章見出しを決定的に抽出する。"""
+    lines = markdown.splitlines()
+    volume_headings = [
+        line
+        for line in lines
+        if line.startswith("## ")
+    ]
+    chapter_headings = [
+        line
+        for line in lines
+        if line.startswith("### ")
+    ]
+
+    if len(volume_headings) != 1:
+        raise ContractError(
+            f"{label}の巻見出し構成が不正です"
+        )
+    if not chapter_headings:
+        raise ContractError(
+            f"{label}に章見出しがありません"
+        )
+
+    return volume_headings[0], chapter_headings
+
+
+def _validate_volume_toc(
+    markdown: str,
+    *,
+    chapter_count: int,
+    label: str,
+) -> None:
+    """巻目次が本文の章見出しと完全一致することを確認する。"""
+    volume_heading, chapter_headings = (
+        _extract_volume_headings(
+            markdown,
+            label=label,
+        )
+    )
+
+    if len(chapter_headings) != chapter_count:
+        raise ContractError(
+            f"{label}の章見出し数が不正です"
+        )
+
+    expected_toc = (
+        "**目次**\n\n"
+        + "\n".join(
+            f"- {heading[4:]}"
+            for heading in chapter_headings
+        )
+        + "\n\n"
+    )
+
+    title_separator = markdown.find("\n\n")
+    if title_separator < 0:
+        raise ContractError(
+            f"{label}の原稿構成が不正です"
+        )
+
+    after_title = markdown[
+        title_separator + 2:
+    ]
+    volume_prefix = volume_heading + "\n\n"
+
+    if not after_title.startswith(volume_prefix):
+        raise ContractError(
+            f"{label}の巻見出し位置が不正です"
+        )
+
+    after_volume = after_title[
+        len(volume_prefix):
+    ]
+
+    if not after_volume.startswith(expected_toc):
+        raise ContractError(
+            f"{label}の目次が章見出しと一致しません"
+        )
 
 
 def _validate_completion(
