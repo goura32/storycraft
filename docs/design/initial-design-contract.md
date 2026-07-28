@@ -31,7 +31,7 @@
 | `world` | 世界、制度、制約 |
 | `knowledge_model` | 作者、人物、読者の知識構造 |
 | `unresolved_threads` | 種別、結末必須性、説明。LLM は新規未解決事項 ID を返さず、コードが採番する |
-| `ending_conditions` | 結末必須事項の達成条件。新規未解決事項への対応は名称・意味内容で解決する |
+| `ending_conditions` | 結末必須事項の達成条件。各条件にコードが `ending_condition_id` を採番する。新規未解決事項への対応は名称・意味内容で解決する |
 
 `initial-design` に作品事実の現在値、人物の現在知識、読者開示済み情報を複写しません。
 

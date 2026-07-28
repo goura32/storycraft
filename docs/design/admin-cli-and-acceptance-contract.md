@@ -22,12 +22,18 @@
 ```json
 {
   "version": 1,
-  "ok": true,
   "grant_id": "grant-...",
+  "operator_id": "...",
+  "workspace_id": "ws-...",
+  "blocked_state_id": "blocked-state-...",
+  "cause": "固定 enum",
+  "issued_at": "UTC 時刻",
   "expires_at": "UTC 時刻",
   "signature": "base64url"
 }
 ```
+
+`reserve_grant` は、この許可証と解決処理 ID を受け、成功時に再取得不能な `reservation_token` を返します。`resolution_application/prepared` の `pending_commit` は許可証 ID、解決処理 ID、予約トークンを原子的に保存する。予約トークンは作業場所の保護された一時保存だけに置き、標準出力・解決記録・呼出し記録には出さない。
 
 許可証は一回だけ使えます。サーバーは許可証ID、作業場所、停止状態、原因、失効、状態（`issued|reserved|consumed`）を不変台帳に保存します。作業場所は解決処理の一時保存を検証した後、サーバーの `reserve_grant` を呼びます。サーバーは未失効の `issued` 許可証だけを同じ許可証ID・作業場所・停止状態・原因で `reserved` にします。作業場所が解決記録と後続選択を最終配置確定し、run-state を更新した後に `consume_grant` を呼びます。消費は同じ予約トークンの `reserved` 許可証だけを `consumed` にする原子的操作です。
 

@@ -79,7 +79,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 {
   "schema_version": "candidate-response-v1",
   "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
-  "payload": { "artifact_kind ごとの完全な候補内容。新規 ID は含めない" }
+  "payload": { "説明": "artifact_kind ごとの完全な候補内容。新規 ID は含めない" }
 }
 ```
 

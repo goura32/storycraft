@@ -47,9 +47,11 @@
   "thread_id": "入力 catalog から選んだ既存 ID",
   "action": "introduce | progress | resolve",
   "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
-  "required_conditions": ["達成条件の選択または説明"]
+  "required_conditions": ["ending-condition-000001"]
 }
 ```
+
+`required_conditions` と `resolved_condition_refs` は、初期設計でコード採番した `ending_condition_id` だけを参照します。説明文を代用しません。
 
 - シリーズ計画: 結末必須未解決事項ごとに `resolve` を一つだけ予定する。
 - 巻 / 章計画: 親計画の予定を狭める。新しい `resolve` を作らない。
@@ -64,7 +66,7 @@
 
 1. 場面本文に達成条件を満たす本文根拠がある。
 2. 継続性更新が未解決事項を `resolved` に変更する。
-3. 更新が本文位置と達成条件を `resolved_condition_refs` に記録する。
+3. 更新が本文位置と `ending_condition_id` を `resolved_condition_refs` に記録する。
 4. 場面確定がその更新を後続の作品状態へ一度だけ適用する。
 
 `progress` は同じ手順で `progressed` にできますが、達成条件の全充足は要求しません。`introduce` は `open` のままでもよいです。
@@ -75,8 +77,8 @@
 
 巻公開は、当該巻で `resolve` を予定した未解決事項が正規形現在状態で `resolved` であることを検証します。未解決なら `volume_publication_invalid` で停止します。
 
-最終巻の公開では、すべての結末必須未解決事項が `resolved` であり、各達成条件に本文根拠があることを決定的に検証します。これは最終巻だけの追加 LLM 確認ではありません。通常の計画、場面、継続性、公開検証器が持つ参照検証です。
+最終巻でも追加の達成条件照合、確認記録、本文再生成、注意付き公開による例外を設けません。シリーズ計画が結末必須未解決事項ごとに最終的な `resolve` 座標を一意に定め、各巻共通の公開検証が当該巻に予定された `resolve` の解決と本文根拠を検証するため、最終巻の通常公開が完了すれば全結末必須未解決事項も通常経路で検証済みになります。
 
 ## 6. 復旧
 
-未公開の `resolve` 場面が不整合なら、保護された解決記録は、その場面計画から依存末端までを選び直しまたは除外できます。公開済み巻の本文、場面、作品状態、公開記録は変更できません。
+`resolve` 場面の計画・本文・継続性更新・根拠の不整合は、`authority_reference_inconsistency` として停止する。この原因の保護された解決記録だけが、その場面計画から未公開依存末端までを選び直しまたは除外できる。公開済み巻の本文、場面、作品状態、公開記録は変更できません。
