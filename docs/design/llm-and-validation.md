@@ -9,6 +9,91 @@
 | `QualityLoop` | 生成、独立確認、修正、再確認、品質上限時の注意付き採用 | 通常工程の候補を採用する |
 | `ArtifactState` | 不変確定、採用参照、停止、復旧 | LLM 記録を物語正本にしない |
 
+### 7. LLMClient.invoke インターフェース仕様
+
+```python
+def invoke(
+    model: str,
+    seed: int,
+    system_prompt: str,
+    user_prompt: str,
+    response_schema: str,  # JSON Schema as string
+    timeout_ms: int
+) -> dict:
+    """
+    Returns:
+    {
+      "raw": "string",           # LLM raw response text
+      "seed_used": int,          # actual seed used
+      "latency_ms": int,         # round-trip latency
+      "retries": int,            # technical retries performed
+      "error": "string | null"   # transport error if any
+    }
+    """
+```
+
+### 8. StructuredOperation.parse_and_validate インターフェース仕様
+
+```python
+def parse_and_validate(
+    raw_response: str,
+    response_schema: dict,    # parsed JSON Schema
+    input_artifact_refs: list[dict]  # [{"artifact_type": "...", "artifact_id": "..."}, ...]
+) -> dict:
+    """
+    Returns:
+    {
+      "valid": bool,
+      "parsed": dict,                    # parsed JSON object
+      "errors": ["string"],              # validation error messages
+      "artifact_refs": [{"artifact_type": "...", "artifact_id": "..."}],
+      "update_ranges": [{"op": "...", "path": "..."}]
+    }
+    """
+```
+
+### 9. QualityLoop.run_stage インターフェース仕様
+
+```python
+def run_stage(
+    generation_input: dict,
+    stage_name: str
+) -> dict:
+    """
+    Loops over generate -> review -> revise -> recheck
+    Returns:
+    {
+      "adopted": bool,
+      "candidate_id": "string",
+      "quality_id": "string",
+      "notices": ["string"]
+    }
+    """
+```
+
+### 10. 技術的再試行の待機戦略
+
+- 初回失敗後: 即座に再試行（最大 `technical_retry_limit` 回）
+- 連続失敗時: 指数バックオフ 1s, 2s, 4s, 8s, 16s（上限 30s）
+- idle timeout 時: 即座に再試行
+- 全再試行失敗後: `blocked/manual_review_required` で停止
+
+### 11. review_profile_id 定義形式
+
+```json
+{
+  "schema_version": 1,
+  "review_profile_id": "string",
+  "aspects": [
+    {"code": "string", "description": "string", "severity": "critical | notice | reference"}
+  ],
+  "evidence_requirements": ["json_path | paragraph | prose_offset"],
+  "exclusion_rules": ["code"]
+}
+```
+
+取り得る値: `initial-design-consistency`, `series-plan-coherence`, `volume-plan-alignment`, `chapter-plan-alignment`, `scene-plan-feasibility`, `scene-card-constraint`, `scene-prose-quality`, `scene-continuity-accuracy`, `volume-publication-completeness`
+
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
 ## 2. 二種類の再試行
