@@ -202,23 +202,33 @@ Publicationまで完了する
 
 ## 9. `ACC-E2E-003` `step`で一段階ずつ進む
 
-**目的:** `step`が一つの意味的Stageだけを完了することを確認する。
+**目的:** `step`が既存workspaceで一つの意味的Stageだけを完了することを確認する。
+
+**前提:**
+
+```text
+runで新規workspaceを作成済み
+current_stageが通常Stageを指す
+```
 
 **操作:**
 
 ```text
-新規workspaceでstepを複数回実行
+同じworkspaceへstepを複数回実行
 ```
 
 **期待結果:**
 
 ```text
-一回ごとにStageが一つ進む
-Review／Revisionは同じStage内で完了する
-内部file操作ごとには停止しない
+各実行の最初に起動検証とRecoveryを行う
+RecoveryがCrash前Stageを完了した場合はそこで終了し、次Stageを実行しない
+一回ごとに意味的Stageを一つだけ完了する
+Reviewと未採用Candidate Revisionは同じStage内で完了する
+内部file操作やRecovery phaseごとには停止しない
+存在しないworkspaceへのstepは新規作成せず拒否する
 ```
 
-**対応要件:** `REQ-FR-003`, `REQ-FR-006`
+**対応要件:** `REQ-FR-003`, `REQ-FR-006`, `REQ-REC-001`
 
 ---
 
@@ -462,15 +472,17 @@ Briefのvolume_countと一致
 **前提:**
 
 ```text
-Plan Candidateのbasis Generationが現在値より古い
-差分がPlan前提へ影響
+未採用Plan Candidateのbasis Generationがcurrent Generationと異なる
 ```
 
 **期待結果:**
 
 ```text
 Candidateを採用しない
-Plan Revisionまたは再生成
+関連するAuthority入力identityが完全に同一ならコードで再検証できる
+入力identityが異なる場合は古いCandidateをRevisionせず破棄する
+新しいContextから未採用Candidateを再生成する
+採用済みPlanは変更しない
 ```
 
 **対応要件:** `REQ-FR-018`, `REQ-NFR-004`
@@ -482,14 +494,16 @@ Plan Revisionまたは再生成
 **操作:**
 
 ```text
-採用済みVolume PlanをRevision
+採用済みVolume PlanをRevisionまたは置換しようとする
 ```
 
 **期待結果:**
 
 ```text
-新versionを作る
-旧versionを保持
+操作を拒否する
+新しい採用済みversionを作らない
+既存Planを変更またはsupersedeしない
+対象ごとの採用済みPlanは一件のまま
 ```
 
 **対応要件:** `REQ-FR-014`, `REQ-DATA-004`
@@ -618,22 +632,30 @@ Scene処理を再生成
 
 ---
 
-## 31. `ACC-SCENE-007` 本文Revision後のContinuity再生成
+## 31. `ACC-SCENE-007` 本文Candidate Revision後のContinuity再生成
+
+**前提:**
+
+```text
+未採用本文Candidateを基にContinuity Candidateを生成済み
+本文Reviewでerrorを検出
+```
 
 **操作:**
 
 ```text
-Continuity生成後に本文Revision
+本文CandidateをRevisionして新versionを作成する
 ```
 
 **期待結果:**
 
 ```text
-古いContinuityとEvidenceを破棄
-新本文から再生成
+旧本文versionに基づく未採用Continuity Candidateを採用しない
+新本文Candidate versionからContinuityを再生成する
+確定済みScene本文やGenerationをRevisionしない
 ```
 
-**対応要件:** `REQ-FR-019`, `REQ-FR-022`
+**対応要件:** `REQ-FR-019`, `REQ-FR-022`, `REQ-FR-025`
 
 ---
 
@@ -797,15 +819,18 @@ Revision済みという理由だけで採用しない
 **前提:**
 
 ```text
-上限までRevisionしてもerrorが残る
+設定上限までRevisionしてもerrorが残る
+warningとnoteだけの別Candidateも用意する
 ```
 
 **期待結果:**
 
 ```text
-Candidateを採用しない
-runをblocked
-停止理由を表示
+errorが残るCandidateを採用しない
+run statusがblocked
+stop_reasonがrevision_limit
+warningまたはnoteだけなら採用可能
+確定済み成果物をRevisionしない
 ```
 
 **対応要件:** `REQ-FR-027`
@@ -819,17 +844,18 @@ runをblocked
 ```text
 transport error 1回
 format error 1回
-Revision 2回
+未採用Candidate Revision 2回
 ```
 
 **期待結果:**
 
 ```text
-三つを独立計数
+transport retry、format retry、Revisionを独立計数する
 一つの共通retry上限へ混ぜない
+各Provider call試行を別Call IDとattemptで記録する
 ```
 
-**対応要件:** `REQ-FR-026`
+**対応要件:** `REQ-FR-026`, `REQ-OPS-008`
 
 ---
 
@@ -859,9 +885,12 @@ Publicationなし
 **期待結果:**
 
 ```text
-全Required Threadを評価
-全Ending条件を評価
-publicationへ進む
+全採用済みPlanを評価する
+全確定Sceneを評価する
+最終巻を含む全Handoffを評価する
+全Required Thread、Ending条件、主要Arcを評価する
+Completion Resultへ評価入力identityを保存する
+同じ入力identityでcompletion内Publication確定operationへ進む
 ```
 
 **対応要件:** `REQ-FR-030`, `REQ-FR-031`
@@ -908,8 +937,10 @@ valid incomplete受領後は再試行しない
 **期待結果:**
 
 ```text
-Publication Stage中のProvider call数が0
-採用済みScene本文から組み立て
+completion Stage内のPublication確定operationでProvider call数が0
+Provider factoryとCredential参照も0
+Brief、採用済みPlan、確定Scene本文、Completion Resultからコードで組み立てる
+独立Publication Stage、Publication Plan、Publication Gate、Publication Manifestを使用しない
 ```
 
 **対応要件:** `REQ-FR-033`, `REQ-NFR-003`
@@ -951,21 +982,33 @@ Recovery情報
 
 ---
 
-## 50. `ACC-PUB-004` 再生成の決定性
+## 50. `ACC-PUB-004` Recovery再構築の決定性
+
+**前提:**
+
+```text
+Publication finalize前にCrash
+pending_commitへ予定Publication IDと確定入力identityを記録済み
+stagingが欠落または不完全
+```
 
 **操作:**
 
 ```text
-同じ採用済み入力からPublicationを二回構成
+Recoveryを実行する
 ```
 
 **期待結果:**
 
 ```text
-本文順と本文内容が一致
+同じ予定Publication IDを使う
+Completionが評価した同じ入力identityから決定的にstagingを再構築する
+Provider call、本文再生成、Counter更新を行わない
+正式Publicationを二件作らない
+本文順と本文内容が同一になる
 ```
 
-**対応要件:** `REQ-NFR-003`
+**対応要件:** `REQ-NFR-003`, `REQ-REC-004`, `REQ-REC-008`
 
 ---
 
@@ -1075,18 +1118,20 @@ Generation ID予約後に処理失敗
 
 ```text
 SceneとGenerationのstaging作成後
-pending commit設定前
+pending_commit設定前
 ```
 
 **期待結果:**
 
 ```text
-final成果物なし
-stagingを未採用として再生成
-Provider call重複は再生成時だけ
+final成果物は存在しない
+残存stagingを未採用としてorphansへ隔離する
+Recovery自身はProvider callを行わない
+Recovery自身はCall ID、usage、Counter、成果物IDを増やさない
+Recovery完了後に通常Stageから再実行できる
 ```
 
-**対応要件:** `REQ-REC-003`
+**対応要件:** `REQ-REC-003`, `REQ-REC-008`
 
 ---
 
@@ -1102,12 +1147,15 @@ Generation final directory確定前
 **期待結果:**
 
 ```text
-Scene finalを削除しない
-Generation stagingが完全なら確定を続行
-不完全なら人間対応
+Scene finalを削除、置換、別IDへ移動しない
+完全なGeneration stagingがあれば同じ予定IDでfinalizeを続行する
+stagingが欠落または不完全なら確定Sceneと親Generationから決定的に再構築する
+再構築可能なら同じ予定Generation IDで前進する
+Provider call、本文再生成、Counter更新を行わない
+決定的再構築でも契約を満たせない場合だけfailedかつmanual_review_required
 ```
 
-**対応要件:** `REQ-REC-004`
+**対応要件:** `REQ-REC-004`, `REQ-REC-008`
 
 ---
 
@@ -1132,22 +1180,24 @@ current Generationを新Generationへ更新
 
 ---
 
-## 59. `ACC-CRASH-004` Publication rename後Crash
+## 59. `ACC-CRASH-004` Publication finalize後Crash
 
 **故障位置:**
 
 ```text
 Publication final directory確定後
-run status completed更新前
+run-stateの最終atomic replacement前
 ```
 
 **期待結果:**
 
 ```text
-Publicationを検証
-current Publicationを更新
-statusをcompleted
-本文再生成なし
+予定Publication IDと入力identityを再検証する
+current_publication_idを予定IDへ更新する
+statusをcompletedへ更新する
+current_stageをcompletionに保つ
+stop_reason、active状態、pending_commitをnullにする
+Provider call、本文再生成、新ID割当、Counter更新を行わない
 ```
 
 **対応要件:** `REQ-REC-004`, `REQ-REC-008`
@@ -1192,16 +1242,21 @@ run-stateがJSONとして読めない
 **操作:**
 
 ```text
-同じCrash状態へresumeを二回実行
+Candidate adoption、Scene Commit、Volume Handoff、Publicationの各pending phaseを対象にする
+同じCrash境界からRecoveryを二回以上実行する
 ```
 
 **期待結果:**
 
 ```text
+最終run-stateと確定成果物が同一になる
 追加Provider callなし
-追加Generationなし
-追加Publicationなし
-追加ID消費なし
+Call IDとattempt増加なし
+usage増加なし
+Counter増加なし
+Candidate version増加なし
+Generation、Publicationその他の成果物ID増加なし
+確定済みfinal directoryの変更なし
 ```
 
 **対応要件:** `REQ-REC-008`
@@ -1218,6 +1273,8 @@ run-stateがJSONとして読めない
 Provider callなし
 Credential値を表示しない
 必要設定名だけを表示
+run statusがstopped
+stop_reasonがcredential_unavailable
 ```
 
 **対応要件:** `REQ-OPS-005`, `REQ-SEC-001`
@@ -1265,6 +1322,8 @@ Call全体
 部分応答をCandidateとして採用しない
 transport errorとして分類
 上限内の場合だけ独立したtransport retry
+Retry上限到達時はrun statusがstopped
+Retry上限到達時のstop_reasonがtimeout
 fake clockを使い、長い実時間待機なし
 ```
 
@@ -1279,38 +1338,51 @@ chunk受信後に経過時間を確認するだけの実装は失敗とする。
 **前提:**
 
 ```text
-次CallでCall数またはtoken上限超過
+次のCallを含めるとCall数、token数、cost、経過時間のいずれかがBudget上限を超える
 ```
 
 **期待結果:**
 
 ```text
-Callを開始しない
-安全にstopped
-stop_reasonがbudget_exhausted
+保守的予約量を使ってCall前に判定する
+Provider Adapterとclientを生成しない
+Provider callを開始しない
+run statusがstopped
+stop_reasonがbudget_limit
+過去Callのusage集計を変更しない
 ```
 
 **対応要件:** `REQ-OPS-007`
 
 ---
 
-## 67. `ACC-LLM-005` Usage記録
+## 67. `ACC-LLM-005` Provider call監査とUsage欠落
+
+**前提:**
+
+```text
+成功Call
+transport error Call
+timeout Call
+Provider usageが存在するCall
+Provider usageが欠落するCall
+```
 
 **期待結果:**
 
 ```text
-Stage
-operation
-Provider
-model
-時刻
-usage
-outcome
+成功、失敗、timeoutを含む全試行を記録する
+call_id、operation_instance_id、attempt_number、operation、Stage、target、Provider、model、operation_config_idを記録する
+prompt_version、output_schema_version、basis_generation_idを記録する
+開始時刻、終了時刻、outcome、error分類、Provider request IDを記録する
+token preflightの見積値、予約出力値、上限、判定、usage、usage_sourceを記録する
+Provider usage欠落時はpreflightの保守的上限をBudgetへ計上する
+安全な継続判断ができなければ新しいCallを開始しない
+その場合はrun statusがstopped、stop_reasonがusage_unknown
+Credential、Authorization情報、cookie、署名付きURLを記録しない
 ```
 
-を記録し、Credentialを含めない。
-
-**対応要件:** `REQ-OPS-008`, `REQ-SEC-001`
+**対応要件:** `REQ-OPS-008`, `REQ-SEC-001`, `REQ-OPS-007`
 
 ---
 
@@ -1567,15 +1639,19 @@ Recoveryだけで正常状態へ前進できる場合、Provider factory callは
 
 **前提:**
 
-counter値を、既存final成果物で使用済みの最大番号より小さくする。
+```text
+counter値を、既存final成果物で使用済みの最大番号より小さくする
+```
 
 **期待結果:**
 
 ```text
 自動巻戻しなし
 使用済み番号の再利用なし
-自動再採番なし
-manualを要求
+既存directory走査による自動再採番なし
+run statusがfailed
+stop_reasonがmanual_review_required
+確定済み成果物とCounterを変更しない
 ```
 
 **対応要件:** `REQ-DATA-008`, `REQ-REC-007`
@@ -1691,17 +1767,21 @@ Auditへpreflight結果を記録
 initial_accept
 scene_commit
 Recovery
-Publication Builder
+completion Stage内のPublication確定operation
 workspace audit
 ```
 
 **期待結果:**
 
 ```text
+Operation Serviceを経由しない
 Provider factory call 0
+Provider Adapter生成 0
 Credential参照 0
 Provider endpoint接続 0
 model設定なしで実行可能
+
+`volume_handoff`はこのcode-only検査の対象外とする。Handoffはコードでsource bundleと参照を検証し、LLMで意味的要約の生成・Review・必要時Revisionを行う。
 ```
 
 **対応要件:** `REQ-FR-033`, `REQ-REC-008`, `REQ-NFR-003`
@@ -1750,19 +1830,28 @@ Provider Adapterをfakeまたはstubへ置換可能
 
 Requirement traceを機械検査し、全76要件が少なくとも一つの`ACC-*`から参照されることを確認する。
 
-さらに必須suiteに次が存在し、skipされていないことを確認する。
+さらに、次の必須scenarioが存在し、skipまたはxfailされていないことを確認する。
 
 ```text
-正常系
+Brief入力による4巻構成のend-to-end完走
+Keywords入力によるend-to-end完走
+全巻Handoff作成と最終巻Handoff検証
 Review／Revision
 transport failure
 format failure
 Scene途中中断
-Scene／Generation／Publication確定直後中断
+Candidate adoption／Scene／Generation／Volume Handoff／Publication確定直後中断
+Recovery反復時のCall・usage・Counter・ID不増加
 秘密情報除外
 Completion incomplete
+Budget limit
+Usage unknown
 Lock競合
+installed wheelからのPrompt／Schema asset読込
+予期しないnetwork接続の遮断
 ```
+
+4巻E2Eでは、4件のVolume Plan、全巻のScene、4件のHandoff、Completion Result、単一の正式Publicationが確定することを検証する。
 
 **対応要件:** `REQ-NFR-008`
 

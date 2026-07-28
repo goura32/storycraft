@@ -327,47 +327,32 @@ workspace外を指すsymlink
 
 ## 14. Run status
 
-推奨状態:
+`status`は実行状態だけを表し、次のいずれかとする。
 
-```text
-initializing
-running
-stopping
-stopped
-blocked
-failed
-completed
-```
+- `running`: 通常Stageを実行可能または実行中
+- `stopping`: 利用者停止要求を受け、安全な停止境界へ移行中
+- `stopped`: 制御された再開可能な停止
+- `blocked`: 現在の入力と確定成果物では意味的に続行不能
+- `failed`: Authority不整合、Recovery不能、内部失敗など、自動継続が安全でない
+- `completed`: Publication確定済み
 
-意味:
+新規workspaceは作成用一時directory内で初期化を完了してから公開するため、永続run statusとして`initializing`を使用しない。
 
-| 状態 | 意味 |
-|---|---|
-| `initializing` | workspace初期化中 |
-| `running` | 正常実行中 |
-| `stopping` | 安全な停止境界へ移行中 |
-| `stopped` | 再開可能な利用者停止 |
-| `blocked` | 人間確認が必要 |
-| `failed` | 自動再試行不能な技術失敗 |
-| `completed` | Publication確定済み |
+`status`へStage IDを保存せず、`current_stage`へstatus値を保存しない。
 
 ---
 
 ## 15. `current_stage`
 
-`current_stage`は意味的Stage IDを持つ。
+`current_stage`は、現在処理中または再開判断の基準となる意味的Stage IDを表す。
 
-内部の次の処理をStage IDにしない。
+値は`PIPELINE.md`で定義された20個のStage IDのいずれかとする。
 
-```text
-file_validate
-allocate_id
-rename_directory
-update_state
-write_log
-```
+file rename、Schema検証、Recovery、Publication確定operationなどの内部処理名を格納してはならない。
 
-Stage IDは`PIPELINE.md`で定義する。
+`stopped`、`blocked`、`failed`、`completed`などのstatus値も格納してはならない。
+
+Publication確定中および正常完了後の`current_stage`は`completion`とする。
 
 ---
 
@@ -391,11 +376,11 @@ artifact_id
 
 ## 17. `current_generation_id`
 
-`current_generation_id`は、現在採用済みStory状態を指す。
+`current_generation_id`は、Initial Generation確定後の現在採用済みStory状態を指す。
 
-指し先が存在しない場合は重大な不整合である。
+`initial_accept`の完了前はnullを許可する。この期間にGenerationを必要とするStageへ進んではならない。Initial Generation確定後はnullにしてはならず、指し先が存在しない場合は重大な不整合である。
 
-起動時に必ず確認する。
+起動時に、現在StageがInitial Generation確定前かを判定したうえで確認する。
 
 ---
 
@@ -437,12 +422,14 @@ Scene処理中は、Scene CardからScene確定まで同じScene IDを保持す�
 
 `pending_commit`は、immutable directoryの確定と最後の`run-state.json`更新をまたぐ操作で必ず使用する。
 
-Version 1で対象となる操作は次の二つである。
+Version 1で対象となる操作は次の四種類である。
 
 | `kind` | 確定対象 | 必須field |
 |---|---|---|
+| `candidate_adoption` | Review済みCandidateから確定成果物への採用 | `kind`, `target_id`, `stage`, `version`, `phase`、必要な予約ID |
 | `scene_commit` | Scene directoryとGeneration directory | `kind`, `target_id`, `expected_generation_id`, `phase` |
-| `publication` | Publication directory | `kind`, `target_id`, `phase` |
+| `handoff` | Volume Handoff directory | `kind`, `target_id`, `basis_generation_id`, `phase` |
+| `publication` | Publication directory | `kind`, `target_id`, `input_identity`, `phase` |
 
 Scene Commitの例:
 
@@ -480,10 +467,18 @@ active_scene_id:
 Phaseは`kind`ごとに次へ固定する。
 
 ```text
+candidate_adoption:
+  prepared
+  artifact_finalized
+
 scene_commit:
   prepared
   scene_finalized
   generation_finalized
+
+handoff:
+  prepared
+  handoff_finalized
 
 publication:
   prepared
@@ -495,8 +490,10 @@ publication:
 | Phase | 意味 |
 |---|---|
 | `prepared` | 全stagingを検証し、finalize開始をrun-stateへ記録済み |
+| `artifact_finalized` | 採用対象の確定成果物directoryを確認済み |
 | `scene_finalized` | Scene final directoryの存在と完全性を確認済み |
 | `generation_finalized` | Generation final directoryの存在と完全性を確認済み |
+| `handoff_finalized` | Handoff final directoryの存在と完全性を確認済み |
 | `publication_finalized` | Publication final directoryの存在と完全性を確認済み |
 
 Directory rename直後、phase更新前にCrashし得る。Recoveryはphaseだけで判断せず、予定ID、staging、final directory、current pointerを再検証して、実在する完全な成果物まで前進する。
@@ -507,21 +504,34 @@ Directory rename直後、phase更新前にCrashし得る。Recoveryはphaseだ�
 
 ## 23. `stop_reason`
 
-`stopped`、`blocked`、`failed`の場合は、利用者が理解できる停止理由を持つ。
+`stopped`、`blocked`、`failed`では、利用者が原因と次の対応を判断できる停止理由を持つ。
 
-推奨:
+主な値:
 
-```text
-user_requested
-budget_exhausted
-revision_limit
-provider_unavailable
-invalid_workspace
-completion_incomplete
-manual_review_required
-```
+- `user_requested`
+- `budget_limit`
+- `usage_unknown`
+- `credential_unavailable`
+- `timeout`
+- `provider_unavailable`
+- `communication_retry_limit`
+- `format_retry_limit`
+- `revision_limit`
+- `semantic_reject`
+- `completion_incomplete`
+- `manual_review_required`
+- `invalid_workspace`
+- `internal_error`
 
-自由記述だけでなく、機械判定用codeと説明を分ける。
+代表的な組合せ:
+
+- `stopped`: `user_requested`、`budget_limit`、`usage_unknown`、`credential_unavailable`、`timeout`、`provider_unavailable`、`communication_retry_limit`、`format_retry_limit`
+- `blocked`: `revision_limit`、`semantic_reject`、`completion_incomplete`
+- `failed`: `manual_review_required`、`invalid_workspace`、`internal_error`
+
+`running`と`completed`では`stop_reason`をnullとする。`stopping`では停止要求に対応する理由を保持できる。
+
+Credential欠落は`credential_unavailable`、timeout Retry上限到達は`timeout`、一時的な通信失敗のRetry上限到達は`communication_retry_limit`、Provider service利用不能は`provider_unavailable`、形式Retry上限到達は`format_retry_limit`として、いずれも再開可能な`stopped`へ分類する。
 
 ---
 
@@ -569,15 +579,22 @@ OS互換性の詳細は実装で吸収する。
 
 ## 26. Run stateの不変条件
 
-```text
-statusがcompletedならcurrent_publication_idが存在
-statusがrunningならstop_reasonはnull
-active_scene_idがあるならcurrent_targetはSceneを示す
-current_generation_idは存在するGenerationを指す
-current_publication_idは存在するPublicationを指す
-pending_commitは同時に一つだけ
-updated_atは後退しない
-```
+`run-state.json`は次を満たす。
+
+- `workspace_id`がworkspace metadataと一致する
+- `status`と`current_stage`は別の意味を持つ
+- `current_stage`は定義済みStage IDである
+- `running`では`stop_reason`がnullである
+- `completed`では`stop_reason`がnullである
+- `completed`では`current_stage`が`completion`である
+- `completed`では`current_publication_id`が完全なPublicationを指す
+- `blocked`、`failed`、`stopped`では`stop_reason`が存在する
+- Initial Generation確定後の`current_generation_id`は完全なGenerationを指す
+- `current_publication_id`はnullまたは完全なPublicationを指す
+- `pending_commit`は同時に一件だけである
+- pointerがCandidate、staging、一時fileを指さない
+
+不変条件を安全に証明できない場合は、値を推測補完せず`failed`かつ`manual_review_required`とする。
 
 ---
 
@@ -1103,17 +1120,17 @@ created_at
 
 ---
 
-## 57. Planの現在版
+## 57. 採用済みPlanの解決
 
-「現在のPlan」を示す独立pointerを正本にしない。
+Version 1では、Series、各Volume、各Chapter、各Sceneの対象ごとに、採用済みPlanは正確に一件だけ存在できる。
 
-現在使用するPlan versionは、run-stateのtargetと上位Plan参照から決定する。
+現在使用するPlanは、対象IDと上位Plan参照からその一件を解決する。`current_version`、`latest`、`superseded`などの可変pointerを正本にしない。
 
-必要なら再生成可能なindexを作ってよい。
+採用済みPlanを置換、上書き、supersedeしてはならない。
+
+同じ対象に複数の採用済みPlanが存在する場合は一つを推測して選ばず、run statusを`failed`、stop reasonを`manual_review_required`とする。
 
 ---
-
-# Part XI: Generation
 
 ## 58. Generation構成
 
@@ -1252,19 +1269,13 @@ Publication時の章題などは別情報から組み立てる。
 
 ---
 
-## 66. Scene version
+## 66. Scene成果物の識別
 
-同じ論理Sceneを修正して再採用する必要がある場合は、Scene versionを明示する。
+Version 1では、確定済みSceneのRevisionまたは再採用を提供しない。
 
-推奨選択肢:
+確定Scene directoryは論理Scene IDごとに一件だけ存在する。未採用本文CandidateのversionはCandidate領域で管理し、確定Scene metadataには採用元Candidate IDとversionを追跡情報として記録できる。
 
-```text
-scene-v01-c001-s002-v0002/
-```
-
-またはScene directory内にversion別directoryを持つ。
-
-Version 1の初期実装では、採用後Sceneの修正workflowを必須にせず、将来追加してよい。
+このversionは確定SceneのRevision系列ではない。
 
 ---
 
@@ -1296,43 +1307,36 @@ Run stateは、次のVolume計画またはCompletion Stageへ移るときに更�
 
 ## 69. Completion構成
 
-```text
-completion/completion-000001/
-├── result.json
-└── summary.md
-```
+Completion Resultは次のimmutable directoryへ保存する。
 
-`summary.md`は利用者向け表示用であり、`result.json`から再生成可能でなければならない。
+`completion/<completion-id>/`
+
+少なくともCompletion Result本体と、評価したPlan、Scene、Handoff、最終Generationを一意に解決できるmetadataを持つ。
 
 ---
 
 ## 70. Completion確定
 
-Completion Resultは一度の意味評価結果として保存する。
+Completion Result Candidateを検証後、stagingで完成させ、共通finalize手順により一件のCompletion Resultとして確定する。
 
-`incomplete`も正式なCompletion Resultである。
+`complete`、`complete_with_issues`、`incomplete`はいずれも正式な意味評価結果であり、確定後に内容を変更しない。
 
-ただし、Publication作成条件は満たさない。
+同じ入力を`complete`になるまで無制限に再評価してはならない。
 
 ---
 
 ## 71. Completionとrun-state
 
-Completion Resultが:
+Completion Resultが`incomplete`の場合は、Completionを確定した後、最後のatomic run-state更新で次を設定する。
 
-```text
-complete:
-  Publicationへ進む
+- `status`: `blocked`
+- `current_stage`: `completion`
+- `stop_reason`: `completion_incomplete`
+- `pending_commit`: null
 
-complete_with_issues:
-  注意事項を保持してPublicationへ進む
+`complete`または`complete_with_issues`の場合は、`current_stage`を`completion`のまま保ち、同じ入力identityからPublication確定operationを続ける。
 
-incomplete:
-  statusをblocked
-  stop_reasonをcompletion_incomplete
-```
-
-`incomplete`を`failed`として扱わない。
+Publication確定後だけ`status`を`completed`へ更新する。
 
 ---
 
@@ -1340,94 +1344,71 @@ incomplete:
 
 ## 72. Publication構成
 
-```text
-publications/pub-000001/
-├── series.md
-├── v01.md
-├── v02.md
-├── metadata.json
-└── completion.json
-```
+Publicationは次のimmutable directoryへ保存する。
 
-巻数に応じて巻別Markdownを増やす。
+`publications/<publication-id>/`
+
+Publication本文、volume別出力、metadata、Completion参照を持つ。MetadataからBrief、採用済みPlan集合、確定Scene本文集合、Completion Result、最終Generationを一意に解決できなければならない。
 
 ---
 
 ## 73. Publication staging
 
-Publicationは次へ全内容を作る。
+Publication確定operationは、決定的に構築した全内容を`runtime/staging/publication-<publication-id>/`で完成させる。
 
-```text
-runtime/staging/publication-pub-000001/
-```
-
-最終directory内へ順次fileを書き足さない。
+Provider call、LLM再監査、独立Publication Plan、Publication Gate、Publication Manifestを使用しない。
 
 ---
 
 ## 74. Publication検証
 
-Finalize前に確認する。
+Finalize前にコードで次を確認する。
 
-```text
-Completionがcompleteまたはcomplete_with_issues
-series.mdが空でない
-全巻Markdownが存在
-巻順とScene順がPlanと一致
-metadataの巻数がfile数と一致
-private情報がない
-JSONが読める
-最終pathが存在しない
-```
+- Completionが`complete`または`complete_with_issues`である
+- Completionが評価したPlan集合と現在の採用済みPlan集合が一致する
+- Completionが評価したScene集合とPublicationのScene集合が一致する
+- Scene本文がCompletion評価時と同じ確定成果物である
+- 最終GenerationとCompletionの`basis_generation_id`が一致する
+- 本文順、巻数、章数、Scene数がPlanと一致する
+- private情報、Candidate、Review、Audit、Recovery情報を含まない
+- 最終pathが存在しない
 
 ---
 
 ## 75. Publication finalize
 
-手順は次へ固定する。
+Publication確定は次の順序へ固定する。
 
-```text
-1. Publication stagingを完成・検証
-2. pending_commitをpublication / preparedとしてatomic replacement
-3. Publication stagingをfinalize
-4. pending_commit.phaseをpublication_finalizedへatomic replacement
-5. run-stateを一回のatomic replacementで最終更新
-```
+1. Publication stagingを完成・検証する
+2. `pending_commit`を`publication / prepared`としてatomic replacementする
+3. Publication stagingをfinalizeする
+4. `pending_commit.phase`を`publication_finalized`へatomic replacementする
+5. run-stateを一回のatomic replacementで最終更新する
 
-手順5では次を同時に更新する。
+最後のrun-state更新では次を同時に設定する。
 
-```text
-current_publication_id:
-  新Publication ID
+- `current_publication_id`: 確定したPublication ID
+- `status`: `completed`
+- `current_stage`: `completion`
+- `stop_reason`: null
+- active状態: null
+- `pending_commit`: null
 
-status:
-  completed
-
-active_candidate:
-  null
-
-active_scene_id:
-  null
-
-pending_commit:
-  null
-```
-
-独立Publication Gateは作らない。
+Publication finalの確定前に`completed`を設定してはならない。
 
 ---
 
-## 76. Publication再生成
+## 76. Publication再実行
 
-同じGenerationから再生成する場合も、新しいPublication IDを使う。
+同じworkspaceで正式Publicationを複数作成する標準操作は提供しない。
 
-過去Publicationを上書きしない。
+有効なPublication finalが既に存在し、run-stateがそれを正しく参照している場合は、その成果物を再利用し、新しいPublication IDを割り当てない。
 
-同じ内容であっても、再生成操作として別Publicationにしてよい。
+Crash Recoveryでfinalize前の再構築が必要な場合は、`pending_commit`が予定する同じPublication IDと同じ確定入力を使って決定的に再構築する。
+
+同じ予定IDのfinal内容が入力identityと競合する場合や、completed後に異なるPublication作成が要求された場合は、上書きや別ID生成を行わず`failed`かつ`manual_review_required`とする。
 
 ---
-
-# Part XVI: AuditとLog
 
 ## 77. Provider call記録
 
@@ -1581,69 +1562,68 @@ completionが読める
 
 ## 86. 三分類
 
-Recovery結果は次のいずれかである。
+Recoveryの内部判定は次の三分類とする。
 
-```text
-resume:
-  既存の確定状態から続行
+- `resume`: 確定済み成果物を変更せず、通常Pipelineを安全に続行できる
+- `regenerate`: 未採用の途中作業だけを隔離または破棄し、同じ意味的Stageから続行できる
+- `manual`: Authority不整合などにより自動継続が安全でない
 
-regenerate:
-  未採用の途中作業を捨て、同じStageを再実行
+`resume`または`regenerate`はRecovery完了後に通常Stageへ制御を返す。Recovery自身はProvider call、Candidate生成、意味的Revisionを行わない。
 
-manual:
-  自動判断せず利用者対応を要求
-```
+`manual`ではrun statusを`failed`、stop reasonを`manual_review_required`として停止する。
+
+`completion_incomplete`、`revision_limit`、`semantic_reject`など、意味が確定した`blocked`状態をRecovery失敗またはmanualへ分類してはならない。
 
 ---
 
 ## 87. Resume
 
-Resume可能条件:
+`resume`には次が必要である。
 
-```text
-run-stateが正常
-current Generationが正常
-必要な採用済みPlanが正常
-pending_commitがない、または自動確定可能
-現在Stageの入力が揃っている
-競合する最終成果物がない
-```
+- run-stateとworkspace metadataが正常である
+- current Generationが完全である
+- 必要な採用済みPlanが対象ごとに一件存在する
+- `pending_commit`がない、または同じ予定IDで自動確定できる
+- 現在Stageの確定入力が解決する
+- 競合するfinal成果物がない
+
+完全なfinal成果物が存在する場合は後退せず、その成果物を再検証して前進する。
 
 ---
 
 ## 88. Regenerate
 
-Regenerate対象:
+`regenerate`の対象は未採用作業だけとする。
 
-```text
-不完全Candidate
-不完全Review
-Contextだけ存在
-Stagingだけ存在
-format error後の未採用応答
-Scene本文はあるがContinuityが未完成
-Publication stagingが不完全
-```
+- 不完全CandidateまたはReview
+- Contextだけが存在する状態
+- 不完全staging
+- 形式不正後の未採用response
+- 未確定のScene本文またはContinuity
+- finalize前の不完全Publication staging
 
-採用済み成果物は削除しない。
+対象は`runtime/orphans/`へ隔離するか、安全に同じ予定IDで決定的に再構築する。
+
+採用済み成果物、確定済みfinal directory、利用者入力を削除、置換、再生成してはならない。
+
+Recovery中にCounter、Call ID、利用量、Provider call、Candidate version、成果物IDを増やしてはならない。
 
 ---
 
 ## 89. Manual
 
-人間対応条件:
+次の場合は`manual`とする。
 
-```text
-run-stateが読めない
-countersが読めない
-current Generationがない
-Generation内容が不正
-同じIDのfinal directoryが競合
-pending_commitの意図と実在成果物が矛盾
-workspace_idが不一致
-Completionがincomplete
-completed runのPublicationが不正
-```
+- run-stateまたはcountersを安全に解釈できない
+- current Generationが欠落または不正である
+- 同じ対象に複数の採用済みPlanが存在する
+- 同じIDのfinal directory内容が競合する
+- `pending_commit`の意図と実在成果物が矛盾する
+- workspace IDが一致しない
+- completed runのPublicationが欠落または不正である
+- 確定済み成果物が外部変更されている
+
+`Completion Result.status == incomplete`はmanual条件ではない。これは`blocked`かつ`completion_incomplete`として確定済みの停止状態である。
 
 ---
 
@@ -1804,42 +1784,44 @@ Final directoryを削除、上書き、別IDへ移動して推測修復しては
 
 # Part XX: Publication Recovery
 
-## 97. Crash位置A: Publication rename前
+## 97. Crash位置A: Publication finalize前
 
-`pending_commit`がなくPublication finalもない場合、stagingは未採用としてorphansへ移し、Publication Stageを再実行できる。
+`pending_commit`がなくPublication finalもない場合、残存stagingは未採用としてorphansへ隔離する。Recovery中に新しいPublication IDを割り当てず、通常Pipelineへ戻った後も`completion` Stage内のcode-only operationとして処理する。
 
-`publication / prepared`があり、完全な予定stagingが存在する場合はfinalizeを再開する。stagingが不完全でfinalがなければ、stagingをorphansへ移し、pendingをnullへ戻して決定的に再生成する。
+`publication / prepared`があり、予定IDの完全なstagingが存在する場合は、§75のfinalizeを同じIDから再開する。
+
+stagingが欠落または不完全でfinalがない場合は、Completionが評価した確定入力から、予定された同じPublication IDでstagingを決定的に再構築する。Provider call、本文再生成、Counter更新は行わない。
+
+同じ入力から安全に再構築できない場合だけmanualとする。
 
 ---
 
-## 98. Crash位置B: Publication rename後
+## 98. Crash位置B: Publication finalize後
 
-Publication finalが完全で予定IDと一致する場合は、phaseにかかわらず次へ前進する。
+予定IDのPublication finalが完全で入力identityと一致する場合は、phaseにかかわらず前進する。
 
-```text
-pending_commit.phaseをpublication_finalizedとして整合
-current_publication_idを予定IDへ設定
-statusをcompletedへ設定
-active状態とpending_commitをnullへ設定
-```
+- `pending_commit.phase`を`publication_finalized`として整合する
+- `current_publication_id`を予定IDへ設定する
+- `status`を`completed`へ設定する
+- `current_stage`を`completion`に保つ
+- `stop_reason`、active状態、`pending_commit`をnullにする
 
-これらは最後の一回のatomic run-state replacementで行う。Provider callや本文再生成は行わない。
+これらは最後の一回のatomic run-state replacementで行う。Provider call、本文再生成、新しいID割当を行わない。
 
 ---
 
 ## 99. Publicationのmanual条件
 
-次のいずれかはmanualとする。
+次の場合はmanualとする。
 
-```text
-予定IDと異なるPublication finalが存在
-同じ予定IDのPublication内容がpendingの意図と競合
-Completion参照が不正
-completed runのPublicationが不完全
-current_publication_idが予定IDと競合
-```
+- 予定IDと異なるPublication finalが存在する
+- 同じ予定IDのPublication内容が確定入力identityと競合する
+- Completion参照または評価済み入力集合が不正である
+- completed runのPublicationが不完全である
+- `current_publication_id`が予定IDと競合する
+- 同じworkspaceに複数の正式Publicationが存在する
 
-`completed`かつ正常なPublicationを指している場合、`pending_commit`は必ずnullでなければならない。
+`completed`かつ正常なPublicationを指す場合、`current_stage`は`completion`、`pending_commit`はnullでなければならない。
 
 ---
 
@@ -1897,36 +1879,39 @@ Orphan保持期間は設定可能とする。
 
 `run`は新規workspaceだけを対象にする。
 
-既存workspaceがある場合は、`resume`を案内する。
+最終workspace pathが既に存在する場合は、内容にかかわらず上書きまたは再利用せず失敗し、`resume`または`step`を案内する。
+
+workspace作成は§9の一時directory方式で行い、完全な初期状態を最終pathへrenameした後に通常Pipelineを開始する。
 
 ---
 
 ## 104. `resume`
 
-`resume`は起動検証とRecovery分類を行う。
+`resume`は既存workspaceだけを対象にする。存在しないworkspaceを新規作成してはならない。
 
-結果:
+Lock取得後、起動検証とRecoveryを通常Stageより先に実行する。
 
-```text
-resume:
-  実行続行
+Recovery完了前にProvider clientを生成せず、Provider callまたは通常Stageを開始してはならない。
 
-regenerate:
-  利用者へ再生成対象を表示して続行
+Recovery結果が安全な続行状態なら、`current_stage`を基準としてPipelineを継続する。
 
-manual:
-  理由と必要な確認を表示して終了
-```
+`blocked`、`failed`、`completed`など、通常Stageを実行すべきでない状態ではその状態を返す。
 
 ---
 
 ## 105. `step`
 
-`step`は一つの意味的Stageを完了する。
+`step`は既存workspaceだけを対象にし、存在しないworkspaceを新規作成してはならない。
 
-Stage内部の確定処理が完了する前に正常終了しない。
+`resume`と同じ起動検証およびRecoveryを先に実行する。
 
-Crashした場合は通常のRecovery規則を使う。
+RecoveryがCrash前Stageの採用、確定、または最後のrun-state更新を完了した場合は、その状態を返し、続けて通常Stageを実行しない。
+
+Recoveryが永続状態を前進させなかった場合に限り、現在の意味的Stageを一つだけ完了する。
+
+Review、必要な未採用Candidate Revision、採用または確定は、その一Stage内に含める。
+
+Crashした場合は同じRecovery規則を使用する。
 
 ---
 
@@ -2013,42 +1998,43 @@ pending commitは0または1
 
 ## 111. Run不変条件
 
-```text
-running中はlockを保持
-completedならPublicationが存在
-blockedなら停止理由が存在
-active Scene中は基準Generationが固定
-新しいIDはCounter予約済み
-```
+- `running`中はLockを保持する
+- `status`と`current_stage`を混同しない
+- `completed`では完全なPublicationを指す
+- `completed`では`current_stage`が`completion`である
+- `blocked`、`failed`、`stopped`ではstop reasonが存在する
+- active Scene中はbasis Generationを固定する
+- 新しいIDは通常処理でCounter予約済みである
+- Recovery反復によってCounter、Call、利用量、ID、成果物を増やさない
 
 ---
 
 ## 112. Scene Commit不変条件
 
-```text
-Scene PlanからScene Commitまでbasis Generationが固定
-pending開始前にSceneとGenerationの両stagingが完全
-Scene finalより先にGeneration finalを作らない
-Scene finalとGeneration finalは予定IDと一致
-Canonは親Generationから変更しない
-Evidenceは確定本文に存在
-Updateはallowed_updatesとAuthorityの範囲内
-current Generationの切替は最後のrun-state更新だけで行う
-正常完了後はactive_scene_idとpending_commitがnull
-確定済みfinal directoryを削除または上書きしない
-```
+- Scene PlanからScene Commitまでbasis Generationを固定する
+- pending開始前にSceneとGenerationの両stagingが完全である
+- Scene finalより先にGeneration finalを作らない
+- Scene finalとGeneration finalは予定IDと一致する
+- Canonは親Generationから変更しない
+- Evidenceは確定本文に存在する
+- Updateはallowed_updatesとAuthorityの範囲内である
+- current Generationの切替は最後のrun-state更新だけで行う
+- 正常完了後はactive Sceneとpending_commitがnullである
+- 確定済みfinal directoryを削除または上書きしない
 
 ---
 
 ## 113. Publication不変条件
 
-```text
-Completionが公開可能
-全巻が存在
-本文順がPlanと一致
-private情報がない
-completed runはPublicationを指す
-```
+- Completionが`complete`または`complete_with_issues`である
+- Completionが評価したPlan、Scene、本文、最終GenerationとPublication入力が一致する
+- 全巻が存在し、本文順が採用済みPlanと一致する
+- private情報、Candidate、Review、Audit、Recovery情報を含まない
+- 正式Publicationはworkspace内に一件だけである
+- completed runは完全なPublicationを指す
+- completed runの`current_stage`は`completion`である
+- completed runの`pending_commit`はnullである
+- 確定済みPublicationを削除、上書き、別IDで再生成しない
 
 ---
 

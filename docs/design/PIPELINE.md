@@ -47,31 +47,31 @@ Stageは、利用者、生成モデル、再開処理にとって意味のある
 
 Stageとして扱う例:
 
-```text
-初期Concept生成
-シリーズ計画
-Scene Card生成
-Scene本文生成
-継続性更新
-Scene確定
-巻Handoff
-完結判定
-Publication
-```
+- 初期Concept生成
+- シリーズ計画
+- Scene Card生成
+- Scene本文生成
+- 継続性更新
+- Scene確定
+- 巻Handoff
+- 完結判定
 
 Stageとして扱わない例:
 
-```text
-JSONの読込
-Schema確認
-ID割当
-一時file作成
-directory rename
-run-state更新
-Log出力
-```
+- JSONの読込
+- Schema確認
+- ID割当
+- 一時file作成
+- directory rename
+- run-state更新
+- Log出力
+- Publication本文の連結
+- Publication metadataの作成
+- Publication確定処理
 
 これらはStage内部の実装手順である。
+
+Publicationは独立Stageではなく、`completion` Stage内でコードだけにより構築、検証、確定する。
 
 ---
 
@@ -114,15 +114,12 @@ Crash後にその境界から再開する意味がある
 
 ## 5. Pipelineの大分類
 
-```text
-入力
-初期設計
-計画
-Scene生成
-巻終了処理
-完結判定
-Publication
-```
+- 入力
+- 初期設計
+- 計画
+- Scene生成
+- 巻終了処理
+- 完結判定とPublication確定
 
 ---
 
@@ -167,18 +164,22 @@ SCENE_CONTINUITY
   ↓
 SCENE_COMMIT
   ↓
-SCENE_PLAN／CHAPTER_PLAN／VOLUME_HANDOFF
+次のSCENE_PLAN／CHAPTER_PLAN／VOLUME_HANDOFF
   ↓
 VOLUME_HANDOFF
   ↓
+次のVOLUME_PLANまたはCOMPLETION
+  ↓
 COMPLETION
   ↓
-PUBLICATION
+コードによるPublication構築・確定
   ↓
 COMPLETED
 ```
 
-Review／Revisionは、対象Stage内のoperationとして実行し、独立Stageとして数えない。
+Review／Revisionは対象Stage内のoperationとして実行し、独立Stageとして数えない。
+
+Publication構築と確定も独立Stageとして数えない。
 
 ---
 
@@ -305,10 +306,11 @@ scene_continuity
 scene_commit
 volume_handoff
 completion
-publication
 ```
 
-合計21 Stageである。
+合計20 Stageである。
+
+`publication`はStage IDではない。Publication構築と確定は`completion` Stage内のcode-only operationである。
 
 ---
 
@@ -392,10 +394,12 @@ run-stateがそのStageを示す
 対象が一致
 必要な入力が存在
 基準Generationが一致
-予算が残る
+新しいLLM operationを開始できる予算が残る
 停止要求がない
 pending commitがない
 ```
+
+予算条件はProviderを呼ぶoperationだけに適用する。予算到達後でも、新しいLLM callを開始せずに完了できるコード検証、既存Candidateの採用、atomic確定、状態更新、Recovery、安全停止は実行しなければならない。
 
 ---
 
@@ -489,16 +493,22 @@ BriefとKeywordsの正確に一方が存在
 Keywordsの場合:
 
 ```text
-Keywords検証
+Keywordsの決定的入力検証
 ↓
 Brief Candidate生成
 ↓
-元条件保持確認
+明示条件・巻数・必須fieldの決定的保持検証
 ↓
-必要ならReview／Revision
+Brief Review（必須）
+↓
+errorがあればBrief Revision
+↓
+Brief再Review
 ↓
 Brief採用
 ```
+
+決定的検証は、Keywordの存在、指定巻数、required／avoidの明示矛盾、必須field、言語を確認する。LLM Reviewは、premiseの実質的な取り違え、Ending希望の意味の反転、avoid条件の言い換えによる違反、日本語としての自然さを確認する。手入力BriefはLLM生成物ではないため、コード検証と利用者の確認を行い、自動的なLLM Revisionはしない。
 
 ---
 
@@ -1089,19 +1099,15 @@ scene_plan:
 
 ## 55. 古いPlan
 
-`basis_generation_id`が現在Generationと異なるPlanは、そのまま採用または実行しない。
+未採用Plan Candidateの`basis_generation_id`が現在Generationと異なる場合、そのまま採用または使用してはならない。
 
-再利用できるのは、Planが参照する対象とfieldをコードで比較し、基準Generation以降の変更が入力へ影響しないと証明できる場合だけである。
+Generation IDだけが異なり、Candidateが参照する関連Authority入力と内容が同一であることをコードで証明できる場合だけ、現在の基準で再検証できる。
 
-```text
-影響なしを証明できる:
-  同じPlan版を再検証して利用可能
+関連Authority入力が変化した場合、または同一性を証明できない場合は、旧Candidateを採用せず、新しいbasis GenerationからCandidateを再生成する。
 
-関連入力に変更がある、または影響なしを証明できない:
-  新しいbasis GenerationでPlanを再生成し、旧版をsupersededにする
-```
+採用済みPlanの`basis_generation_id`不整合が検出された場合は、新版へ置換せずAuthority不整合として停止する。
 
-LLM判断だけで古いPlanを再利用せず、Hash一致も使わない。
+LLM判断やHash一致だけでPlanを再利用してはならない。
 
 ---
 
@@ -1549,67 +1555,64 @@ Volume完了専用のManifestやGateは作らず、採用済みPlanと確定済�
 
 目的:
 
-```text
-巻末の実際のStory状態を次巻またはCompletionへ渡す
-```
+巻の最終Generationと確定済み成果物を根拠に、次巻計画またはCompletionで使う**意味的な補助要約**を生成・検証・確定する。
 
 入力:
 
-```text
-Volume Plan
-巻内の採用済みScene
-巻末Generation
-Series Plan
-```
+- 採用済みVolume Plan
+- 巻内の採用済みChapter／Scene Plan
+- 巻内の確定済みScene
+- 巻の最終Generation
+- Series Plan
+- 巻中のEvidence、Thread、Ending Design
 
 出力:
 
-```text
-Volume Handoff Candidate
-```
+- 確定済みVolume Handoff
+
+最終巻を含むすべてのVolumeについて一件作成する。
+
+コードは入力からHandoff source bundleを構築する。LLMはそのbundleに基づいてHandoff Candidateを生成し、独立したLLM Reviewを受ける。`error`があれば未採用CandidateをRevisionし、必ず再Reviewしてから確定する。
 
 ---
 
-## 83. Handoff生成内容
+## 83. Handoff source bundleと意味的要約
 
-```text
-主要人物の巻末状態
-主要Relationshipの巻末状態
-解決Thread
-未解決Thread
-新しい制約
-次巻で無視できない結果
-Ending進捗
-```
+source bundleは、巻の開始／最終Generation、確定SceneとEvidence、採用済みPlan、Thread、Ending Designを、永続IDと参照関係を保った構造化入力として集める。先頭・末尾の抜粋、固定行数の切り詰め、本文の機械連結を要約の代替にしてはならない。
 
----
+LLMはsource bundleから、次を読みやすく関連付けて要約する。
 
-## 84. Handoff Review観点
+- 主要人物とRelationshipの巻末状態および巻中の意味ある変化
+- 解決Threadと未解決Thread、および根拠Scene
+- 新しい制約、次巻で無視できない結果、Ending進捗
+- 最終巻ではCompletionが評価すべき残存事項
 
-```text
-巻末Generationと一致
-本文にない出来事なし
-未解決Threadを勝手に解決しない
-次巻本文を先に書かない
-Canonを変更しない
-Series Planへの接続
-```
+最終巻では次巻要件を空または非適用として表現できる。詳細なStory Authorityは`basis_generation_id`が示すGenerationであり、Handoffではない。
 
 ---
 
-## 85. Handoff採用
+## 84. Handoff Reviewと検証
 
-Review済みHandoffを確定する。
+LLM Reviewは、要約が重要な出来事・未解決事項・制約を落としていないこと、状態・因果・巻番号を取り違えていないこと、根拠のない出来事や解釈を追加していないことを評価する。
 
-次Stage:
+確定前にコードで次を確認する。
 
-```text
-次Volumeあり:
-  volume_plan
+- 対象Volumeと巻番号が一致する
+- basis Generationが巻の最終Generationである
+- 全予定ChapterとSceneが確定している
+- `source_refs`の全参照先がsource bundle内に存在し、対象Volumeと整合する
+- HandoffがCanon、State、Thread、Ending条件を変更していない
+- 同じVolumeに確定済みHandoffが存在しない
 
-最終Volume:
-  completion
-```
+コードは参照・ID・列挙値・対象範囲を検証する。本文の意味、重要事項の欠落、因果の妥当性はLLM Reviewが検証する。この役割を混ぜてはならない。
+
+---
+
+## 85. Handoff確定
+
+`WORKSPACE_AND_RECOVERY.md`の確定手順に従って、Review済みの一件のHandoffを確定する。
+
+次Volumeがある場合は`volume_plan`へ進み、最終Volumeの場合は`completion`へ進む。
 
 ---
 
@@ -1619,186 +1622,125 @@ Review済みHandoffを確定する。
 
 目的:
 
-```text
-シリーズが正式Publication可能な完結状態かを評価する
-```
+全確定成果物を評価し、シリーズの完結状態を判定する。公開可能な場合は同じStage内でPublicationをコードにより確定する。
 
 入力:
 
-```text
-最終Generation
-全Volume Handoff
-Series Plan
-Initial Design
-Ending Design
-Required Thread
-主要人物Arc
-主要Relationship Arc
-```
+- 最終Generation
+- 採用済みPlan全件
+- 確定済みScene全件と本文
+- 最終巻を含むVolume Handoff全件
+- Initial DesignとEnding Design
+- Required Thread
+- 主要Character ArcとRelationship Arc
 
 出力:
 
-```text
-Completion Result Candidate
-```
+- Completion Result Candidate
+- 公開可能な場合は確定済みPublication
 
 ---
 
 ## 87. Completion前確認
 
-LLM call前にコードで確認する。
+Provider call前にコードで次を確認する。
 
-```text
-全Volume完了
-全計画Scene確定
-未完了active Sceneなし
-最終Handoff存在
-必須Thread存在
-Ending条件存在
-```
+- Series Planが要求する全Volumeが完了している
+- 対象ごとに採用済みPlanが正確に一件存在する
+- 全Chapterと全予定Sceneが確定している
+- 最終巻を含む全Volume Handoffが存在する
+- 現在Generationが最終予定Sceneの確定結果である
+- 未完了の執筆、採用、確定、Recovery処理がない
+- Plan、Scene、Handoffの実集合が期待集合と一致する
+- 必須Thread、Ending条件、主要Arcを評価できる
 
-満たさない場合はCompletion callを行わない。
+満たさない場合はCompletion callを行わない。競合PlanやAuthority不整合は推測せず人間確認を要求する。
 
 ---
 
 ## 88. Completion Context
 
-含める:
+Completionへは、全Plan、全Scene、全Handoffのidentityと、Thread、Ending、Arc評価に必要な確定情報を渡す。
 
-```text
-最終Generationの必要状態
-Required Thread一覧
-Ending必須条件
-主要人物の開始と終了状態
-主要Relationshipの開始と終了状態
-各Volume Handoff
-重要Evidence参照
-```
+本文全量が不要な評価ではEvidenceと必要箇所だけを渡せるが、評価対象Scene本文を一意に解決できなければならない。
 
-含めない:
-
-```text
-不要な全本文
-Provider Audit
-Review履歴
-秘密でないものまで含む巨大Context
-```
+Provider Audit、Review履歴、Credential、不要な秘密情報を含めない。
 
 ---
 
 ## 89. Completion Review
 
-Completion Resultは、構造確認と一貫性確認を行う。
+Completion Result Candidateについて、構造、入力identity、Checkとstatusの整合、Evidence参照を確認する。
 
-確認:
+Issue severityは`error`、`warning`、`note`とする。`error`があれば採用せず、`warning`または`note`だけなら採用できる。
 
-```text
-全必須Threadを評価
-全Ending条件を評価
-statusとchecksが一致
-basis Generationが最終
-Evidence参照が解決
-```
-
-意味的Review／Revisionは原則一回まで許可してよい。
-
-`incomplete`をRevision対象にしない。
+未採用Candidateの意味的Revisionは設定上限まで許可できるが、`incomplete`という判定自体を成功するまでRevisionしてはならない。
 
 ---
 
 ## 90. Completion結果遷移
 
-```text
-complete:
-  publication
+`incomplete`の場合はCompletion Resultを確定し、run statusを`blocked`、stop reasonを`completion_incomplete`として停止する。
 
-complete_with_issues:
-  publication
+`complete`または`complete_with_issues`の場合は、同じ入力identityを使ってPublication構築・検証・確定を続ける。
 
-incomplete:
-  blocked
-```
+入力identityまたはAuthorityの不整合が判明した場合はPublicationを作らず、run statusを`failed`、stop reasonを`manual_review_required`とする。
 
-`incomplete`の場合:
-
-```text
-stop_reason:
-  completion_incomplete
-```
+Publication確定後だけrun statusを`completed`へ更新する。
 
 ---
 
-# Part XV: Publication Stage
+# Part XV: Publication確定処理
 
-## 91. `publication`
+## 91. Publication確定operation
 
-目的:
+Publicationは独立Stageではなく、公開可能なCompletion Resultを採用した`completion` Stage内のcode-only operationである。
 
-```text
-採用済みScene本文から読者向け原稿を組み立てる
-```
-
-LLM call:
-
-```text
-なし
-```
+Provider callは行わない。
 
 ---
 
 ## 92. Publication入力
 
-```text
-採用済みSeries／Volume／Chapter Plan
-採用済みScene本文
-Publication formatting設定
-Completion Result
-```
+- Brief
+- 採用済みSeries／Volume／Chapter／Scene Plan全件
+- 確定済みScene本文全件
+- Completion Result
+- 決定的なformatting設定
+
+Completion Resultが評価したPlan集合、Scene集合、本文、最終Generationと同一でなければならない。
 
 ---
 
 ## 93. Publication処理
 
-```text
-Scene順を確認
-巻別本文を組み立て
-全巻本文を組み立て
-目次・題名・区切りを付加
-metadataを作成
-Completion Resultを添付
-private情報を除外
-```
+- Completionと現在の入力identityを照合する
+- Plan順にScene本文を連結する
+- 巻題、章題、区切り、目次を決定的に付加する
+- private情報を除外する
+- Publication metadataを作る
+- `WORKSPACE_AND_RECOVERY.md`の手順で確定する
 
 ---
 
 ## 94. Publication禁止事項
 
-```text
-新しい本文生成
-Scene本文の書換え
-未公開情報の追加
-ReviewやAuditの混入
-Provider call
-```
+- 新しい本文、出来事、説明、要約の生成
+- Scene本文の書換え
+- 未公開情報の追加
+- Candidate、Review、Audit、Recovery情報の混入
+- Provider callまたはLLM再監査
+- 独立Publication Plan、Publication Gate、Publication Manifestの作成
 
 ---
 
 ## 95. Publication完了
 
-確定後:
+Publication確定中の`current_stage`は`completion`のままとする。
 
-```text
-current_publication:
-  新Publication
+Publicationのfinal成果物とmetadataが確定した後だけ、run statusを`completed`へ更新する。
 
-run status:
-  completed
-
-current_stage:
-  publication
-```
-
-`completed`はPublication確定後だけ設定する。
+Publication確定前に`completed`を設定してはならない。
 
 ---
 
@@ -1806,107 +1748,92 @@ current_stage:
 
 ## 96. Review対象Stage
 
-標準Review対象:
+標準Review対象は次とする。すべてのLLM生成Candidateは、採用前に独立LLM Reviewを受ける。例外は、LLMを呼ばずコードだけで処理する`initial_accept`、`scene_commit`、Publication確定operationである。
 
-```text
-initial_concept
-initial_characters
-initial_relationships
-initial_world
-initial_knowledge
-initial_threads
-initial_ending
-initial_integrate
-series_plan
-volume_plan
-chapter_plan
-scene_plan
-scene_card
-scene_prose
-scene_continuity
-volume_handoff
-completion
-```
+- Keywords由来のBrief Candidate
+- `initial_concept`
+- `initial_characters`
+- `initial_relationships`
+- `initial_world`
+- `initial_knowledge`
+- `initial_threads`
+- `initial_ending`
+- `initial_integrate`
+- `series_plan`
+- `volume_plan`
+- `chapter_plan`
+- `scene_plan`
+- `scene_card`
+- `scene_prose`
+- `scene_continuity`
+- `volume_handoff`
+- `completion`
 
-`input`、`initial_accept`、`scene_commit`、`publication`はコード検証中心である。
+`initial_accept`、`scene_commit`、Publication確定operationはコード検証だけで処理する。`input`のKeywords→Briefと`volume_handoff`は、LLM生成物を扱うため生成・Review・必要時Revisionを行う。
 
 ---
 
 ## 97. Review決定
 
-```text
-accept:
-  採用可能
+Review Issueのseverityは`error`、`warning`、`note`のいずれかとする。
 
-revise:
-  Revisionへ
+- `error`が一件でもある場合は採用禁止
+- `warning`または`note`だけの場合は採用可能
 
-reject:
-  再生成または人間対応
-```
+`decision`は次のいずれかとする。
+
+- `accept`: 採用可能
+- `revise`: 同じ未採用Candidateを新versionで修正する
+- `reject`: 同じoperation内で採用不能
+
+`error`が存在するReviewを`accept`にしてはならない。
 
 ---
 
 ## 98. Revision回数
 
-Revision上限はoperationごとに設定できる。
+Revision上限はoperationごとに設定する。推奨既定は次とする。
 
-推奨既定:
+- Initial Design Candidate: 2
+- Plan Candidate: 2
+- Scene Card Candidate: 2
+- Scene本文Candidate: 3
+- Continuity Candidate: 2
+- Keywords由来Brief Candidate: 2
+- Handoff Candidate: 2
+- Completion Result Candidate: 1
 
-```text
-Initial Design:
-  2
+Scene CommitとPublicationには意味的Revisionを設けない。Handoffは意味的補助要約であり、通常のCandidate Revision規則を適用する。
 
-Plan:
-  2
-
-Scene Card:
-  2
-
-Scene本文:
-  3
-
-Continuity:
-  2
-
-Handoff:
-  2
-
-Completion:
-  1
-```
+Revision上限後も`error`が残る場合はCandidateを採用せず、run statusを`blocked`、stop reasonを`revision_limit`とする。
 
 ---
 
 ## 99. Review Issueの引継ぎ
 
-Revisionには未解決Issueだけを渡す。
+Revisionには未解決Issueを渡す。解決済みIssueは修正要求として再提示しない。
 
-過去に解決したIssueを毎回再提示しない。
-
-ただし、Revision後に再発していないかReviewで再確認する。
+Revision後のReviewでは、解決済みIssueの再発と、新しいIssueの有無も確認する。
 
 ---
 
 ## 100. Revision後Review
 
-Revision結果は再Reviewする。
+Revisionは未採用Candidateだけを対象とし、同じCandidate IDの新しい完全置換versionを作る。
 
-Revisionしたという事実だけで採用しない。
+Revision結果は必ず再Reviewする。Revisionした事実だけで採用してはならない。
+
+確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物へRevisionを適用してはならない。
 
 ---
 
 ## 101. Reject
 
-`reject`は次の場合に使う。
+`reject`は、同じoperation内のRevisionでは安全に採用可能なCandidateへ到達できない場合に使用する。
 
-```text
-前提から全面的に外れている
-Revisionでは修正困難
-安全上採用不可
-基準Generationが古い
-入力自体が矛盾
-```
+Revision余地がない意味的拒否は、run statusを`blocked`、stop reasonを`semantic_reject`として停止する。
+
+Authority不整合など自動判断が安全でない場合は、run statusを`failed`、stop reasonを`manual_review_required`とする。
 
 ---
 
@@ -2047,41 +1974,43 @@ Scene CommitまたはPublication確定途中は、PipelineでStageを再実行�
 
 ## 111. 一回の`step`
 
-`step`は、現在Stageを一つ完了する。
+`step`は、起動検証とRecoveryを通常Stageより先に実行する。
+
+RecoveryがCrash前Stageの採用、確定、または最後のrun-state更新を完了した場合は、そのRecovery完了を今回の意味的処理境界として終了し、続けて現在Stageを実行しない。
+
+Recoveryが永続状態を前進させず、通常Stageを安全に開始できることの確認だけで終了した場合に限り、`current_stage`が示す意味的Stageを一つ実行する。
+
+一つのStage内では、生成、形式確認、Review、必要なRevision、採用または確定までを完了する。
 
 例:
 
 ```text
-current_stage:
-  scene_prose
-
-step:
-  本文生成、Review、必要なRevision、本文凍結まで
+current_stage: scene_prose
+step: 本文生成、形式確認、Review、必要なRevision、本文凍結まで
 ```
 
 Review／Revisionを別stepへ分割しない。
+
+`completion`の一回のstepでは、Completion判定が公開可能なら、同じ入力からPublicationをコードで構築、確定し、run statusを`completed`へ更新する。
 
 ---
 
 ## 112. `step`とLoop
 
-`step`はLoop全体を完了しない。
+`step`はLoop全体を完了せず、一つの意味的Stageだけを完了する。
 
 例:
 
 ```text
-scene_commitを一回実行:
-  一Sceneだけ確定
-
-次回step:
-  次Sceneのscene_plan、次Chapterのchapter_plan、またはvolume_handoff
+scene_commitを一回実行: 一Sceneだけ確定
+次回step: 次Sceneのscene_plan、次Chapterのchapter_plan、またはvolume_handoff
 ```
 
 ---
 
 ## 113. `step`の停止
 
-Stageがblockedまたはfailedになった場合は、完了せずその状態で返る。
+Stageが`blocked`、`failed`、`stopped`になった場合は、次のStageを実行せずその状態で返る。
 
 ---
 
@@ -2110,50 +2039,36 @@ Stageがblockedまたはfailedになった場合は、完了せずその状態�
 | `scene_continuity` | `scene_commit` |
 | `scene_commit` | 次Sceneの`scene_plan`、次Chapterの`chapter_plan`、または`volume_handoff` |
 | `volume_handoff` | 次Volumeの`volume_plan`または`completion` |
-| `completion` | `publication`または`blocked` |
-| `publication` | `completed` |
+| `completion` | Publication確定後の`completed`、または`blocked`／`failed` |
+
+Publicationは独立Stage遷移を持たない。
 
 ---
 
 ## 115. 戻り遷移
 
-許可する戻り:
+許可する戻りは、同じ未採用Candidate処理内に限定する。
 
 ```text
-Review revise:
-  同じStage内
-
-Continuity原因が本文:
-  scene_prose
-
-Scene Card候補だけが不正:
-  scene_card内でRevisionまたは再生成
-
-Scene Cardの前提であるScene Planが不正:
-  scene_plan
-
-Planが古い:
-  対応Plan Stageで新versionを生成
+Review revise: 同じStage内で新Candidate versionを作る
+Continuity原因が本文: 未採用本文Candidateをscene_prose内でRevisionし、Continuityを再生成する
+Scene Card Candidateの問題: scene_card内でRevisionまたは再生成する
+Scene Plan Candidateの問題: 未採用のままscene_plan内でRevisionまたは再生成する
 ```
 
-任意の過去Stageへ自由に戻らない。
+任意の過去Stageへ自由に戻ってはならない。
+
+確定済みInitial Design、採用済みPlan、確定済みSceneへ戻るRevision遷移を設けない。
 
 ---
 
-## 116. Plan Revision遷移
+## 116. Plan Candidate再生成
 
-Scene処理中にPlan Revisionが必要な場合:
+Plan Candidateの基準Generationまたは関連Authority入力が無効になった場合は、未採用Candidateを採用せず、同じPlan Stage内で新しいCandidateを生成する。
 
-```text
-active Sceneの未採用Candidateを履歴として保持する
-current Generationは変更しない
-必要なPlan Stageへ戻る
-新Plan版を採用する
-下位Planを順に再評価する
-対象SceneのScene Planから再開する
-```
+この処理は採用済みPlanのRevisionではない。
 
-旧Planを上書きせず、古いbasis Generationに依存するScene Card、本文、Continuityを採用しない。
+対象に採用済みPlanが既に存在する場合、新しいPlanを採用して置換、supersede、上書きしてはならない。
 
 ---
 
@@ -2339,7 +2254,7 @@ operation:
 
 ## 130. Code-only Stage
 
-`scene_commit`と`publication`は原則code-onlyである。
+`scene_commit`はcode-only Stageであり、Publication確定は`completion`内のcode-only operationである。`volume_handoff`は、コードでsource bundleを構築・検証し、LLMで意味的要約を生成・Reviewする複合Stageである。
 
 `initial_accept`もcode-onlyを基本とする。
 
@@ -2463,13 +2378,13 @@ Hash・Manifest・Gateへ依存しない
 ## 138. 実装完成条件
 
 ```text
-21 StageをRegistryから解決できる
+20 StageをRegistryから解決できる
 run／resume／stepが同じTransition規則を使う
 各Stageの開始条件を検証できる
 Review／Revision上限を守る
 Scene Loopを複数回実行できる
 Volume Loopを複数回実行できる
-CompletionからPublicationへ遷移できる
+completion Stage内でPublicationを確定しcompletedへ更新できる
 incompleteでblockedになる
 Crash Recovery後に正しいStageへ戻る
 ```

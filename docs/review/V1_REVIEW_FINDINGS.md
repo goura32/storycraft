@@ -1,5 +1,7 @@
 # Storycraft V1 Review Findings
 
+> **位置づけ:** この文書は時点付きのレビュー・監査記録であり、仕様の正本ではない。現行契約は[`../README.md`](../README.md)の優先順位に従い、各Findingを要件として逆輸入してはならない。各Findingの状態は記録時点のものであり、変更時は正本文書と対応する実装・試験で再確認する。
+
 ## F-001: Stage test workspaceの再構築コスト
 
 - 種別: 試験性能

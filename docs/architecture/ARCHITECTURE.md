@@ -1,6 +1,6 @@
 # Storycraft アーキテクチャ
 
-この文書は、Storycraft Version 1の最上位アーキテクチャを定める。
+この文書は、Storycraft Version 1の**内部設計における最上位アーキテクチャ**を定める。
 
 この文書は、次の役割を一つに統合する。
 
@@ -16,7 +16,7 @@
 
 既存の`ARCHITECTURE_PRINCIPLES.md`は、この文書へ統合して廃止する。
 
-以後の製品仕様、要件、詳細設計、実装、試験がこの文書と矛盾する場合は、下位文書または実装を修正する。
+`product/SPECIFICATION.md`および`product/REQUIREMENTS.md`はこの文書より上位である。これらと矛盾する場合は、この文書を修正する。詳細設計、実装、試験がこの文書と矛盾する場合は、下位文書または実装を修正する。
 
 ---
 
@@ -109,11 +109,11 @@ shared workspace
 設計判断は、次の順で優先する。
 
 ```text
-1. 実装しやすさ
-2. Crash後の理解しやすさ
-3. workspaceの人間可読性
-4. データ喪失の防止
-5. 生成品質
+1. データ喪失の防止と正本性
+2. 生成・評価の品質
+3. Crash後の理解しやすさ
+4. workspaceの人間可読性
+5. 実装しやすさ
 6. 将来拡張性
 ```
 
@@ -530,38 +530,44 @@ Schema定義はproductionとtestで共用する。
 
 ## 24. Review／Revision制御の責務
 
-ReviewはCandidateの問題点を返し、RevisionはCandidate全体の置換版を返す。
+Reviewは未採用Candidateの問題を評価し、Candidate自体を書き換えない。
 
-制御componentは次を管理する。
+Review Issueは次へ分類する。
 
-```text
-Review回数
-Revision回数
-未解決Issue
-Candidate version
-停止条件
-```
+- `error`: 採用禁止
+- `warning`: 採用可能だが利用者へ表示
+- `note`: 採用可否へ影響しない補足
 
-ReviewがCandidateを書き換えたり、予期しない内部例外をReview Issueへ変換したりしてはならない。形式・参照・State operationなどコードで決定できる検証は、LLM Reviewとは分離する。
+`error`があるCandidateは採用してはならない。
+
+Revisionは、Reviewを受けた未採用Candidate全体の置換版を作る。Revision後は必ず再Reviewする。
+
+Version 1では、確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物をRevision対象にしない。
+
+通信失敗、形式不正、意味的Revisionは独立した処理とし、それぞれ別の上限を持つ。
+
+形式、参照、State operationなどコードで決定できる検証はLLM Reviewと分離する。内部例外をReview Issueへ変換して隠してはならない。
 
 ---
 
 ## 25. Publication Builderの責務
 
-Publication Builderは、採用済みplanとScene本文からreader-facing成果物を組み立てる。
+Publication Builderは、次の確定済み入力からreader-facing成果物をコードだけで決定的に構築する。
 
-主な責務:
+- Brief
+- 採用済みSeries Plan
+- 採用済みVolume Plan
+- 採用済みChapter Plan
+- 確定済みScene本文
+- Completion Result
 
-```text
-Scene順の確認
-巻別Markdownの作成
-全巻Markdownの作成
-metadataの作成
-completion resultの添付
-private情報の除外
-```
+独立したPublication Plan成果物またはPublication Plan生成Stageは作らない。
 
-Publication Builderは新しいStory事実を生成してはならない。
+Publication確定前に、Completionが評価したPlan集合、Scene集合、Scene内容が現在も同一であることを確認する。
+
+Completion確定後にPublication根拠が変更、欠落、競合している場合はPublicationを作らず、人間確認を要求する。
+
+Publication Builderは生成モデルを使用せず、新しいStory事実、Scene、設定、人物の内面、結末、要約本文を生成しない。
 
 ---
 
@@ -601,20 +607,23 @@ AuditはStory状態やCandidateの正本ではない。
 
 ## 28. Authority Registry
 
-全データへ共通する単純な優先順位は設けない。情報種別ごとにAuthorityを一つだけ定める。
+情報種別ごとにAuthorityを一つだけ定める。
 
 ```text
-現在の実行位置:
+現在のrun statusと意味的Stage:
   run-state.json
 
 物語の現在状態:
   current_generation_idが指すGeneration
 
 採用済み計画:
-  対応する確定済みPlan
+  対象ごとに一件の確定済みPlan
 
 確定済みScene本文と継続性結果:
   Scene directory
+
+巻末の詳細状態:
+  Handoffのbasis_generation_idが指すGeneration
 
 完結判定:
   採用済みCompletion Result
@@ -623,50 +632,66 @@ AuditはStory状態やCandidateの正本ではない。
   current_publication_idが指すPublication
 ```
 
-Storyデータ内の詳細なAuthorityは`DATA_MODEL.md` §4および§39、保存上のAuthorityは`WORKSPACE_AND_RECOVERY.md`に従う。Audit、Context、Review、Candidate、staging成果物は補助情報であり、現在状態の正本ではない。
+HandoffはGenerationと確定済み成果物を根拠にした意味的補助要約であり、詳細なStory Authorityではない。コードがsource bundleと参照整合性を検証し、LLMが要約・Review・必要時Revisionを担う。
+
+Audit、Context、Review、Candidate、Revision Record、staging成果物は補助情報であり、現在状態の正本ではない。
+
+Storyデータ内の詳細なAuthorityは`DATA_MODEL.md`、保存上のAuthorityは`WORKSPACE_AND_RECOVERY.md`に従う。
 
 ---
 
 ## 29. 実行状態
 
-実行状態は、現在のrun位置を表す唯一の正本である。
+`run-state.json`は、現在のrun状態を表す唯一の変更可能な正本である。
 
-代表的な情報:
+少なくとも次を別々に保持する。
 
-```text
-run_id
-status
-current_stage
-current_target
-current_generation_id
-current_publication_id
-active_candidate
-active_scene_id
-pending_commit
-stop_reason
-last_error
-updated_at
-```
+- `status`
+- `current_stage`
+- `current_target`
+- `current_generation_id`
+- `current_publication_id`
+- `active_candidate`
+- `active_scene_id`
+- `pending_commit`
+- `stop_reason`
+- `last_error`
 
-field、enum、不変条件の唯一の正本は`design/WORKSPACE_AND_RECOVERY.md`とし、この文書では再定義しない。
+`status`は実行状態を表し、`current_stage`は現在処理中または再開判断の基準となる意味的Stageを表す。
+
+`current_stage`へ`stopped`、`blocked`、`failed`、`completed`などのstatus値を格納してはならない。
+
+statusの意味は次とする。
+
+| status | 意味 |
+|---|---|
+| `running` | 通常処理中 |
+| `stopping` | 停止要求後、安全な境界へ移行中 |
+| `stopped` | 同じworkspaceから再開可能な運用上の停止 |
+| `blocked` | 現在の入力と確定成果物では意味的に続行不能 |
+| `failed` | Authority不整合、Recovery不能、内部失敗など、自動継続が安全でない |
+| `completed` | Publication確定済み |
+
+詳細field、停止理由、不変条件の正本は`design/WORKSPACE_AND_RECOVERY.md`とする。
 
 ---
 
 ## 30. Story成果物のAuthority
 
-Generation、Scene、Candidate、Review、Revision、Evidence、Handoff、Completion、Publicationの意味、field、参照関係は`design/DATA_MODEL.md`を唯一の正本とする。
-
-アーキテクチャ上の分類だけを次へ固定する。
+Generation、Scene、Candidate、Review、Revision Record、Evidence、Handoff、Completion、Publicationの意味、field、参照関係は`design/DATA_MODEL.md`を正本とする。
 
 | 分類 | 対象 | 性質 |
 |---|---|---|
 | 現在状態 | Generation | immutable。現在のStory Stateを表す |
 | 確定済み本文 | Scene | immutable。Scene Card、本文、Continuity、Commitをまとめる |
-| 未採用成果物 | Candidate、Review、Revision | 補助情報。Story Authorityではない |
-| 根拠 | Evidence | 本文由来のState変更を人間が確認する情報 |
-| 巻境界 | Handoff | 確定済み状態の要約。新しい事実を作らない |
-| 完結評価 | Completion | `complete`、`complete_with_issues`、`incomplete` |
-| 公開成果物 | Publication | immutable。採用済み成果物からコードで組み立てる |
+| 確定済み計画 | Plan | immutable。対象ごとに採用済みPlanを一件とする |
+| 未採用作業 | Candidate、Review、Revision Record | Story Authorityではない |
+| 根拠 | Evidence | 本文由来のState変更と開示更新を確認する |
+| 巻境界 | Handoff | Generationと確定済み成果物を根拠にした、Review済みの意味的補助要約 |
+| 完結評価 | Completion | 評価対象のPlan、Scene、Generationを特定するimmutable成果物 |
+| 公開成果物 | Publication | Completionが評価した同一入力からコードで作るimmutable成果物 |
+
+入力、Initial Design、Plan、Scene、Generation、Handoff、Completion、Publicationその他の確定成果物を、同じ識別子の異なる内容で上書きしてはならない。
 
 Scene本文とContinuity結果を別々のAuthorityにせず、Scene Commitで一体として確定する。
 
@@ -695,8 +720,9 @@ Scene Card
 Scene確定
 巻Handoff
 完結判定
-Publication
 ```
+
+Publicationは独立Stageではなく、completion Stage内のcode-only operationとして構築、検証、確定する。
 
 Review／Revisionは対象Stage内のoperationである。Schema確認、ID割当、rename、State operation適用、実行状態更新は内部処理であり、独立Stageにしない。
 
@@ -720,31 +746,23 @@ Loopの境界は`design/PIPELINE.md`で定義する。
 
 ## 33. Scene中の基準状態固定
 
-一つのSceneについて、次が完了するまで同じ`basis_generation_id`を使う。
+一つのSceneについて、Scene PlanからScene確定まで同じ`basis_generation_id`と、そこから解決した同一の確定済みAuthority入力を使う。
 
-```text
-Scene Plan
-Scene Card
-本文
-継続性更新
-Scene確定
-```
+人物状態、場所、Knowledge、Thread、開示状態、時間、所有物、採用済みPlanなどの関連入力が変化した場合は、未採用Candidateをそのまま利用せずScene Planからやり直す。
 
-途中で不一致を検出した場合は、対象Sceneの未採用Candidateを再利用せず、Scene Planからやり直す。
+Generation IDだけが異なり、関連Authority入力と内容が同一であることをコードで証明できる場合だけ、既存Candidateを現在の基準で再検証できる。
+
+異なるbasis GenerationのCandidate、Review、Continuity、Scene Commitを混在させてはならない。
 
 ---
 
 ## 34. Retryの分類
 
-次を別々に扱う。
+通信失敗、応答形式不正、意味的Revisionを別々に扱い、それぞれに独立した上限を持たせる。
 
-```text
-通信失敗
-応答形式不正
-意味的Revision
-```
+形式不正な応答を意味的Reviewへ渡したり、推測補完して採用したりしてはならない。
 
-それぞれに独立した上限を持たせる。
+Revision上限後も`error`が残る場合、または同じoperation内で修正不能な場合は、Candidateを採用せず`blocked`として停止する。
 
 無制限に成功まで繰り返してはならない。
 
@@ -752,15 +770,19 @@ Scene確定
 
 ## 35. 完結前確認
 
-完結判定の前に、コードで次を確認する。
+Completion callの前に、コードで次を確認する。
 
-```text
-全Volumeが完了している
-全計画Sceneが確定している
-Required Threadが存在する
-Ending条件が存在する
-未完了のScene処理がない
-```
+- Series Planが要求する全Volumeが完了している
+- 対象ごとに採用済みPlanが正確に一件存在する
+- 全Chapterと全予定Sceneが確定している
+- 最終巻を含む全Volume Handoffが存在する
+- 現在Generationが最終予定Sceneの確定結果である
+- 未完了の執筆、採用、確定、Recovery処理がない
+- 主要Thread、Ending条件、主要Arcを評価できる
+
+Plan集合、Scene集合、Handoff集合が期待される集合と一致しない場合はCompletion callを行わない。
+
+複数の競合する採用済みPlanが存在する場合は、推測して一つを選ばず人間確認を要求する。
 
 確認結果をhash付きの独立artifactにする必要はない。
 
@@ -768,30 +790,46 @@ Ending条件が存在する
 
 ## 36. Publication確定
 
-Publicationの保存、`pending_commit`、rename、最後の`run-state.json`更新は`design/WORKSPACE_AND_RECOVERY.md`を唯一の正本とする。
+Publicationの保存、`pending_commit`、finalize、最後の`run-state.json`更新は`design/WORKSPACE_AND_RECOVERY.md`を正本とする。
 
-Publication Builderは採用済み成果物から決定的に内容を組み立て、独立Publication GateやLLM監査を作らない。
+Publication確定前に、Completionが次と同一の入力を評価したことをコードで確認する。
+
+- 採用済みPlan集合
+- 確定済みScene集合
+- 各Scene本文
+- 最終Generation
+
+Publication Builderは同一入力から決定的に内容を組み立てる。
+
+生成モデル、独立Publication Gate、Publication Plan、LLMによる再監査を使用してはならない。
+
+Publication確定後だけrun statusを`completed`へ更新する。
 
 ---
+
 
 # Part VI: 秘密情報とContext
 
 ## 37. Writer秘密境界
 
-本文生成へは、Scene執筆に必要な情報だけを渡す。
+本文生成へ渡す情報は、現在Sceneの執筆に必要で、Scene Cardが利用または開示を明示的に許可した範囲へ限定する。
 
-除外する情報:
+通常は次を除外する。
 
-```text
-未公開の真相
-Threadの作者用回答
-Endingの内部設計
-非POV人物の非公開内面
-将来Sceneの詳細
-継続性更新の内部処理
-```
+- 現在Sceneで利用を許可されていない真相
+- 作者用Thread回答
+- 現在Sceneで不要なEnding内部設計
+- 非POV人物の非公開内面
+- 将来Sceneの詳細
+- 継続性更新の内部処理
 
-この境界はhashやManifestより優先する。
+一つのSceneには一つのPOVを指定する。
+
+Scene CardはPOV制約を緩和または上書きできない。非POV人物の思考、感情、意図を事実として断定する情報をWriterへ渡してはならない。
+
+Scene固有の利用許可だけで、読者への永続的な開示済み状態や人物のKnowledgeを更新してはならない。
+
+読者への開示状態は、確定本文に対応するEvidenceがある場合だけ更新する。
 
 ---
 
@@ -836,19 +874,24 @@ Credentialは環境変数など、workspace外のsourceから取得する。
 
 ## 41. Recovery境界
 
-Recoveryの状態分類、起動検証、`pending_commit`、Scene／Generation／Publication確定、再構築条件、人間対応条件の唯一の正本は`design/WORKSPACE_AND_RECOVERY.md`とする。
+Recoveryの状態分類、起動検証、`pending_commit`、Scene／Generation／Publication確定、再構築条件、人間対応条件の正本は`design/WORKSPACE_AND_RECOVERY.md`とする。
 
 アーキテクチャ上の不変条件は次のとおりである。
 
-```text
-Recoveryを通常Stageより先に実行する
-Recovery中にProvider clientを生成しない
-Recovery中にProvider callを行わない
-完全なfinal成果物がある場合は後退せず前進する
-不完全stagingは採用しない
-決定的に再構築できない事実を推測しない
-run-stateまたはAuthorityが曖昧なら人間対応にする
-```
+- Recoveryを通常Stageより先に実行する
+- Recovery中にProvider clientを生成しない
+- Recovery中にProvider callを行わない
+- 完全なfinal成果物がある場合は後退せず前進する
+- 不完全な未採用作業を確定成果物として採用しない
+- 利用者入力と確定済み成果物を再生成しない
+- 決定的に再構築できない事実を推測しない
+- Recoveryを繰り返してもCall、利用量、ID、成果物を増やさない
+
+Authority不整合など安全な自動判断ができない場合は、run statusを`failed`、停止理由を`manual_review_required`とする。
+
+`completion_incomplete`、`revision_limit`、`semantic_reject`など、意味が確定した停止は`blocked`であり、Recovery失敗として扱わない。
+
+制御された`stopped`状態とCrash後のRecoveryを同じ保証として扱ってはならない。
 
 ---
 
@@ -880,20 +923,22 @@ docs/
 
 ---
 
-## 43. 文書の正本
+## 43. 文書の正本と優先順位
 
-正本となる文書:
+文書間の優先順位は次とする。
 
-```text
-SPECIFICATION.md
-REQUIREMENTS.md
-ARCHITECTURE.md
-DATA_MODEL.md
-WORKSPACE_AND_RECOVERY.md
-PIPELINE.md
-LLM_INTEGRATION.md
-ACCEPTANCE.md
-```
+1. `product/SPECIFICATION.md`
+2. `product/REQUIREMENTS.md`
+3. `architecture/ARCHITECTURE.md`
+4. `design/`配下の担当正本文書
+5. `testing/ACCEPTANCE.md`
+6. `product/IMPLEMENTATION_STATUS.md`
+
+下位文書は、上位文書の製品契約を変更または狭小化してはならず、上位文書にない利用者向け制約を追加してはならない。
+
+設計文書は、上位契約を実現するための内部構造、field、path、処理境界を具体化できる。
+
+競合がある場合は上位文書へ従い、下位文書を修正する。
 
 `IMPLEMENTATION_STATUS.md`は現状報告であり、仕様や設計の正本ではない。
 
@@ -917,7 +962,13 @@ quick start
 
 ## 45. docs/README.mdの責務
 
-`docs/README.md`は文書一覧と推奨読書順だけを扱う。
+`docs/README.md`は次を扱う。
+
+- 文書一覧
+- 推奨読書順
+- 文書間の優先順位
+- 各文書の担当範囲
+- 競合時の修正方向
 
 独立した`DOCUMENT_STRUCTURE.md`は作らない。
 
@@ -965,73 +1016,86 @@ Stage ID
 
 ## 49. DATA_MODELの責務
 
-`design/DATA_MODEL.md`は、Storyデータの意味と関係の唯一の正本である。
+`design/DATA_MODEL.md`は、Storyデータの意味、field、参照関係、cross-field制約の正本である。
 
-対象:
+対象には次を含む。
 
-```text
-Brief
-初期設計
-Canon
-State
-Knowledge
-Thread
-Plan
-Scene Card
-Continuity
-Evidence
-Handoff
-Completion
-Publication metadata
-```
+- BriefとKeywords
+- Initial Design
+- CanonとState
+- KnowledgeとThread
+- Plan
+- Scene Card
+- ContinuityとEvidence
+- Generation
+- Handoff
+- ReviewとRevision Record
+- Completion
+- Publication metadata
+- schema version識別
 
-Stage遷移やCrash処理を定義しない。
+Stage遷移、保存手順、Crash処理を定義しない。
 
 ---
 
 ## 50. WORKSPACE_AND_RECOVERYの責務
 
-`design/WORKSPACE_AND_RECOVERY.md`は、保存とRecoveryの唯一の正本である。
+`design/WORKSPACE_AND_RECOVERY.md`は、保存、実行状態、停止、Recoveryの正本である。
 
-対象:
+対象には次を含む。
 
-```text
-workspace layout
-run-state
-counters
-atomic write
-staging
-immutable directory
-確定処理
-起動確認
-resume
-再生成
-人間対応
-```
+- workspace layoutとpath境界
+- run statusとcurrent_stage
+- stop_reason
+- counters
+- atomic write
+- staging
+- immutable成果物
+- 確定処理
+- 起動確認
+- resumeとstep開始時Recovery
+- 決定的再構築
+- 人間対応
 
 ---
 
 ## 51. PIPELINEの責務
 
-`design/PIPELINE.md`は、意味的Stage、Loop、Stage入力出力、Review／Revision、Completion、Publicationの流れを定義する。
+`design/PIPELINE.md`は、意味的Stage、Loop、Stage入力出力、Review／Revision、Completion、Publicationの処理順を定義する。
 
-JSON fieldや保存手順を再定義しない。
+Version 1で、確定済みInitial Designまたは採用済みPlanをRevisionする遷移を定義してはならない。
+
+JSON field、directory path、atomic確定手順を再定義しない。
 
 ---
 
 ## 52. LLM_INTEGRATIONの責務
 
-`design/LLM_INTEGRATION.md`は、Provider、Prompt、Context、秘密情報、structured response、Retry、timeout、budget、Auditを定義する。
+`design/LLM_INTEGRATION.md`は次を定義する。
 
-StoryデータSchemaやRecovery規則を再定義しない。
+- Providerとmodel設定
+- version付きPromptとSchema asset
+- Context構築と秘密境界
+- structured response
+- 通信Retryと形式Retry
+- timeout
+- token preflight
+- Budget累積
+- usage欠落時の保守処理
+- Provider call監査
+- CredentialとAuditのredaction
+
+StoryデータSchema、Stage遷移、Recovery規則を再定義しない。
 
 ---
 
 ## 53. ACCEPTANCEの責務
 
-`testing/ACCEPTANCE.md`は、Release判断に必要な試験を定義する。
+`testing/ACCEPTANCE.md`は、上位仕様と設計から導かれるRelease判断用の試験を定義する。
 
-新しいpath、field、Stage、Recovery規則を追加してはならない。
+新しい製品契約、path、field、Stage、Recovery規則を追加してはならない。
+
+手動確認だけを必須自動試験の代替にしてはならない。
 
 ---
 

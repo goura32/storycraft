@@ -33,7 +33,18 @@ Fixtureは[`../tests/fixtures/`](../tests/fixtures/)に置き、説明は[`../te
 
 ## 競合時の判断
 
-文書へ共通の優先順位は設けません。競合した内容を所有する文書を正本とします。
+文書間には次の優先順位を適用する。
+
+1. `product/SPECIFICATION.md`
+2. `product/REQUIREMENTS.md`
+3. `architecture/ARCHITECTURE.md`
+4. `design/`配下の担当文書
+5. `testing/ACCEPTANCE.md`
+6. `product/IMPLEMENTATION_STATUS.md`
+
+下位文書は上位文書の製品契約を変更または狭小化してはならず、上位文書にない利用者向け制約を追加してはならない。
+
+文書間の矛盾を発見した場合は、一方を暗黙に優先せず、上位文書から順に修正する。
 
 ```text
 利用者向け振る舞い      SPECIFICATION.md
@@ -47,7 +58,9 @@ Release試験             ACCEPTANCE.md
 現在の進捗              IMPLEMENTATION_STATUS.md
 ```
 
-`IMPLEMENTATION_STATUS.md`が正本文書と競合する場合は、正本文書を優先し、Statusを修正します。
+`ACCEPTANCE.md`は、上位文書に存在しない契約を追加してはならない。
+
+`IMPLEMENTATION_STATUS.md`が正本文書と競合する場合は、正本文書を優先し、Statusを修正する。
 
 ## 変更先
 
@@ -71,8 +84,8 @@ SPECIFICATION
 → ARCHITECTURE
 → 対応するdesign文書
 → ACCEPTANCE
-→ production code
 → 自動試験
+→ production code
 → IMPLEMENTATION_STATUS
 → README
 ```

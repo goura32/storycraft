@@ -33,7 +33,6 @@ Scene本文
 継続性更新候補
 Review
 Revision
-Handoff
 完結判定
 ```
 
@@ -271,29 +270,32 @@ Candidate version
 
 ## 13. Call Recorder
 
-Call Recorderは、一回のProvider callを調査可能にする。
+Call Recorderは、すべてのProvider call試行を監査可能にする。成功Callだけを記録対象にしてはならない。
 
-記録するもの:
+各試行について少なくとも次を記録する。
 
-```text
-Call ID
-Stage
-operation
-対象
-Provider
-model
-時刻
-timeout
-usage
-outcome
-error分類
-```
+- Call IDとattempt番号
+- operation instance ID
+- Stage IDとtarget ID
+- Providerとmodel
+- materialized config version
+- Prompt versionとSchema version
+- response mode
+- 開始時刻と終了時刻
+- timeout設定
+- outcomeとerror分類
+- transport／format retryとの関係
+- 正規化usageとusage source
+- Provider request ID
+- request／response記録への参照
 
-CredentialやAuthorization headerは記録しない。
+Call開始前に監査metadataを確定し、終了後にoutcomeを追記またはatomic replacementする。
+
+Credential、Authorization header、cookie、署名付きURL、秘密値を記録してはならない。
+
+Call recordは調査用であり、Candidate、Story State、Stage遷移のAuthorityではない。
 
 ---
-
-# Part III: Operation
 
 ## 14. Operation ID
 
@@ -311,33 +313,36 @@ Operation IDは、Stage内のLLM用途を識別する。
 initial_concept.generate
 initial_concept.review
 initial_concept.revise
-scene_prose.generate
-scene_prose.review
-scene_prose.revise
+input_brief.generate
+input_brief.review
+input_brief.revise
+volume_handoff.summarize
+volume_handoff.review
+volume_handoff.revise
 completion.evaluate
+completion.review
+completion.revise
 ```
 
 ---
 
 ## 15. 標準action
 
-```text
-generate
-review
-revise
-evaluate
-summarize
-```
+標準actionは次とする。
 
-意味:
+- `generate`
+- `review`
+- `revise`
+- `evaluate`
+- `summarize`
 
 | action | 意味 |
 |---|---|
-| `generate` | 新しいCandidateを作る |
-| `review` | Candidateを評価する |
-| `revise` | Reviewを受けて置換Candidateを作る |
-| `evaluate` | 完結などを意味評価する |
-| `summarize` | Handoffなどの要約を作る |
+| `generate` | 新しい未採用Candidateを作る |
+| `review` | 未採用Candidateを評価する |
+| `revise` | Reviewを受けて同じCandidate IDの新versionを作る |
+| `evaluate` | Completionなどを意味評価する |
+| `summarize` | 根拠を参照できる入力束から、LLMが意味的な補助要約Candidateを作る |
 
 ---
 
@@ -384,20 +389,20 @@ CLI、Stage、testが別々のOperation一覧を持たない。
 
 次はLLM operationを持たない。
 
-```text
-initial_accept
-scene_commit
-publication
-ID割当
-Schema validation
-参照検証
-State operation適用
-Stage遷移
-Workspace検証
-Recovery
-```
+- `initial_accept`
+- `scene_commit`
+- Publication確定operation
+- ID割当
+- Schema validation
+- 参照検証
+- State operation適用
+- Stage遷移
+- Workspace検証
+- Recovery
 
-Code-only operationは、model設定、Credential、Provider endpoint、Provider clientを要求してはならない。
+Code-only operationは、Operation Serviceを経由せず、model設定、Credential、Provider endpoint、Provider Adapter、Provider clientを要求してはならない。`volume_handoff`はcode-onlyではない。コードでsource bundleと参照検証を担当し、LLMが意味的要約、Review、必要時Revisionを担当する。
+
+Stage HandlerがProvider Adapterを直接呼んではならない。
 
 ---
 
@@ -600,38 +605,39 @@ Provider SDKのdebug logに含まれ得る場合はdebug log自体を無効化�
 
 ## 30. Asset root
 
-Prompt assetはinstalled package内の一つのrootから読む。
+PromptとSchema assetは、installed package内の単一asset rootから読む。
 
 推奨:
 
 ```text
-storycraft/assets/prompts/
+storycraft/assets/
 ```
 
-Source repository上の相対pathへfallbackしない。
+PromptとSchemaについて、source repository上の相対path、作業directory、test専用copyへfallbackしてはならない。
+
+installed wheel環境とsource checkout環境で同じasset解決処理を使用する。
 
 ---
 
 ## 31. 推奨構成
 
 ```text
-prompts/
-├── common/
-│   ├── system.md
-│   ├── safety.md
-│   ├── japanese_style.md
-│   └── structured_output.md
-├── initial_concept/
-│   ├── generate.md
-│   ├── review.md
-│   └── revise.md
-├── scene_prose/
-│   ├── generate.md
-│   ├── review.md
-│   └── revise.md
-└── completion/
-    └── evaluate.md
+assets/
+├── prompts/
+│   ├── common/
+│   ├── initial_concept/
+│   ├── scene_prose/
+│   └── completion/
+└── schemas/
+    ├── candidates/
+    ├── reviews/
+    ├── completion/
+    └── call-records/
 ```
+
+各operationは使用するPrompt versionとSchema versionをOperation Registryから一意に解決する。
+
+同じversion識別子を異なる内容へ解決してはならない。
 
 ---
 
@@ -711,17 +717,19 @@ Promptには次だけを簡潔に示す。
 
 ---
 
-## 37. Prompt asset検証
+## 37. Prompt／Schema asset検証
 
-Release時に確認する。
+Release時とinstalled-package smoke testで次を確認する。
 
-```text
-全Operationに必要assetが存在
-空fileがない
-packageへ含まれる
-versionが解決する
-参照するSchemaが存在
-```
+- 全LLM operationに必要なPrompt assetが存在する
+- 全structured operationに必要なSchema assetが存在する
+- 空fileがない
+- assetがwheelへ含まれる
+- Prompt versionとSchema versionが一意に解決する
+- Promptが参照するSchemaとOperation RegistryのSchemaが一致する
+- source tree fallbackなしで読み込める
+
+欠落、version不明、内容競合がある場合はProvider callを開始せずconfiguration errorとする。
 
 ---
 
@@ -897,13 +905,13 @@ Provider call前に、最終的なPromptとContextを含むrequest全体を見�
 
 ```text
 1. 無関係項目を除外
-2. 過去本文を要約へ置換
+2. 関連する長文を、根拠参照付きLLM要約へ置換
 3. 低重要度Threadを除外
-4. 参照済み長文説明を短縮
+4. 既に確認済みの重複説明を除外
 5. Stage分割を検討
 ```
 
-秘密情報を残したまま公開情報を削るなど、意味を損なう削減をしない。
+LLM要約は別operationとして、生成後に独立Reviewを行う。先頭・末尾の抜粋、固定行数の切り詰め、本文の機械連結は、意味的要約の代替にしてはならない。秘密情報を残したまま公開情報を削るなど、意味を損なう削減をしない。
 
 ---
 
@@ -1301,23 +1309,23 @@ Reviewは採用済みStory Stateを変更しない。
 
 ## 77. Review出力
 
-構造化Review Resultを返す。
+Reviewは構造化Review Resultを返す。
 
 主要項目:
 
-```text
-decision
-issues
-summary
-```
+- `decision`
+- `issues`
+- `summary`
 
-`decision`:
+`decision`は`accept`、`revise`、`reject`のいずれかとする。
 
-```text
-accept
-revise
-reject
-```
+Issue severityは`error`、`warning`、`note`のいずれかとする。
+
+- `error`: Candidateの採用を禁止する
+- `warning`: 採用可能だが注意事項として記録する
+- `note`: 採用可能な改善提案として記録する
+
+`error`が一件でもある場合は`accept`にしてはならない。`warning`または`note`だけの場合は`accept`できる。
 
 ---
 
@@ -1325,13 +1333,17 @@ reject
 
 Issueは次を満たす。
 
-```text
-具体的
-対象位置が分かる
-修正可能
-評価基準に基づく
-秘密情報を不要に開示しない
-```
+- 具体的である
+- 対象Candidate内の位置または対象fieldを特定できる
+- `evidence_locator`でCandidateまたはReview入力中の根拠を一つ以上特定できる
+- 評価基準に基づく
+- 修正可能性を説明する
+- severityが定義済み値である
+- 秘密情報を不要に引用しない
+
+コードは`evidence_locator`の対象artifact、field pathまたは本文range、引用が実在することを検証する。根拠を解決できないIssueをRevision入力へ渡してはならない。
+
+Reviewごとに独自の類似severityを追加してはならない。
 
 ---
 
@@ -1369,63 +1381,61 @@ Review自体のformat errorは再取得できる。
 
 ## 82. Revisionの目的
 
-Revisionは、Review Issueを解消した完全な置換Candidateを作る。
+Revisionは、一つの未採用Candidate versionに対するReview Issueを解消する、新しい完全置換Candidate versionを作る。
+
+確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物をRevision対象にしてはならない。
 
 ---
 
 ## 83. Revision入力
 
-```text
-元Candidate
-未解決Issue
-元operationのContext
-出力契約
-```
+- 元の未採用Candidate
+- 元CandidateのIDとversion
+- 未解決Review Issue
+- 元operationの必要Context
+- 出力契約
+
+元operationで渡していない秘密を、Revisionで新たに追加してはならない。
 
 ---
 
 ## 84. Revision出力
 
-元Candidateと同じデータ型または本文modeで返す。
+元Candidateと同じデータ型または本文modeの、完全な置換Candidateを返す。
 
-Patch、diff、修正指示だけを返してはならない。
+同じCandidate IDの新しい単調増加versionとし、元versionを変更または削除しない。
+
+Patch、diff、修正指示だけをRevision結果として採用してはならない。
 
 ---
 
 ## 85. Addressed issue
 
-Revision後、どのIssueを対象にしたかRevision Recordへ記録する。
+対象IssueとRevision Recordの対応を記録する。
 
-LLM自身の「すべて修正した」という宣言だけで解決扱いにしない。
-
-再Reviewする。
+LLM自身の修正完了宣言だけでIssueを解決扱いにせず、Revision結果を再Reviewする。
 
 ---
 
 ## 86. 新しい問題
 
-Revisionで新しい問題が発生した場合は、新Review Issueとして扱う。
+Revision後のReviewでは、未解決Issue、解決済みIssueの再発、新しいIssueを確認する。
 
-過去Issueだけを確認して採用しない。
+新しい問題は新しいReview Issueとして記録する。
 
 ---
 
 ## 87. Revision上限
 
-Operationごとに上限を持つ。
+OperationごとにRevision上限を持つ。
 
-上限到達時:
+上限後も`error`が残る場合はCandidateを採用せず、run statusを`blocked`、stop reasonを`revision_limit`として停止する。
 
-```text
-未解決errorあり:
-  blocked
+`warning`または`note`だけの場合は採用できる。
 
-warningのみ:
-  operation policyに従い採用判断
+同じoperation内で修正不能な場合は、run statusを`blocked`、stop reasonを`semantic_reject`として停止する。
 
-noteのみ:
-  採用可能
-```
+成功するまで無制限にRevisionしてはならない。
 
 ---
 
@@ -1441,13 +1451,24 @@ Scene PlanからScene Commitまでの処理中に`basis_generation_id`の不一�
 
 ## 89. Completion operation
 
-Completionは次のoperationを使う。
+Completionは`completion.evaluate`を使用する。
 
-```text
-completion.evaluate
-```
+Call前にコードで確定した次の入力identityを渡す。
 
-通常のgenerate／review loopと異なり、一回の意味評価を基本とする。
+- 採用済みSeries Plan ID
+- 採用済みVolume Plan ID全件
+- 採用済みChapter Plan ID全件
+- 採用済みScene Plan ID全件
+- 確定済みScene参照全件
+- 最終巻を含むHandoff ID全件
+- 最終Generation ID
+- Required Thread
+- Ending必須条件
+- 主要Character ArcとRelationship Arc
+
+Completion Result Candidateは、評価したPlan、Scene、Handoff、最終Generationのidentityをそのまま保持しなければならない。
+
+一回の意味評価を基本とし、入力集合を変更しながら完結結果を探索してはならない。評価直後に独立した`completion.review`を行い、Resultが入力・根拠・各Checkを正確に説明しているかを確認する。
 
 ---
 
@@ -1455,36 +1476,48 @@ completion.evaluate
 
 `incomplete`は正当な意味結果である。
 
-次をしてはならない。
+次を行ってはならない。
 
-```text
-completeになるまで再Call
-Prompt表現だけを変えて再判定
-別modelへ自動切替して完結を得る
-```
+- `complete`になるまで再Callする
+- Prompt表現だけを変えて再判定する
+- 別modelへ自動切替して完結結果を得る
+- Scene、Plan、Handoffを推測補完する
+- `incomplete`自体をRevision Issueとして扱う
 
 ---
 
 ## 91. Completion format error
 
-JSON不正などのformat errorだけは再取得できる。
+JSON不正、Schema不一致、必須field欠落などのformat errorだけは、形式Retry上限内で再取得できる。
 
-再取得時も同じ意味評価対象を使う。
+再取得時は同じ入力identity、Prompt version、Schema version、意味評価条件を使用する。
+
+形式不正応答を推測補完してCompletion Resultへ採用してはならない。
 
 ---
 
 ## 92. Completion一貫性
 
-コードで確認する。
+コードで次を確認する。
 
-```text
-全Required Threadを評価
-全Ending条件を評価
-statusとcheckが一致
-basis Generationが最終
-```
+- 評価済みPlan集合がCall前の集合と一致する
+- 評価済みScene集合がCall前の集合と一致する
+- 評価済みHandoff集合がCall前の集合と一致する
+- `basis_generation_id`が最終Generationである
+- 全Required Thread、Ending条件、主要Arcを評価している
+- statusと各Checkが矛盾しない
+- Evidence参照が確定Scene本文へ解決する
 
-矛盾がある場合は、format／semantic consistency errorとして一度のRevisionを許可してよい。
+未採用Completion Result Candidateは、`completion.review`で次を検証する。
+
+- 評価対象と各Check、Issue、Evidenceの対応が説明可能である
+- `summary`がstatus、Check、Issueと矛盾しない
+- 重要なThread、Ending、Arcの評価根拠を落としていない
+- 根拠のない出来事、解決、断定を追加していない
+
+Reviewが`error`なら、同じ入力identityを保った`completion.revise`を一回以上、設定上限内で実行できる。Revisionが変更できるのは、根拠参照、Checkの説明、Issueの位置、summaryの明確さだけである。`status`、各Checkの判定、評価対象ID集合、Evidenceの意味、`incomplete`という意味判定をRevisionで変更してはならない。Revision後は必ず再Reviewする。
+
+入力identity不一致、Authority不整合、根拠を満たせない評価はProviderへ再依頼せず人間確認とする。
 
 ---
 
@@ -1669,61 +1702,90 @@ transport retry policyへ従う
 
 # Part XVIII: TokenとContext上限
 
-## 109. Input token
+## 109. Token preflight
 
-最終requestのtoken数をCall前に見積もる。
+すべてのProvider call直前に、materialized operation configと最終requestを使ってtoken preflightを行う。
 
-対象:
+見積対象:
 
-```text
-System instruction
-Operation Prompt
-Context
-Candidate
-Review Issue
-Schema表現
-```
+- System instruction
+- operation Prompt
+- Context
+- Candidate
+- Review Issue
+- structured output用Schema表現
+- Provider固有wrapper
+
+Provider tokenizerが利用可能ならそれを使用する。利用できない場合は、明示した保守的見積方式を使用する。
+
+token見積完了前にProvider Adapterまたはclientを生成してはならない。
 
 ---
 
 ## 110. Output予約
 
-Provider context window内で、必要なoutput tokenを予約する。
+modelのcontext window内に、operationで設定した最大output tokenを予約する。
 
-Inputが収まるだけでCallを開始しない。
+次を満たさないCallは開始しない。
+
+```text
+estimated_input_tokens + reserved_output_tokens <= model_context_window
+```
+
+Inputだけが収まることをCall開始条件にしてはならない。
 
 ---
 
 ## 111. Operation上限
 
-Operationごとにinputとoutputの上限を持つ。
+Operationごとに最大input token、最大output token、必要に応じて最大total tokenを設定する。
 
-Scene本文とReviewで同じ上限を使う必要はない。
+token preflightではmodel context windowとoperation上限の両方を満たすことを確認する。
+
+Scene本文、Review、Revision、Completionで同じ上限を使う必要はない。
 
 ---
 
 ## 112. Context overflow
 
-上限を超える場合:
+上限超過時は対象operationのCallを開始せず、次の順で処理する。
 
-```text
-Context最小化
-要約
-関連対象選択
-Stage再設計
-```
+- 不要Contextを除外する
+- 関連する長文について、根拠参照付きLLM要約のoperationを実行する
+- その要約を独立LLM Reviewし、`error`があればRevisionと再Reviewを行う
+- Review済み要約とsource referenceをContextへ使用する
+- 関連対象をさらに限定する
+- 意味的Stageまたはoperation境界を再設計する
 
-無関係な情報を入れたままmodel context windowだけを大きくすることを基本解決にしない。
+要約operationには、元artifact ID、source range、basis Generation、保持すべきID・禁止条件・未解決Thread・Evidenceを明示する。コードはsource referenceの存在と対象範囲を検証し、LLM Reviewは要約の正確性、重要事項の欠落、誤帰属、過度な断定を検証する。
+
+先頭・末尾の抜粋、固定文字数での切り詰め、本文の機械連結を標準解決にしてはならない。必要情報を失う削減、秘密境界違反、model context windowの単純拡大だけを標準解決にしてはならない。安全に収められない場合はrun statusを`blocked`として停止する。
 
 ---
 
 ## 113. 要約
 
-要約を使う場合、要約は補助情報であり正本ではない。
+要約は補助情報でありStory Authorityではない。要約ごとに、元artifact ID、source range、basis Generation、source reference、対象operation、Candidate IDとversionを保存する。
 
-重要な識別子、禁止条件、未解決Threadを落とさない。
+要約は次の品質ループを通す。
 
-要約生成を別LLM Callにする場合はBudgetへ含める。
+```text
+source bundleをコードで構築・検証
+↓
+LLM summarize
+↓
+LLM review
+↓
+errorがあればLLM revise
+↓
+LLM re-review
+↓
+採用
+```
+
+重要なID、禁止条件、未解決Thread、basis Generation、Evidence参照を失ってはならない。要約の意味的主張はsource referenceへ解決できなければならない。
+
+要約を生成・Review・Revisionする各LLM Callには、token preflight、Budget、Audit、通信Retry、形式Retry、Revision上限を適用する。
 
 ---
 
@@ -1731,61 +1793,52 @@ Stage再設計
 
 ## 114. Budget種類
 
-```text
-max_calls
-max_input_tokens
-max_output_tokens
-max_total_tokens
-max_estimated_cost
-max_elapsed_time
-```
+Budgetは少なくとも次を設定できる。
+
+- `max_calls`
+- `max_input_tokens`
+- `max_output_tokens`
+- `max_total_tokens`
+- `max_estimated_cost`
+- `max_elapsed_time`
 
 ---
 
 ## 115. Budget確認時点
 
-新しいProvider callの直前に確認する。
+新しいProvider callの直前に、現在の確定集計と今回Callの保守的予約量を使ってBudget preflightを行う。
 
-Review、Revision、要約Callも同じBudgetへ含める。
+生成、Review、Revision、要約、Completionの全Callを同じrun Budgetへ含める。Budgetを節約する目的だけで、必須のReviewまたはerror後のRevisionを省略してCandidateを採用してはならない。
+
+Call開始後に超過判定するだけではBudget契約を満たさない。
 
 ---
 
 ## 116. Cost見積
 
-Providerとmodelの価格設定が利用可能な場合、usageから推定costを計算する。
+Providerとmodelの価格情報が利用可能な場合は、正規化usageまたは保守的token予約量から推定costを計算する。
 
-価格情報が不明な場合:
+価格情報が不明な場合は`cost_unknown: true`とし、tokenとCall数のBudgetで安全性を判断する。
 
-```text
-cost_unknown:
-  true
-```
-
-として、token Budgetを使用する。
+未知costを0として扱ってはならない。
 
 ---
 
 ## 117. Budget到達
 
-Budget超過が予測される場合、Callを開始しない。
+今回Callを含めるとBudget超過になる場合は、Provider clientを生成せずCallを開始しない。
 
-Runを安全に停止する。
+run statusを`stopped`、stop reasonを`budget_limit`として停止する。
 
-```text
-status:
-  stopped
-
-stop_reason:
-  budget_exhausted
-```
+Budget到達をProvider error、format error、semantic rejectionとして扱ってはならない。
 
 ---
 
 ## 118. Budgetの変更
 
-再開前に利用者がBudgetを増やしてよい。
+再開前に利用者がBudgetを増やせる。
 
-変更はmaterialized configの明示的な新versionとして記録する。
+変更はmaterialized configの新versionとして明示的に記録し、過去Callの集計をリセットしない。
 
 ---
 
@@ -1795,44 +1848,40 @@ stop_reason:
 
 Provider usageを次へ正規化する。
 
-```text
-input_tokens
-output_tokens
-cached_input_tokens
-reasoning_tokens
-total_tokens
-estimated_cost
-currency
-```
+- `input_tokens`
+- `output_tokens`
+- `cached_input_tokens`
+- `reasoning_tokens`
+- `total_tokens`
+- `estimated_cost`
+- `currency`
+- `usage_source`
 
-Providerが返さない項目は`null`とする。
+`usage_source`は`provider`、`estimated`、`unknown`のいずれかとする。
+
+Providerが返さない値を0へ変換せず、取得不能なfieldはnullとする。
 
 ---
 
 ## 120. Usage集計
 
-集計単位:
+UsageはCall、operation、Stage、run、Provider、model単位で集計する。
 
-```text
-Call
-operation
-Stage
-run
-Provider
-model
-```
+Provider値が欠落したCallは、token preflightで予約したinputとoutputの保守的上限を集計へ使用できる。その場合は`usage_source: estimated`として監査可能にする。
 
-Usage集計をStory Authorityにしない。
+Usage集計をStory Authorityにしてはならない。
 
 ---
 
 ## 121. Usage欠落
 
-通信成功でもusageが取得できない場合がある。
+通信成功後にProvider usageが取得できなくても、形式と意味が有効なCandidateを直ちに失敗扱いにする必要はない。
 
-Candidateを必ず失敗にする必要はない。
+次のCall前には、欠落分を保守的見積値でBudgetへ計上する。
 
-ただし、Budgetの安全な継続判断ができなければ停止してよい。
+安全な上限を計算できない、または欠落が累積してBudget継続判断ができない場合は、新しいProvider callを開始せず、run statusを`stopped`、stop reasonを`usage_unknown`として停止する。
+
+usage欠落を0 token、0 costとして継続してはならない。
 
 ---
 
@@ -1840,81 +1889,51 @@ Candidateを必ず失敗にする必要はない。
 
 ## 122. Call metadata
 
-代表構造:
+すべてのProvider call試行は、成功、失敗、timeout、cancelを問わずCall metadataを持つ。
 
-```json
-{
-  "schema_version": 1,
-  "call_id": "call-000041",
-  "operation_instance_id": "op-000018",
-  "attempt": 2,
-  "stage": "scene_prose",
-  "operation": "scene_prose.generate",
-  "target": {
-    "scene_id": "scene-v01-c001-s002"
-  },
-  "provider": "example-provider",
-  "model": "example-model",
-  "prompt_version": "v1",
-  "basis_generation_id": "gen-000005",
-  "started_at": "2026-07-23T12:00:00Z",
-  "finished_at": "2026-07-23T12:00:24Z",
-  "outcome": "success",
-  "usage": {
-    "input_tokens": 4100,
-    "output_tokens": 1800,
-    "total_tokens": 5900
-  }
-}
-```
+Call metadataには§13の監査項目と`schema_version`を保存する。
+
+Provider raw requestまたはraw responseを保存しない設定でも、Call metadataとoutcomeは保存する。
 
 ---
 
 ## 123. Request record
 
-Request記録を有効にする場合、次を保存してよい。
+Request記録を有効にする場合は、Providerへ送信した内容を再現可能な範囲で保存する。
 
-```text
-operation
-model
-非秘密parameter
-Prompt version
-Context
-```
+保存可能なもの:
 
-Credential、Authorization header、Provider内部署名を保存しない。
+- operation IDとtarget
+- Prompt versionとSchema version
+- redaction済みPromptまたはその参照
+- redaction済みContextまたはその参照
+- response mode
+- token preflight結果
+- timeoutとoutput予約
+
+Credential、header、cookie、署名、秘密値を保存してはならない。
 
 ---
 
 ## 124. Response record
 
-Response記録を有効にする場合:
+Response記録を有効にする場合は、redaction済みresponse textまたはstructured payload、Provider request ID、usage、終了理由を保存できる。
 
-```text
-raw text
-structured payload
-Provider request ID
-finish reason
-usage
-```
+部分応答、timeout応答、cancelled応答は未採用であることを明示する。
 
-秘密情報policyに従ってredactする。
+保存したraw responseからCandidateやStory Stateを自動復元してはならない。
 
 ---
 
 ## 125. Recording policy
 
-推奨設定:
+記録policyは少なくとも`metadata_only`、`redacted`、`full_local`を区別できる。
 
-```text
-metadata_only
-redacted
-full_local
-```
+どのpolicyでもCredential、Authorization情報、cookie、署名付きURL、明示的secret fieldを保存してはならない。
 
-`full_local`でもCredentialは保存しない。
+`full_local`でも秘密情報policyと共通redactionを適用する。
 
-Publicationや通常logへraw responseを複製しない。
+Publication、通常log、利用者向けerrorへPrompt全文、Context全文、raw responseを複製してはならない。
 
 ---
 
@@ -1945,6 +1964,8 @@ budget_error
 cancelled
 internal_error
 ```
+
+Run-stateへ停止を反映する場合、`credential_error`は`stopped / credential_unavailable`、Retry上限後の`timeout`は`stopped / timeout`、Retry上限後の`transport_error`または`rate_limit`は`stopped / communication_retry_limit`、Provider service利用不能は`stopped / provider_unavailable`、形式Retry上限到達は`stopped / format_retry_limit`へ対応させる。Call recordのerror分類とrun-stateのstop reasonを混同しない。
 
 ---
 
@@ -2212,19 +2233,11 @@ Review:
 
 ## 146. Handoff
 
-```text
-response mode:
-  structured
+Volume HandoffはLLM operationではない。
 
-目的:
-  巻末状態の要約
+巻の最終Generation、採用済みPlan、確定済みSceneからコードで決定的に導出する。
 
-禁止:
-  新しい物語事実
-
-Review:
-  必須
-```
+Prompt、Context、Provider call、Review、Revisionを使用しない。
 
 ---
 
@@ -2538,18 +2551,23 @@ Prompt全文、Context全文、Credentialは通常logへ出さない。
 
 ## 167. Redaction
 
-共通redaction処理を一か所に持つ。
+共通redaction処理を一か所に実装し、Call record、Audit、application log、error表示、Provider raw errorへ同じ規則を適用する。
 
-対象:
+少なくとも次を除去または置換する。
 
-```text
-Authorization
-API key
-cookie
-signed query
-secret field
-Provider raw error内のcredential
-```
+- CredentialとAPI key
+- Authorization、cookie、session header
+- signed URLとquery内secret
+- Schemaでsecret指定されたfield
+- Provider raw errorに含まれる認証情報
+- PromptまたはContext内の保存禁止情報
+- filesystem上の不要な秘密path
+
+入れ子構造、配列、文字列化JSON、例外chainにもredactionを適用する。
+
+redaction後に秘密値が残らないことをtestする。
+
+安全にredactできるか判断できない場合は、対象内容の保存または表示を中止する。
 
 ---
 

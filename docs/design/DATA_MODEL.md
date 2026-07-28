@@ -152,19 +152,15 @@ Version 1では、すべての項目へ機械的なvisibility fieldを付ける�
 
 ## 7. データの不変性
 
-採用済みの次のデータは、原則として上書きしない。
+利用者入力、Initial Design、Plan、Scene成果物、Generation、Volume Handoff、Completion Result、Publicationその他の確定済み成果物はimmutableとする。
 
-```text
-Initial Designの採用版
-Planの採用版
-Scene成果物
-Generation
-Volume Handoff
-Completion result
-Publication
-```
+同じ識別子または同じversionの異なる内容で上書きしてはならない。
 
-修正は、新しい版または新しい識別子として作る。
+Version 1は、確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物をRevisionしない。
+
+未採用CandidateのRevisionは、新しいCandidate versionとして作成し、旧Candidateを変更しない。
+
+確定済み成果物が外部変更された場合は、新しい正式版として自動採用せず、Authority不整合として扱う。
 
 ---
 
@@ -191,20 +187,22 @@ Review identity
 
 ## 9. JSONの基本規則
 
-構造化データは、原則としてJSONで表現する。
+構造化データは原則としてJSONで表現する。
 
 共通規則:
 
-```text
-UTF-8
-Unicode NFC
-改行はLF
-数値は有限値
-日時はtimezoneを含む
-未知項目は原則拒否
-必須項目の省略は禁止
-同じ意味を複数fieldへ重複保存しない
-```
+- UTF-8
+- Unicode NFC
+- 改行はLF
+- 数値は有限値
+- 日時はtimezoneを含む
+- 未知項目は拒否
+- 必須項目の省略は禁止
+- 同じ意味を複数fieldへ重複保存しない
+
+永続JSON成果物は、自身の`schema_version`または親metadataから、適用するSchema versionを一意に識別できなければならない。
+
+同じSchema version識別子を異なるSchema内容へ解決してはならない。
 
 厳密なSchemaは実装assetとして一元管理し、productionとtestで共用する。
 
@@ -259,19 +257,13 @@ pub-000001
 
 ## 12. 版番号
 
-同じ論理対象をRevisionする場合は、版番号を持たせる。
+未採用CandidateをRevisionする場合は、新しい単調増加versionを割り当てる。
 
-推奨:
+版番号は1から始まり、失敗やrejectによって未使用となった番号を再利用しない。
 
-```text
-version: 1
-version: 2
-version: 3
-```
+Revision後も旧Candidate versionを変更または削除しない。
 
-版番号は1から始まる単調増加整数とする。
-
-過去版を削除して番号を詰め直さない。
+確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物には、Version 1のRevision用version系列を設けない。
 
 ---
 
@@ -845,67 +837,34 @@ Briefのavoidへ違反しない
 
 ## 37. Canon
 
-Canonは、Initial Designまたは明示的なDesign Revisionで採用された、安定した設定と過去の確定事実を表す。
+Canonは、採用済みInitial Designから作られた安定した設定と過去の確定事実を表す。
 
-Canonへ置く例:
+通常SceneのContinuity UpdateはCanonを追加、更新、削除してはならない。
 
-```text
-人物の出生関係
-町の成立史
-World Rule
-事件の事前設計された真相
-物理的に変わらない場所関係
-```
+確定済みCanonの訂正が必要な場合、Version 1は既存workspaceを変更せず`blocked`として停止し、新しいworkspaceが必要であることを示す。
 
-Canonへ置かない例:
-
-```text
-現在の位置・所持品・感情
-Scene中に発生した出来事
-読者や人物への開示状態
-未確定の疑い
-将来計画
-```
-
-Scene中に発生した事実は、現在State、Timeline、Evidenceで追跡する。
+Canon上の真相が本文で開示された場合もCanon自体は変更せず、Character KnowledgeまたはReader KnowledgeだけをEvidenceに基づいて更新する。
 
 ---
 
-## 38. Canon Recordと変更
+## 38. Canon Record
 
-一つのCanon事実は、Canon Recordとして表す。
+Canon Recordは少なくとも次を持つ。
 
-```text
-canon_id
-subject_type
-subject_id
-predicate
-value
-visibility
-introduced_generation_id
-source_type
-source_id
-status
-superseded_by_canon_id
-notes
-```
+- `canon_id`
+- `category`
+- `subject_id`
+- `statement`
+- `source_type`
+- `source_id`
+- `status`
+- `created_at`
 
-`status`:
+`source_type`は`initial_design`だけを許可し、`source_id`は採用済みInitial Designを参照する。
 
-```text
-active
-superseded
-```
+Version 1の`status`は`active`だけを許可する。
 
-`source_type`は`initial_design`または`design_revision`、`source_id`は対応する採用済み設計成果物の永続IDとする。通常SceneをCanonの作成元として参照しない。
-
-`status`が`superseded`の場合は`superseded_by_canon_id`を必須とし、`active`の場合はnullとする。
-
-通常のScene ContinuityはCanonを追加、更新、削除、supersedeしてはならない。
-
-既存Canonの誤りを訂正する場合は、明示的なDesign Revisionで新Recordを追加し、旧Recordを`superseded`にする。過去Recordは削除しない。
-
-既存Canonの真相が本文で明かされた場合は、Canonを変更せず、人物または読者のKnowledge Stateだけを更新する。
+`design_revision`、`superseded`、`superseded_by_canon_id`はVersion 1の永続契約へ含めない。
 
 ---
 
@@ -1200,29 +1159,23 @@ active Canonと直接矛盾しない
 
 ## 50. Plan共通規則
 
-Planは将来の執筆方針であり、確定事実ではない。
+Planは将来の執筆方針であり、確定したStory事実ではない。
 
-すべてのPlanは次を持つ。
+Plan本体は少なくとも次を持つ。
 
-```text
-plan_id
-version
-status
-basis_generation_id
-parent_plan_id
-objectives
-constraints
-created_at
-```
+- `plan_id`
+- `plan_type`
+- `basis_generation_id`
+- 対象を一意に示すfield
+- `objectives`
+- `constraints`
+- `created_at`
 
-推奨状態:
+未採用PlanはCandidate領域で管理する。
 
-```text
-candidate
-accepted
-superseded
-abandoned
-```
+採用済みPlanはimmutableであり、Version 1では対象ごとに正確に一件だけ存在できる。
+
+Version 1のPlan本体へ`superseded`状態、`parent_plan_id`、`supersedes_version`などのRevision用fieldを持たせない。
 
 ---
 
@@ -1232,21 +1185,24 @@ Series Planは全巻の物語構造を定める。
 
 主要項目:
 
-```text
-series_plan_id
-version
-volume_count
-series_objectives
-volume_summaries
-character_arc_map
-relationship_arc_map
-thread_progression
-revelation_schedule
-ending_path
-global_constraints
-```
+- `series_plan_id`
+- `title`
+- `basis_generation_id`
+- `volume_count`
+- `series_objectives`
+- `volume_summaries`
+- `character_arc_map`
+- `relationship_arc_map`
+- `thread_progression`
+- `revelation_schedule`
+- `ending_path`
+- `global_constraints`
 
-`volume_summaries`は順序付きである。
+`title`はPublicationで使用する確定シリーズ名である。Briefの`title`が空でなければ同じ値とし、空の場合はSeries Planで空でない表示名を一件確定する。
+
+`volume_summaries`は`volume_number`による順序付き集合とする。
+
+一workspaceに採用済みSeries Planは一件だけ存在できる。
 
 ---
 
@@ -1256,101 +1212,109 @@ Volume Planは一巻の役割と到達点を定める。
 
 主要項目:
 
-```text
-volume_plan_id
-volume_number
-version
-basis_generation_id
-series_plan_id
-starting_state_summary
-volume_purpose
-central_conflict
-character_changes
-relationship_changes
-thread_goals
-revelations
-chapter_summaries
-required_end_state
-handoff_expectations
-```
+- `volume_plan_id`
+- `title`
+- `volume_number`
+- `basis_generation_id`
+- `series_plan_id`
+- `previous_handoff_id`
+- `starting_state_summary`
+- `volume_purpose`
+- `central_conflict`
+- `character_changes`
+- `relationship_changes`
+- `thread_goals`
+- `revelations`
+- `chapter_summaries`
+- `required_end_state`
+- `handoff_expectations`
 
-前巻が存在する場合は、Handoffを入力として参照する。
+`title`は空でない巻題とし、Publicationの巻題Authorityとする。
+
+第1巻では`previous_handoff_id`をnullとする。
+
+第2巻以降では直前巻の確定済みHandoffを参照する。ただし詳細AuthorityはHandoffの`basis_generation_id`が示すGenerationである。
+
+同じ`volume_number`の採用済みVolume Planは一件だけ存在できる。
 
 ---
 
 ## 53. Chapter Plan
 
-Chapter Planは、一章を順序付きSceneへ具体化する。
+Chapter Planは一章を順序付きSceneへ具体化する。
 
 主要項目:
 
-```text
-chapter_plan_id
-volume_number
-chapter_number
-version
-basis_generation_id
-volume_plan_id
-chapter_purpose
-starting_conditions
-ending_changes
-scene_summaries
-required_revelations
-constraints
-```
+- `chapter_plan_id`
+- `title`
+- `volume_number`
+- `chapter_number`
+- `basis_generation_id`
+- `volume_plan_id`
+- `chapter_purpose`
+- `starting_conditions`
+- `ending_changes`
+- `scene_summaries`
+- `required_revelations`
+- `constraints`
+
+`title`は空でない章題とし、Publicationの章題Authorityとする。
+
+同じ`volume_number`と`chapter_number`の採用済みChapter Planは一件だけ存在できる。
 
 ---
 
 ## 54. Scene Plan
 
-Scene Planは、章計画内の一Sceneの予定を表す。
+Scene Planは章計画内の一Sceneの予定を表す。
 
 主要項目:
 
-```text
-scene_plan_id
-volume_number
-chapter_number
-scene_number
-purpose
-pov_character_id
-participant_ids
-location_id
-starting_conditions
-intended_beats
-intended_revelations
-intended_changes
-prohibited_disclosures
-```
+- `scene_plan_id`
+- `volume_number`
+- `chapter_number`
+- `scene_number`
+- `basis_generation_id`
+- `chapter_plan_id`
+- `purpose`
+- `pov_character_id`
+- `participant_ids`
+- `location_id`
+- `starting_conditions`
+- `intended_beats`
+- `intended_revelations`
+- `intended_changes`
+- `prohibited_disclosures`
 
-Scene Planは、Scene Cardより粗い計画である。
+Scene PlanはScene Cardより粗い計画である。
+
+同じ巻・章・Scene番号の採用済みScene Planは一件だけ存在できる。
 
 ---
 
 ## 55. Planの基準Generation
 
-Volume、Chapter、SceneのPlanは、どの採用済みGenerationを基準にしたかを識別する。
+すべてのPlanは、どの採用済みGenerationを基準に作られたかを`basis_generation_id`で識別する。
 
-基準Generationより後にStory状態が変化した場合は、Planをそのまま利用できるか再評価する。
+Planを採用または使用する前に、基準Generationから解決した関連Authority入力が現在も同一であることをコードで確認する。
 
-Planが古いことをHashで検出するのではなく、`basis_generation_id`で判断する。
+関連Authority入力が変化している未採用Plan Candidateは破棄またはrejectし、新しいbasis Generationから再生成する。
+
+Generation IDだけが異なり、関連Authority入力と内容が同一であることをコードで証明できる場合だけ、Candidateを現在の基準で再検証できる。
+
+HashだけでPlanの有効性を判断しない。
 
 ---
 
-## 56. Plan Revision
+## 56. Planの採用と不変性
 
-採用済みPlanを修正する場合は、新しいversionを作る。
+Plan採用時は、対象に既存の採用済みPlanがないことを確認する。
 
-新しい版は次を示す。
+採用済みPlanを修正、置換、supersede、上書きしてはならない。
 
-```text
-supersedes_version
-revision_reason
-basis_generation_id
-changed_objectives
-```
+採用後に構造変更が必要になった場合は、既存Planと確定済み成果物を保持したまま`blocked`として停止し、新しいworkspaceが必要であることを示す。
 
-旧版を削除または上書きしない。
+Version 1にはPlan Revision遷移を設けない。
 
 ---
 
@@ -1358,41 +1322,44 @@ changed_objectives
 
 ## 57. Scene Card
 
-Scene Cardは、実際のScene生成に使う詳細な設計である。
+Scene Cardは、実際のScene生成に使用する詳細な未採用設計Candidateである。
 
 主要項目:
 
-```text
-scene_id
-version
-basis_generation_id
-scene_plan_id
-pov_character_id
-participant_ids
-location_id
-story_time
-purpose
-opening_state
-required_beats
-conflict
-allowed_revelations
-forbidden_revelations
-allowed_updates
-ending_state_targets
-style_constraints
-```
+- `scene_id`
+- `version`
+- `basis_generation_id`
+- `scene_plan_id`
+- `pov_character_id`
+- `participant_ids`
+- `location_id`
+- `story_time`
+- `purpose`
+- `opening_state`
+- `required_beats`
+- `conflict`
+- `allowed_revelations`
+- `required_revelations`
+- `forbidden_revelations`
+- `allowed_updates`
+- `ending_state_targets`
+- `style_constraints`
+
+`pov_character_id`は`participant_ids`に含まれなければならない。
 
 ---
 
 ## 58. POV
 
-`pov_character_id`は、本文の認識範囲を制御する。
+Version 1では一Sceneにつき一つの`pov_character_id`を指定する。
 
-POV人物が知らない情報を、地の文で断定してはならない。
+本文へ出せる情報は、POV人物が自然に知覚、記憶、認識、または推測できる範囲に限定する。
 
-全知視点など別方式を将来導入する場合は、明示的なPOV modeを追加する。
+非POV人物の非公開の思考、感情、意図を事実として断定してはならない。
 
-Version 1の既定は人物限定視点とする。
+Scene CardはPOV制約を緩和または上書きできない。
+
+Version 1は全知視点、複数POV、無表示のPOV切替を提供しない。
 
 ---
 
@@ -1417,20 +1384,23 @@ Beatを台詞や完成文章として過剰に固定しない。
 
 ## 60. 開示制約
 
-Scene Cardは、情報開示を次へ分ける。
+Scene Cardは情報開示を次へ分類する。
 
-```text
-allowed_revelations:
-  このSceneで開示してよい
+- `allowed_revelations`: このSceneで開示してよい
+- `required_revelations`: このSceneで開示しなければならない
+- `forbidden_revelations`: このSceneでは開示してはならない
 
-required_revelations:
-  このSceneで開示しなければならない
+各値は、安定したKnowledge IDまたはThread IDを参照する。
 
-forbidden_revelations:
-  このSceneでは開示してはならない
-```
+`required_revelations`は`allowed_revelations`の部分集合でなければならない。
 
-対象はKnowledge IDまたはThread IDで参照する。
+`forbidden_revelations`は`allowed_revelations`および`required_revelations`と重複してはならない。
+
+Scene固有のallowedまたはrequired指定はWriterへの一時的な利用許可であり、Reader KnowledgeまたはCharacter Knowledgeを直接更新しない。
+
+確定本文に対応するEvidenceが存在する場合だけ、永続的な開示状態を更新する。
+
+開示許可によってPOV制約を上書きしてはならない。
 
 ---
 
@@ -1504,7 +1474,7 @@ created_at
 
 凍結後に本文を変更した場合、古い継続性更新とEvidenceを再利用してはならない。
 
-Hashではなく、Scene versionと採用関係で識別する。
+Hashだけに依存せず、未採用Candidate ID、Candidate version、確定Scene ID、採用関係で識別する。
 
 ---
 
@@ -1616,10 +1586,12 @@ Scene Commitは、Scene Card、本文、Continuity Update、新Generationを一�
 
 ```text
 scene_id
-scene_version
 parent_generation_id
 result_generation_id
-scene_card_version
+scene_card_candidate_id
+scene_card_candidate_version
+prose_candidate_id
+prose_candidate_version
 continuity_update_id
 committed_at
 commit_summary
@@ -1639,7 +1611,7 @@ basis_generation_idが一致する
 Evidenceが本文に存在する
 Updateがallowed_updates内である
 result_generation_idがparent_generation_idの直接後継である
-同じScene versionが複数Generationへ競合採用されていない
+同じ確定Scene IDが異なるresult Generationへ競合確定されていない
 本文が空でない
 ```
 
@@ -1689,9 +1661,9 @@ gen-000003
 
 通常のGenerationは、直前の採用済みGenerationを一つだけ親として持つ。
 
-Version 1では、Generationのbranchやmergeを標準機能にしない。
+Version 1ではGenerationのbranch、merge、過去Generationの修正を提供しない。
 
-設計Revisionで過去状態を修正する必要がある場合も、新しいGenerationとして現在系統の先へ進める。
+確定済みInitial Design、Canon、State、Generationの訂正が必要な場合は、現在系統へ修正Generationを追加せず`blocked`として停止し、新しいworkspaceが必要であることを示す。
 
 ---
 
@@ -1715,29 +1687,26 @@ Initial Generationは、少なくとも次を含む。
 
 ## 75. Generation Commit
 
-Generation Commitは、そのGenerationが作られた理由を示す。
+Generation Commitは、そのGenerationが作られた確定境界を示す。
 
 主要項目:
 
-```text
-commit_type
-source_artifact_type
-source_artifact_id
-summary
-changed_targets
-created_at
-```
+- `commit_type`
+- `source_artifact_type`
+- `source_artifact_id`
+- `summary`
+- `changed_targets`
+- `created_at`
 
-`commit_type`例:
+`commit_type`は次のいずれかとする。
 
-```text
-initial_design
-scene
-manual_revision
-recovery_adoption
-```
+- `initial_design`
+- `scene`
+- `recovery_finalize`
 
-`recovery_adoption`は新しい物語変更ではなく、既に完成していた成果物を現在状態へ反映したことを表す。
+`recovery_finalize`は新しいStory変更ではなく、Crash前に完成していた同一成果物の確定処理を完了したことを表す。
+
+`manual_revision`や確定成果物の再採用を表す値はVersion 1で使用しない。
 
 ---
 
@@ -1761,44 +1730,55 @@ Commitのsource artifactが存在する
 
 ## 77. Volume Handoff
 
-Volume Handoffは、巻終了時の実際のStory状態を次巻またはCompletionへ渡す要約である。
+Volume Handoffは、一巻の最終Generationと確定済み成果物を根拠として、LLMが作る**補助要約**である。詳細なStory Authorityではなく、次巻計画とCompletionが必要な情報を理解しやすく受け渡すために使う。
+
+最終巻を含むすべてのVolumeについて、一件の確定済みHandoffを作成する。
 
 主要項目:
 
-```text
-handoff_id
-volume_number
-basis_generation_id
-completed_chapter_ids
-completed_scene_ids
-character_states
-relationship_states
-resolved_threads
-open_threads
-new_constraints
-ending_progress
-next_volume_requirements
-issues
-created_at
-```
+- `handoff_id`
+- `volume_number`
+- `basis_generation_id`
+- `completed_chapter_ids`
+- `completed_scene_ids`
+- `character_states`
+- `relationship_states`
+- `resolved_threads`
+- `open_threads`
+- `new_constraints`
+- `ending_progress`
+- `next_volume_requirements`
+- `source_refs`
+- `created_at`
+
+コードはLLM呼出し前に、巻開始・巻末Generation、確定Scene、Evidence、採用済みPlan、Thread、Ending Designから**Handoff source bundle**を構築する。source bundleは、ID・状態値・Evidence・参照関係を落とさず保持する構造化入力であり、先頭や末尾を切り出すだけの機械的要約ではない。
+
+LLMはsource bundleだけを根拠に、次を含む読みやすい構造化Handoffを生成する。
+
+- 主要人物とRelationshipの巻末状態および、次巻で重要な変化
+- 解決済み／未解決Threadと、その根拠Scene
+- 新たな制約、Endingへの進捗、次巻で無視できない結果
+- 各意味的主張を解決できる`source_refs`
+
+`character_states`、`relationship_states`、`resolved_threads`、`open_threads`、`new_constraints`、`ending_progress`、`next_volume_requirements`は、自然言語の印象だけで作成してはならない。LLM出力はsource bundle内のID・状態・Evidenceへ参照を持ち、コードは参照先、対象Volume、巻末Generation、完了済みScene、列挙値を検証する。
+
+生成済みHandoffは独立したLLM Reviewの対象とする。Reviewは、根拠のない出来事、重要な未解決事項の脱落、状態の取り違え、次巻またはCompletionに必要な情報の不足を確認する。`error`があれば未採用HandoffをRevisionし、再Reviewする。
+
+同じ`volume_number`に確定済みHandoffを複数作成してはならない。
 
 ---
 
-## 78. Handoffの内容
+## 78. HandoffのAuthority
 
 Handoffは、すべてのCanonとStateを複製しない。
 
-次の処理に必要な要約と参照だけを持つ。
+巻中の重要変化、巻末時点の主要状態、未解決事項、Endingへの進捗など、後続処理に必要な要約と参照だけを持つ。
 
-```text
-巻中の重要変化
-巻末時点の主要状態
-次巻で無視できない結果
-未解決事項
-Endingへの進捗
-```
+詳細なStory Authorityは`basis_generation_id`が示すGenerationである。
 
-詳細な正本は、`basis_generation_id`が示すGenerationである。
+Handoffの各要約は、`source_refs`を通じてbasis Generationと確定済み成果物へ解決できなければならない。参照先が変化または不整合ならHandoffをAuthorityとして使わず、再評価または人間確認を要求する。
+
+最終巻のHandoffは次巻入力ではなく、Completion入力として使用する。
 
 ---
 
@@ -1806,119 +1786,109 @@ Endingへの進捗
 
 Handoffは次を行ってはならない。
 
-```text
-本文にない出来事の追加
-未解決Threadの無断解決
-次巻の本文作成
-Canonの変更
-Ending条件の変更
-```
+- 本文またはGenerationにない出来事の追加
+- 未解決Threadの無断解決
+- 次巻の本文またはPlanの作成
+- CanonまたはStateの変更
+- Ending条件の変更
 
-Handoffは要約であり、新しい物語生成ではない。
+Handoffは新しい物語生成、Story Authority、確定成果物のRevisionではない。
 
 ---
+
 
 # Part X: ReviewとRevisionモデル
 
 ## 80. Review Result
 
-Review Resultは、一つのCandidateに対する評価である。
+Review Resultは、一つの未採用Candidate versionに対する評価である。
 
 主要項目:
 
-```text
-review_id
-target_type
-target_id
-target_version
-decision
-issues
-summary
-created_at
-```
+- `review_id`
+- `target_type`
+- `target_id`
+- `target_version`
+- `decision`
+- `issues`
+- `summary`
+- `created_at`
 
-`decision`推奨値:
+`decision`は次のいずれかとする。
 
-```text
-accept
-revise
-reject
-```
+- `accept`
+- `revise`
+- `reject`
+
+`error`が一件でも存在する場合、`accept`にしてはならない。
+
+`warning`または`note`だけの場合は`accept`できる。
 
 ---
 
 ## 81. Review Issue
 
-一つのIssueは、具体的かつ修正可能でなければならない。
+一つのIssueは、具体的で対象Candidateに関連付け可能でなければならない。
 
 主要項目:
 
-```text
-issue_id
-category
-severity
-location
-description
-expected
-suggestion
-```
+- `issue_id`
+- `category`
+- `severity`
+- `location`
+- `evidence_locator`
+- `description`
+- `expected`
+- `suggestion`
 
 `category`例:
 
-```text
-schema
-brief_mismatch
-continuity
-knowledge
-pov
-disclosure
-character
-plot
-style
-safety
-```
+- `schema`
+- `brief_mismatch`
+- `continuity`
+- `knowledge`
+- `pov`
+- `disclosure`
+- `character`
+- `plot`
+- `style`
+- `safety`
+
+`evidence_locator`は、対象CandidateまたはReview入力に含まれるartifact ID、field pathまたは本文range、必要時の引用を持つ。コードで解決できないlocatorを持つIssueは無効とし、Revision Recordへ渡してはならない。
 
 ---
 
 ## 82. Issue Severity
 
-推奨値:
+`severity`は次のいずれかとする。
 
-```text
-error
-warning
-note
-```
+- `error`: Candidateの採用を禁止する
+- `warning`: 採用可能だが注意事項として記録する
+- `note`: 採用可能な改善提案として記録する
 
-意味:
-
-- `error`: 採用不可。
-- `warning`: 採用判断が必要。
-- `note`: 改善提案であり、必須修正ではない。
-
-Reviewごとに独自の似たseverityを作らない。
+Reviewごとに独自の類似severityを追加してはならない。
 
 ---
 
 ## 83. Revision Record
 
-Revision Recordは、どのReviewを受けて新Candidateが作られたかを示す。
+Revision Recordは、Reviewを受けて新しい未採用Candidate versionが作られた関係を示す作業データである。
 
 主要項目:
 
-```text
-revision_id
-original_candidate_id
-original_version
-review_id
-result_candidate_id
-result_version
-addressed_issue_ids
-unresolved_issue_ids
-created_at
-```
+- `revision_id`
+- `original_candidate_id`
+- `original_version`
+- `review_id`
+- `result_candidate_id`
+- `result_version`
+- `addressed_issue_ids`
+- `unresolved_issue_ids`
+- `created_at`
 
-Revision RecordはCandidate本文を複製しない。
+Revision RecordはCandidate本文を複製せず、Story Authorityにもならない。
+
+確定済みInitial Design、採用済みPlan、確定済みSceneその他の確定成果物をRevision対象にしてはならない。
 
 ---
 
@@ -1926,156 +1896,110 @@ Revision RecordはCandidate本文を複製しない。
 
 ReviewとRevisionは次を満たす。
 
-```text
-Review対象のversionが一意
-Revision結果は対象より新しいversion
-ReviewがCandidateを直接変更しない
-Revisionが完全な置換Candidateを持つ
-未解決errorがあるCandidateを自動採用しない
-```
+- Review対象は一つの未採用Candidate versionである
+- Review対象のIDとversionが一意に特定できる
+- Reviewが対象Candidateを直接変更しない
+- Revision結果は同じCandidate IDの新しいversionである
+- Revision結果は完全な置換Candidateである
+- 未解決`error`があるCandidateを採用しない
+- `warning`と`note`だけを理由に採用を禁止しない
+- 採用後のCandidateへRevisionを適用しない
 
 ---
+
 
 # Part XI: Completionモデル
 
 ## 85. Completion前確認
 
-Completion前確認は、Completionを開始できるかをコードで確認した結果である。
+Completion callの前に、コードで次を確認する。
 
-確認例:
+- Series Planが要求する全Volumeが完了している
+- 対象ごとに採用済みPlanが正確に一件存在する
+- 全Chapterと全予定Sceneが確定している
+- 最終巻を含む全Volume Handoffが存在する
+- 現在Generationが最終予定Sceneの確定結果である
+- 未完了の執筆、採用、確定、Recovery処理がない
+- 主要Thread、Ending条件、主要Arcを評価できる
+- Plan、Scene、Handoffの実集合が期待集合と一致する
 
-```text
-全Volumeが完了
-全計画Sceneが確定
-未完了Sceneなし
-主要Threadが評価可能
-Ending条件が評価可能
-最終Handoffが存在
-```
+競合PlanやAuthority不整合がある場合は、推測せず人間確認を要求する。
 
-独立した永続artifactにする必要はない。
-
-Completion Result内へ要約を含めてもよい。
+この確認を独立したhash付き永続artifactにする必要はない。
 
 ---
 
 ## 86. Completion Result
 
-Completion Resultは、シリーズの完結状態を表す。
+Completion Resultは、特定の確定済み入力集合を評価した完結判定である。
 
 主要項目:
 
-```text
-completion_id
-basis_generation_id
-status
-summary
-precheck_summary
-thread_checks
-ending_checks
-character_arc_checks
-relationship_arc_checks
-issues
-created_at
-```
+- `completion_id`
+- `basis_generation_id`
+- `evaluated_series_plan_id`
+- `evaluated_volume_plan_ids`
+- `evaluated_chapter_plan_ids`
+- `evaluated_scene_plan_ids`
+- `evaluated_scene_refs`
+- `evaluated_handoff_ids`
+- `status`
+- `summary`
+- `precheck_summary`
+- `thread_checks`
+- `ending_checks`
+- `character_arc_checks`
+- `relationship_arc_checks`
+- `issues`
+- `created_at`
 
-`status`:
+`evaluated_scene_refs`は各確定Scene本文を一意に解決できる情報を計画順で保持する。
 
-```text
-complete
-complete_with_issues
-incomplete
-```
+各要素は、Scene ID、Scene Plan ID、result Generation ID、採用元Scene Card／本文CandidateのIDとversion、および`scene-card.json`、`prose.md`、`continuity.json`、`commit.json`のSHA-256 digestを保持する。
+
+このdigestはCompletion評価後の外部変更をPublication確定時とRecovery時に検出する目的だけに使用する。相違時はPublicationを作成せず`failed`かつ`manual_review_required`とする。Manifest、hash chain、Story Authorityとして使用しない。
+
+`status`は`complete`、`complete_with_issues`、`incomplete`のいずれかとする。
+
+Completion Resultはimmutableとする。
 
 ---
 
 ## 87. Thread Check
 
-Thread Checkは、Completion時点での一Threadの評価である。
+完結必須Threadが未解決の場合、`complete`または`complete_with_issues`にしてはならない。
 
-主要項目:
-
-```text
-thread_id
-required_for_completion
-status
-evidence_scene_ids
-assessment
-issues
-```
-
-必須Threadが`open`または`progressing`のままなら、原則として`complete`にはできない。
+Thread Checkは少なくともThread ID、必須性、状態、Evidence Scene、評価、Issueを持つ。
 
 ---
 
 ## 88. Ending Check
 
-Ending Checkは、Ending Designの一条件に対する評価である。
+Ending必須条件が満たされない場合、`complete`または`complete_with_issues`にしてはならない。
 
-主要項目:
-
-```text
-requirement_id
-status
-evidence_scene_ids
-assessment
-issues
-```
-
-`status`推奨値:
-
-```text
-satisfied
-partially_satisfied
-not_satisfied
-not_applicable
-```
+Ending Checkは少なくとも条件ID、状態、Evidence Scene、評価、Issueを持つ。
 
 ---
 
-## 89. Character Arc Check
+## 89. Arc Check
 
-主要人物の長期Arcが、計画と本文上でどこまで達成されたかを評価する。
+主要Character ArcとRelationship Arcについて、計画上と確定本文上の到達点を評価する。
 
-主要項目:
-
-```text
-character_id
-planned_end_state
-actual_end_state
-status
-evidence_scene_ids
-assessment
-```
-
-計画通りでないことだけを理由に未完結としない。
-
-作品として意味のある代替到達点かを評価する。
+計画との差異だけで未完結とせず、意味のある代替到達点かを評価する。
 
 ---
 
 ## 90. `complete_with_issues`
 
-`complete_with_issues`は、Publication可能だが軽微な注意事項が残る状態である。
+`complete_with_issues`は完結必須条件を満たし、軽微な注意事項だけが残る場合に使用する。
 
-使用例:
+次の場合は`incomplete`とする。
 
-```text
-必須ではない副Threadが弱く残る
-軽微な表現上の不整合がある
-補足的な人物Arcが十分でない
-```
-
-使用してはならない例:
-
-```text
-主要Threadが未解決
-Ending必須条件を満たさない
-最終Sceneが欠落
-主人公の結末が不明
-```
-
-これらは`incomplete`である。
+- 主要Threadが未解決
+- Ending必須条件を満たさない
+- 予定Sceneまたは最終Sceneが欠落
+- 必須Arcを評価できない
+- Plan、Scene、Handoff集合が期待集合と一致しない
 
 ---
 
@@ -2083,14 +2007,14 @@ Ending必須条件を満たさない
 
 Completion Resultは次を満たす。
 
-```text
-basis_generation_idが最終採用Generation
-全必須Threadを評価
-全Ending必須条件を評価
-statusとchecksが矛盾しない
-incompleteを通信errorとして扱わない
-同じ結果をcompleteになるまで再試行しない
-```
+- `basis_generation_id`が最終採用Generationである
+- 評価したPlan、Scene、Handoffの全IDを保持する
+- 評価入力集合がCompletion前確認の集合と一致する
+- 全必須Thread、Ending条件、主要Arcを評価している
+- statusと各Checkが矛盾しない
+- Evidenceが確定本文へ解決する
+- `incomplete`を通信失敗として扱わない
+- 同じ入力を成功まで無制限に再評価しない
 
 ---
 
@@ -2098,99 +2022,87 @@ incompleteを通信errorとして扱わない
 
 ## 92. Publication Metadata
 
-Publication Metadataは、読者向け成果物の構成を示す。
+Publication Metadataは、読者向け成果物の構成と使用入力を示す。
 
 主要項目:
 
-```text
-publication_id
-title
-language
-volume_count
-volume_entries
-basis_generation_id
-completion_id
-completion_status
-created_at
-```
+- `publication_id`
+- `brief_id`
+- `title`
+- `language`
+- `volume_count`
+- `volume_entries`
+- `completion_id`
+- `basis_generation_id`
+- `series_plan_id`
+- `volume_plan_ids`
+- `chapter_plan_ids`
+- `scene_plan_ids`
+- `scene_refs`
+- `created_at`
 
-`volume_entries`:
+`volume_entries`は少なくとも巻番号、題名、章数、Scene数、出力名を持つ。
 
-```text
-volume_number
-title
-chapter_count
-scene_count
-output_name
-```
+Metadataから、使用したBrief、採用済みPlan階層、確定Scene本文、Completion Resultを一意に解決できなければならない。
 
 ---
 
 ## 93. Publication本文
 
-Publication本文は、採用済みScene本文を計画順に連結して作る。
+Publication本文は、次の確定済み入力だけからコードで構築する。
 
-Publication Builderは次だけを追加できる。
+- Brief
+- 採用済みSeries／Volume／Chapter／Scene Plan
+- 確定済みScene本文
+- Completion Result
 
-```text
-作品題名
-巻題
-章題
-区切り
-目次
-必要なformatting
-```
+Scene本文は採用済みPlanの順序に従って連結する。
 
-新しい物語本文を生成してはならない。
+Publication Builderが追加できるものは、題名、巻題、章題、区切り、目次、決定的なformattingに限定する。
+
+新しい物語本文、出来事、説明、要約を生成してはならない。
 
 ---
 
 ## 94. Publicationから除外する情報
 
-Publicationへ含めない。
+Publicationへ次を含めてはならない。
 
-```text
-作者用秘密
-Review Issue
-Revision記録
-Provider request
-Provider response metadata
-Credential
-利用量
-内部Context
-Recovery情報
-未公開Ending Design
-```
+- 作者用秘密
+- Review Issue
+- Revision Record
+- Provider requestまたはresponse metadata
+- Credential
+- 利用量
+- 内部Context
+- Recovery情報
+- 未公開Ending Design
+- Candidateまたはstaging成果物
 
 ---
 
 ## 95. Publicationの完結条件
 
-Publicationは、Completion Resultが次の場合だけ確定できる。
+正式Publicationは、Completion Resultが`complete`または`complete_with_issues`の場合だけ確定できる。
 
-```text
-complete
-complete_with_issues
-```
+`incomplete`の場合は正式Publicationを作成しない。
 
-`incomplete`の場合は、previewを作るとしても正式Publicationとして扱わない。
-
-Version 1では、正式Publicationだけを標準成果物とする。
+Version 1ではpreviewを正式Publicationの代替成果物として扱わない。
 
 ---
 
 ## 96. Publicationの決定性
 
-同じ次の入力からPublicationを再構成した場合、同じ本文順と内容を得られなければならない。
+同じBrief、採用済みPlan階層、確定Scene本文、Completion Resultから再構築したPublicationは、同じ本文順と内容にならなければならない。
 
-```text
-採用済みPlan
-採用済みScene本文
-Publication formatting設定
-Completion Result
-```
+Publication確定前に次を確認する。
 
-Provider callを使って本文を再執筆しない。
+- Completionの評価済みPlan集合と現在の採用済みPlan集合が一致する
+- Completionの評価済みScene集合とPublicationのScene集合が一致する
+- `basis_generation_id`がCompletion Resultと一致する
+- 各Scene本文がCompletion評価時と同じ確定成果物である
+
+Provider call、生成モデル、独立Publication Plan、Publication Gate、Publication Manifest、LLMによる再監査を使用してはならない。
 
 ---
 
@@ -2198,70 +2110,72 @@ Provider callを使って本文を再執筆しない。
 
 ## 97. 全体関係
 
-主要な関係:
+外部入力は、BriefまたはKeywordsのどちらか一つである。
 
 ```text
 Keywords
   └── Brief
+```
 
+Briefを直接入力した場合、Keywords成果物は存在しない。
+
+主要成果物の関係:
+
+```text
 Brief
   └── Initial Design
       └── Initial Generation
+          └── Series Plan
+              └── Volume Plan
+                  └── Chapter Plan
+                      └── Scene Plan
+                          └── Scene Card
+                              └── Scene本文
+                                  └── Continuity Update
+                                      ├── Evidence
+                                      └── Generation
 
-Initial Design
-  └── Series Plan
-      └── Volume Plan
-          └── Chapter Plan
-              └── Scene Plan
-                  └── Scene Card
-                      └── Scene本文
-                          └── Continuity Update
-                              ├── Evidence
-                              └── Generation
+各Volumeの最終Generation
+  └── Volume Handoff
 
-Volume末尾
-  └── Handoff
-
-最終Handoff + 最終Generation
+全Plan + 全Scene + 全Handoff + 最終Generation
   └── Completion Result
-      └── Publication
+
+Brief + 全Plan + 全Scene本文 + Completion Result
+  └── Publication
 ```
 
 ---
 
 ## 98. SceneとGenerationの関係
 
-通常のScene確定では、次が一対一で対応する。
+一つのScene処理は、Scene PlanからScene確定まで同じ`basis_generation_id`と、そこから解決した同一のAuthority入力を使用する。
 
-```text
-一つの採用Scene version
-↓
-一つのContinuity Update
-↓
-一つの新Generation
-```
+Scene確定では、親Generationの直接後継Generationを一件作成する。
 
-同じScene versionから複数の競合Generationを作らない。
+異なるbasis GenerationのScene Card、本文、Continuity Update、Evidence、Scene Commitを混在させてはならない。
 
 ---
 
 ## 99. PlanとGenerationの関係
 
-Planは`basis_generation_id`を持つ。
+すべてのPlanは`basis_generation_id`を持つ。
 
-後続Generationが作られても、Planの基準を自動的に書き換えない。
+Planの採用または使用前に、基準Generationから解決した関連Authority入力が現在も同一であることを確認する。
 
-Plan利用時に、現在Generationとの差を確認する。
+採用済みPlanは将来方針であり、Story StateのAuthorityではない。
 
 ---
 
 ## 100. CompletionとPublicationの関係
 
-Completion Resultは、特定Generationを評価する。
+Completion Resultは、評価したPlan、Scene、Handoff、最終Generationのidentityを保持する。
 
-Publicationは、同じGenerationとCompletion Resultを参照する。
+Publicationは、Completionが評価したものと同一の採用済みPlan集合、確定Scene集合、Scene本文、最終Generationを使用する。
 
-別GenerationのCompletion Resultを流用してはならない。
+Publication Metadataの`completion_id`と`basis_generation_id`はCompletion Resultと一致しなければならない。
+
+別の入力集合または別GenerationのCompletion Resultを流用してはならない。
 
 ---
 
@@ -2495,6 +2409,11 @@ Scene後:
   "issues": [
     {
       "category": "minor_thread",
+      "evidence_locator": {
+        "scene_id": "scene-000024",
+        "artifact": "prose.md",
+        "range": "最終二段落"
+      },
       "description": "町長選Threadの最終的な影響が本文で短くしか触れられていない"
     }
   ],
