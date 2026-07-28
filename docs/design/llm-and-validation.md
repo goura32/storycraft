@@ -44,7 +44,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-確認・修正・再確認は、生成時の入力束を省略、置換、最新探索してはなりません。修正を繰り返す場合も `generation_context` は同一で、直前の形式有効候補と直前の有効確認応答だけを追加します。確認応答に無効な根拠位置の issue があれば、システムが除外した後の有効 issue だけを修正入力に渡します。
+確認・修正・再確認は、生成時の入力束を省略、置換、最新探索してはなりません。反復番号を `r=0` を生成、`r>=1` を修正とすると、確認 `review(r)` の入力候補は `candidate(r)`、修正 `candidate(r+1)` の入力候補は **直前の `candidate(r)`**、修正入力の確認結果は **今回の `review(r)`** です。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の review を、直前候補・今回確認の代わりに使うことはできません。確認応答に無効な根拠位置の issue があれば、システムが除外した後の有効 issue だけを修正入力に渡します。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
