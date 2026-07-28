@@ -1,6 +1,6 @@
 # Storycraft
 
-Storycraft は、作品の依頼文またはキーワードから、日本語の長編シリーズを段階的に設計・執筆し、整合性を保った Markdown 原稿を出力するローカル実行型のコマンドラインツールです。
+Storycraft は、作品の依頼文またはキーワードから、日本語の長編シリーズを段階的に設計・執筆し、整合性を保った Markdown 形式（見出しなどを記号で表すテキスト形式）の原稿を出力するローカル実行型のコマンドラインツールです。
 
 ## V1 の範囲
 
@@ -8,7 +8,7 @@ Storycraft は、作品の依頼文またはキーワードから、日本語の
 - 日本語で 4〜10 巻の作品を作る
 - 依頼文またはキーワード、計画、場面本文、継続性、巻ごとの引継ぎ、完結判定、公開用原稿を扱う
 - 新規実行 `run`、再開 `resume`、一工程実行 `step`、状態表示 `status`、検証 `validate` を使う
-- 創作や意味の評価は LLM、形式・保存・復旧は決定的なコードが担当する
+- 創作や意味の評価は大規模言語モデル（LLM）、形式・保存・復旧は決定的なコードが担当する
 
 複数人の同時編集、分散実行、外部の作業場所、自動ウェブ検索、公開時の本文再生成は V1 の対象外です。
 
@@ -17,10 +17,10 @@ Storycraft は、作品の依頼文またはキーワードから、日本語の
 使えるコマンドと引数は、実行環境で確認します。
 
 ```bash
-storycraft --help
-storycraft run --help
-storycraft resume --help
-storycraft step --help
+uv run storycraft --help
+uv run storycraft run --help
+uv run storycraft resume --help
+uv run storycraft step --help
 ```
 
 新規作品は、依頼文またはキーワードのどちらか一方から始めます。入力形式、制作、品質、復旧、公開の契約は[仕様書](docs/SPECIFICATION.md)を参照してください。
@@ -45,8 +45,8 @@ storycraft step --help
 ## 開発者向け検証
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
-bash scripts/wheel_smoke.sh
+uv run python -m unittest discover -s tests -p "test_*.py"
+uv run bash scripts/wheel_smoke.sh
 ```
 
 > Storycraft は物語の意味生成を LLM に任せながら、状態、保存、継続性、再開、完結判定、公開を明示的な契約と決定的なコードで管理します。
