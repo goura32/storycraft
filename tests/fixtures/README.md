@@ -23,7 +23,7 @@
 | `generation/` | Initial GenerationとScene後Generation |
 | `handoff/` | Volume Handoff |
 | `completion/` | 完結判定3状態 |
-| `publication/` | 4巻Publication |
+| `publication/` | 独立した最小Publication組立scenario |
 | `workspace/` | run-state、counters、config |
 | `recovery/` | Crash位置と期待するRecovery分類 |
 | `provider/` | Provider Adapter応答 |
@@ -39,8 +39,12 @@
 
 `provider/prose-success.txt`と`scene/prose.md`は、Provider成功応答とScene本文という別の検証目的で同じ本文を使う。片方を変更する場合は、同一本文である必要が残るかを確認する。
 
+`publication/`はScene fixtureとは独立した最小scenarioである。同じ題名・章名は説明用の再利用であり、`scene/prose.md`を要約・変換して作る出力例ではない。
+
 ## 利用方法
 
 試験コードは、このdirectoryをpackage source treeから直接参照せず、repository rootまたはtest resource helperから解決する。
 
 不正fixtureは、file名または隣接する`expected.json`で期待errorを示す。
+
+`provider/malformed-json.txt`は、コードフェンスや補足文を含むため応答全体が生JSONではない形式不正を表す。Recoveryの`tree.txt`はcrash時の配置だけを表し、期待する`resume`、`regenerate`、`manual`分類は同じscenarioの`expected.json`で判定する。

@@ -67,9 +67,11 @@ flowchart TD
         K --> W[本文]
         W --> N[継続性更新]
         N --> M[Scene Commit]
+        M -->|次の Scene| SP
       end
+      M -->|当該章の全 Scene 確定後・次章あり| CP
     end
-    M -->|当該巻の全 Scene 確定後| H[巻 Handoff]
+    M -->|当該巻の全章・Scene 確定後| H[巻 Handoff]
   end
   H --> X{次の巻があるか}
   X -->|ある| VP
@@ -92,11 +94,12 @@ Completion Result を除くすべての LLM 生成 Candidate は次の手順を�
 1. 生成または要約する。
 2. schema、必須項目、ID、参照、更新可能範囲をコードで検証する。
 3. 独立した LLM Review を実行する。
-4. error Issue があれば、限定された Revision を行う。
-5. Revision 後の Candidate を同じ決定的規則で再検証する。形式不正は format retry とし、意味的 error は再 Review へ進めない。
-6. 再 Review で error がない Candidate だけを採用する。
+4. error がなければ Candidate を採用する。Revision も再 Review も行わない。
+5. error Issue があれば、限定された Revision を行う。
+6. Revision 後の Candidate を同じ決定的規則で再検証する。形式不正は format retry とし、意味的 error は再 Review へ進めない。
+7. Revision を行った Candidate は再 Review で error がない場合だけ採用する。
 
-Review は Candidate を書き換えません。Revision は Candidate 全体を置換し、指摘対象外を無断変更してはなりません。Issue は対象 artifact、field path または本文範囲へ解決できる `evidence_locator` を持ちます。解決できない Issue は無効として Review 結果から除外し、Revision 入力にも error 判定にも使いません。
+Review は Candidate を書き換えません。Revision は Candidate 全体を置換し、指摘対象外を無断変更してはなりません。Issue severity は `error`、`warning`、`info` のいずれかです。`error` は採用を止め、`warning` は採用を止めないが記録し、`info` は参考情報です。LLM Review が severity を提案し、コードは列挙値と根拠位置を検証します。Issue は対象 artifact、field path または本文範囲へ解決できる `evidence_locator` を持ちます。解決できない Issue は無効として Review 結果から除外し、Revision 入力にも error 判定にも使いません。
 
 Review と Revision の回数、通信 retry、形式 retry は operation ごとに上限を持ち、Call audit に残します。形式不正は再送対象、意味的な error は Revision 対象です。Review 上限後も error が残る Candidate は原則 `blocked` とし、採用してはなりません。未採用 Candidate の前提だけが失効した場合は、その Candidate を破棄し、新しい正本から同じ工程を再生成できます。既に確定した成果物を再生成して別結果を探索してはなりません。
 
@@ -126,13 +129,15 @@ workspace は排他 lock を取得して操作します。起動時は、run-sta
 
 Recovery は前進型で、確定済み成果物を戻したり上書きしたりしません。Scene Commit と Publication の途中 crash では、staging と pending commit を使って、同じ成果物を二重確定せず、不要な LLM Call を増やさずに収束します。
 
+Budget 到達済み workspace では、`resume` と `step` は必要な code-only 検証・Recovery だけを進めます。最初に新しい LLM Call が必要な工程で run-state にその工程を保持したまま `blocked` へ遷移し、予算追加後に同じ工程から再開します。
+
 ## 10. 完結と公開
 
-全巻が完了し、必要な Thread、Ending、Arc を根拠とともに評価できるときだけ Completion を実行します。Completion は `complete`、`complete_with_issues`、`incomplete` を返します。必須 Check が全て満たされ error Issue がない場合は `complete`、必須 Check は評価できるが非阻害 Issue が残る場合は `complete_with_issues`、評価前提または必須 Check が欠ける場合は `incomplete` とします。
+全巻が完了し、必要な Thread、Ending、Arc を根拠とともに評価できるときだけ Completion を実行します。必須 Check は、全ての採用済み Plan の作業が確定済みであること、必須 Thread・Ending・Arc ごとに根拠参照付きの結論があること、未解決の `error` Issue がないことです。Check を評価できない場合も `incomplete` とします。Completion は `complete`、`complete_with_issues`、`incomplete` を返します。必須 Check が全て満たされ warning もない場合は `complete`、必須 Check は全て満たされるが `warning` が残る場合は `complete_with_issues`、それ以外は `incomplete` とします。
 
-Completion の意味評価は一回を基本とし、望ましい status を得るために入力集合や結論を変えて再評価してはなりません。直後の Review は、評価対象、Check、Issue、Evidence、summary、status の整合だけを検査します。Revision は説明と参照の訂正だけに限り、status や Check 判定を変えません。
+Completion の意味評価は一回を基本とし、望ましい status を得るために入力集合や結論を変えて再評価してはなりません。直後の Review は、評価対象、Check、Issue、Evidence、summary、status の整合だけを検査します。Revision は説明と参照の訂正だけに限り、status や Check 判定を変えません。Review が status または必須 Check の不整合を検出した場合、その Completion は公開せず run を `manual` とします。人間が正本の不整合を別工程で確定・修正した後だけ、新しい確定成果物を根拠に Completion を実行できます。この再実行は望ましい status を探すために行ってはなりません。
 
-Publication は確定済み Scene と Completion から決定的に組み立てます。新しい物語本文や設定を生成せず、作者用情報を含めません。巻・章・Scene の順序、Completion との整合、出力の完全性を検証して確定します。`complete` は Publication を作成でき、`complete_with_issues` は残存 Issue を警告として明示した Publication を作成できます。`incomplete` は Publication を作成できず、V1に手動例外はありません。
+Publication は確定済み Scene と Completion から決定的に組み立てます。新しい物語本文や設定を生成せず、作者用情報を含めません。巻・章・Scene の順序、Completion との整合、出力の完全性を検証して確定します。`complete` は Publication を作成でき、`complete_with_issues` は残存 `warning` の Issue ID と要約を本文冒頭の「公開上の注意」に明示した Publication を作成できます。`incomplete` は Publication を作成できず、V1に手動例外はありません。
 
 ## 11. 品質と受入条件
 
