@@ -20,7 +20,7 @@ V1 の Provider は `ollama` だけです。設定 validator は他の provider 
 | 技術的再試行 | 接続不能、Provider エラー、初回・idle timeout、ストリーム中断 | `retry.technical_max_attempts`。作業場所作成時に固定 | `blocked/manual_review_required` |
 | 形式不正再呼出し | 空応答、parse失敗、非 object、schema・参照・根拠・更新範囲の不適合 | 各論理 operation で初回を含め固定5回 | `blocked/manual_review_required` |
 
-`candidate.generate`、`candidate.review`、`candidate.revision` は別々の operation です。技術失敗は応答本文がないため、形式不正5回を消費しません。形式不正の各回は別の seed を使い、すべての物理呼出しを記録します。
+`candidate.generate`、`candidate.review`、`candidate.revision` は別々の operation です。`request` を含むすべての CandidateResponse kind に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正5回を消費しません。形式不正の各回は別の seed を使い、すべての物理呼出しを記録します。
 
 ```python
 def invoke_structured(operation):

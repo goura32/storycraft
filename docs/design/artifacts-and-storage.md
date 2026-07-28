@@ -24,7 +24,7 @@ runtime/selections/selection-000001/record.json
 }
 ```
 
-初期設計の採用後に最初の snapshot を作り、計画採用・場面確定・未公開部分の解決記録による参照変更のたびに、前 snapshot を入力として新 snapshot を確定します。公開済み巻の構成元 slot は後続 snapshot でも変更を拒否します。
+依頼採用後に最初の snapshot を作り、計画採用・場面候補採用・場面確定・未公開部分の解決記録による参照変更のたびに、前 snapshot を入力として新 snapshot を確定します。公開済み巻の構成元 slot は後続 snapshot でも変更を拒否します。
 
 実行状態は現在の `selection_id` だけを参照します。作品の事実、計画本文、公開原稿、LLM 応答は複写しません。
 
@@ -81,8 +81,8 @@ ID は採番後に変更しません。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。
 3. 形式、必須 field、参照実在、採用状態、内容の内部整合を決定的に検証する。
 4. `pending_commit.phase=prepared` を保存する。
-5. staging を最終配置へ原子的に rename する。
-6. 最終配置を再検証し、`pending_commit` を `<kind>_finalized` にする。
+5. staging を最終配置へ原子的に rename する。scene commit は scene rename 後 `scene_finalized`、generation rename 後 `generation_finalized` にする。
+6. 最終配置を再検証し、`candidate_adoption` は `artifact_finalized`、`volume_publication` は `publication_finalized`、`resolution_application` は `record_finalized` にする。
 7. 実行状態の採用参照・公開記録・次工程を更新し、`pending_commit` を消す。
 
 最終配置が既にある場合は上書きしません。復旧時に staging と final の両方がある、またはどちらかが不正なら、自動選択せず停止します。

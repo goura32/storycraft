@@ -50,9 +50,9 @@
 
 `current_target` は未完工程の座標と入力参照だけを持つ stage-local な値です。各工程の validator が許可 field を閉じます。正本の内容を埋め込みません。
 
-`pending_commit` は tagged union とし、共通 field を `kind`、`target_id`、`phase` とします。
+`pending_commit` は kind ごとの phase enum を使います。
 
-| `kind` | `phase` | 収束処理 |
+| `kind` | 許可 phase | 収束処理 |
 |---|---|---|
 | `candidate_adoption` | `prepared` / `artifact_finalized` | 候補版と採用参照を検証し、参照更新だけを完了する |
 | `scene_commit` | `prepared` / `scene_finalized` / `generation_finalized` | 場面・更新・作品状態を検証し、二重確定せず前進する |
@@ -65,8 +65,10 @@
 
 工程名は以下を残します。
 
+`request_intake` は keyword 入口だけの保存 stage です。直接依頼では `initial_design` を最初の stage とします。
+
 ```text
-`input → initial_design → series_plan → volume_plan → chapter_plan → scene_plan`
+`input → request_intake → initial_design → series_plan → volume_plan → chapter_plan → scene_plan`
 → scene_card → scene_prose → scene_continuity → scene_commit
 → volume_publication
 ```
