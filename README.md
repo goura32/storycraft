@@ -43,11 +43,10 @@ uv run storycraft step --help
 | [実装状況](docs/IMPLEMENTATION_STATUS.md) | 時点付きの実装・検証記録。仕様正本ではない |
 | [テスト用資料の説明](tests/fixtures/README.md) | 自動試験で使う資料の構成 |
 
-## 開発者向け検証
+## 開発者向け基本検証
 
 ```bash
 uv run python -m unittest discover -s tests -p "test_*.py"
-uv run bash scripts/wheel_smoke.sh
 ```
 
 > Storycraft は物語の意味生成を LLM に任せながら、状態、保存、継続性、再開、巻公開、最終巻公開による制作完了を明示的な契約と決定的なコードで管理します。
