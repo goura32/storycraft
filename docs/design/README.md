@@ -18,11 +18,11 @@
 | [初期設計](initial-design-contract.md) | 一括生成・確認・修正・採用、初期作品状態、シリーズ計画への入力 |
 | [計画工程](planning-contract.md) | シリーズ・巻・章・場面計画の入力、出力、採用、検証 |
 | [場面制作](scene-production-contract.md) | カード、本文、継続性更新、場面確定の入力、出力、採用、検証 |
-| [共通 schema と正規化](schemas-and-normalization.md) | 保存 schema、LLM 応答、ID 採番、canonical 化 |
-| [依頼入口と thread](request-and-thread-contract.md) | keyword 入口、依頼採用、予定から本文根拠・解決まで |
-| [stage operation](stage-operation-contract.md) | operation、checkpoint、stage ごとの target と停止 |
-| [確定と復旧](commit-and-recovery-contract.md) | lock、atomic commit、crash 収束表 |
-| [管理 API・CLI・受入](admin-cli-and-acceptance-contract.md) | admin grant、通常 CLI、fake Ollama、最小受入 |
+| [共通スキーマと正規化](schemas-and-normalization.md) | 保存スキーマ、LLM 応答、ID 採番、正規形化 |
+| [依頼入口と未解決事項](request-and-thread-contract.md) | キーワード入口、依頼採用、予定から本文根拠・解決まで |
+| [工程処理](stage-operation-contract.md) | 処理、確定点、工程ごとの対象と停止 |
+| [確定と復旧](commit-and-recovery-contract.md) | ロック、原子的確定、異常終了収束表 |
+| [管理 API・CLI・受入](admin-cli-and-acceptance-contract.md) | 管理許可証、通常 CLI、模擬 Ollama、最小受入 |
 | [状態と遷移](state-and-transitions.md) | 実行状態 v2、工程、停止、保護された解決記録登録 |
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |
@@ -39,4 +39,4 @@
 
 ## 4. 実装前に守る境界
 
-実装は、まず状態・保存・決定的検証を完成させ、その後に LLM を接続します。LLM の出力、既存 fixture、既存テストの挙動を理由に、ここで確定した正本や遷移を弱めません。
+実装は、まず状態・保存・決定的検証を完成させ、その後に LLM を接続します。LLM の出力、既存試験用資料、既存テストの挙動を理由に、ここで確定した正本や遷移を弱めません。

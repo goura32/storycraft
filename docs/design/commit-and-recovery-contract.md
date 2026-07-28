@@ -2,48 +2,48 @@
 
 ## 1. 共通前提
 
-一つの workspace は一つの writer lock だけが変更できます。lock は `runtime/lock` にあり、workspace ID、run ID、PID、取得時刻を持ちます。`run`、`resume`、`step`、admin 解決登録は lock を取れなければ exit code `75` で何も変更しません。
+一つの作業場所は一つの書込みロックだけが変更できます。ロックは `runtime/lock` にあり、作業場所ID、run ID、PID、取得時刻を持ちます。`run`、`resume`、`step`、管理解決登録はロックを取れなければ終了コード `75` で何も変更しません。
 
-ID 予約、staging 作成、final rename、run-state 更新は同じ filesystem で行います。ID の欠番は許可します。予約済み ID は再利用しません。
+ID 予約、一時保存作成、最終配置への原子的な名前変更、run-state 更新は同じファイルシステムで行います。ID の欠番は許可します。予約済み ID は再利用しません。
 
 ## 2. 共通収束表
 
-`pending_commit` があるとき、Provider を呼ぶ前にこの表で収束します。
+`pending_commit` があるとき、提供者を呼ぶ前にこの表で収束します。
 
-| staging | final | state 参照 | 処理 |
+| 一時保存 | 最終配置 | 状態参照 | 処理 |
 |---|---|---|---|
-| 有効 | なし | 更新前 | staging を final へ rename。final を検証して state を更新 |
-| なし | 有効 | 更新前 | final を再検証して state を更新 |
-| なし | 有効 | 更新後 | final と state の参照を検証して pending を消す |
-| 有効 | 有効 | 任意 | `blocked`。`stop_reason=manual_review_required`、cause=`authority_reference_inconsistency` |
-| 不正 | 任意 | 任意 | `blocked`。`stop_reason=manual_review_required`、cause=`authority_reference_inconsistency` |
-| なし | なし | 任意 | `blocked`。`stop_reason=manual_review_required`、cause=`internal_error` |
+| 有効 | なし | 更新前 | 一時保存を最終配置へ原子的に名前変更。最終配置を検証して状態を更新 |
+| なし | 有効 | 更新前 | 最終配置を再検証して状態を更新 |
+| なし | 有効 | 更新後 | 最終配置と状態の参照を検証して保留中を消す |
+| 有効 | 有効 | 任意 | `blocked`。`stop_reason=manual_review_required`、原因=`authority_reference_inconsistency` |
+| 不正 | 任意 | 任意 | `blocked`。`stop_reason=manual_review_required`、原因=`authority_reference_inconsistency` |
+| なし | なし | 任意 | `blocked`。`stop_reason=manual_review_required`、原因=`internal_error` |
 
-「有効」は schema、参照、input selection、種類ごとの不変条件に通ることです。自動削除、自動選択、LLM 再呼出しはしません。
+「有効」はスキーマ、参照、入力選択、種類ごとの不変条件に通ることです。自動削除、自動選択、LLM 再呼出しはしません。
 
-## 3. kind ごとの state 更新
+## 3. 種類ごとの状態更新
 
-| kind | final 後に一回だけ行う state 更新 |
+| 種類 | 最終配置後に一回だけ行う状態更新 |
 |---|---|
-| candidate adoption | adoption record と successor selection を current selection にする。next stage / target を更新 |
-| scene commit | scene、generation、scene commit、successor selection を参照し、current generation / selection と次 target を更新 |
-| volume publication | publication record、manuscript、successor selection を参照し、published volumes と次巻 target または completed を更新 |
-| resolution application | resolution record と successor selection を参照し、recovery stage / target と current selection を更新して running にする |
+| 候補採用 | 採用記録と後続選択を現在選択にする。次工程 / 対象を更新 |
+| 場面確定 | 場面、作品状態、場面確定、後続選択を参照し、現在の作品状態 / 選択と次対象を更新 |
+| 巻公開 | 公開記録、原稿、後続選択を参照し、公開済み巻と次巻対象または完了を更新 |
+| 解決適用 | 解決記録と後続選択を参照し、復旧工程 / 対象と現在選択を更新して実行中にする |
 
-state 更新前に final artifact が不正なら停止します。state 更新後に final artifact が失われた場合も停止します。
+状態更新前に最終配置の成果物が不正なら停止します。状態更新後に最終配置の成果物が失われた場合も停止します。
 
-## 4. candidate adoption の詳細
+## 4. 候補採用の詳細
 
-candidate、review records、quality disposition、adoption record、successor selection を同じ staging directory に作ります。quality disposition が `blocked` なら adoption を作りません。artifact を先に final にし、adoption と successor selection を検証してから run-state を更新します。
+候補、確認記録、品質判定、採用記録、後続選択を同じ一時保存ディレクトリに作ります。品質判定が `blocked` なら採用記録を作りません。成果物を先に最終配置にし、採用記録と後続選択を検証してから run-state を更新します。
 
-## 5. scene commit の詳細
+## 5. 場面確定の詳細
 
-scene commit の staging は scene、successor generation、commit record、successor selection を含みます。すべてが同じ base generation、scene coordinate、scene prose、continuity update を参照しなければなりません。generation の更新は一度だけ適用します。
+場面確定の一時保存は場面、後続の作品状態、確定記録、後続選択を含みます。すべてが同じ基準作品状態、場面座標、場面本文、継続性更新を参照しなければなりません。作品状態の更新は一度だけ適用します。
 
-## 6. volume publication の詳細
+## 6. 巻公開の詳細
 
-volume publication の staging は publication record、manuscript、successor selection を含みます。record は全 scene、quality disposition、plan、current state、settings を current selection の slot と照合します。final rename 後だけ published volumes を追加します。
+巻公開の一時保存は公開記録、原稿、後続選択を含みます。記録は全場面、品質判定、計画、現在状態、設定を現在選択のスロットと照合します。最終配置への原子的な名前変更後だけ公開済み巻を追加します。
 
-## 7. lock の解放
+## 7. ロックの解放
 
-正常終了、blocked、例外のすべてで lock を解放します。異常終了後の stale lock は、PID が存在せず、lock の workspace ID が一致し、run-state が running または blocked のときだけ削除できます。条件を満たさない lock は人手確認待ちにします。
+正常終了、停止中、例外のすべてでロックを解放します。異常終了後の残存ロックは、PID が存在せず、ロックの作業場所ID が一致し、run-state が実行中または停止中のときだけ削除できます。条件を満たさないロックは人手確認待ちにします。

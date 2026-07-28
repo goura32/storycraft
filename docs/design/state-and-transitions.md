@@ -46,26 +46,26 @@
 
 ### 2.2 現在対象と保留中確定
 
-`current_selection_id` は不変の選択スナップショットを指します。下流工程は、この snapshot の slot だけを入力権限として読みます。`current_generation_id` は current state slot と一致するための簡便な整合性 field であり、単独で下流入力を決めません。
+`current_selection_id` は不変の選択スナップショットを指します。下流工程は、このスナップショットのスロットだけを入力権限として読みます。`current_generation_id` は現在状態スロットと一致するための簡便な整合性項目であり、単独で下流入力を決めません。
 
-`current_target` は未完工程の座標と入力参照だけを持つ stage-local な値です。各工程の validator が許可 field を閉じます。正本の内容を埋め込みません。
+`current_target` は未完工程の座標と入力参照だけを持つ stage-local な値です。各工程の検証器が許可項目を閉じます。正本の内容を埋め込みません。
 
-`pending_commit` は kind ごとの phase enum を使います。
+`pending_commit` は種類ごとの段階列挙値を使います。
 
-| `kind` | 許可 phase | 収束処理 |
+| `kind` | 許可段階 | 収束処理 |
 |---|---|---|
 | `candidate_adoption` | `prepared` / `artifact_finalized` | 候補版と採用参照を検証し、参照更新だけを完了する |
 | `scene_commit` | `prepared` / `scene_finalized` / `generation_finalized` | 場面・更新・作品状態を検証し、二重確定せず前進する |
 | `volume_publication` | `prepared` / `publication_finalized` | 巻公開物を検証し、公開記録追記と次巻または完了へ収束する |
 | `resolution_application` | `prepared` / `record_finalized` | 解決記録を検証し、許可された安全工程だけへ戻す |
 
-最終成果物がない、または staging と final がともに存在する・不整合である場合は、自動選択・自動削除をせず `blocked` にします。
+最終成果物がない、または一時保存と最終配置がともに存在する・不整合である場合は、自動選択・自動削除をせず `blocked` にします。
 
 ## 3. 工程遷移
 
 工程名は以下を残します。
 
-`request_intake` は keyword 入口だけの保存 stage です。直接依頼では `initial_design` を最初の stage とします。
+`request_intake` はキーワード入口だけの保存工程です。直接依頼では `initial_design` を最初の工程とします。
 
 ```text
 `input → request_intake → initial_design → series_plan → volume_plan → chapter_plan → scene_plan`
@@ -90,19 +90,19 @@ volume_publication
 
 ## 4. 通常の復旧
 
-`resume` と `step` は `running` のときだけ、保存済みの checkpoint を収束させた後に工程を進めます。`blocked` のときは `status` と `validate` だけを通常操作として許可します。Provider を呼ばない収束処理では LLM を初期化しません。
+`resume` と `step` は `running` のときだけ、保存済みの確定点を収束させた後に工程を進めます。`blocked` のときは `status` と `validate` だけを通常操作として許可します。提供者を呼ばない収束処理では LLM を初期化しません。
 
 失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。
 
 ## 5. 保護された解決記録登録
 
-通常の `run`、`resume`、`step`、`status`、`validate` は解決記録を作れません。内部 operation `register_resolution_record` だけが登録できます。
+通常の `run`、`resume`、`step`、`status`、`validate` は解決記録を作れません。内部処理 `register_resolution_record` だけが登録できます。
 
 ### 5.1 認可境界
 
 V1 のローカル作業場所では、同じ OS 利用者による直接ファイル編集を暗号学的に防ぐことは目的にしません。ここでの保護は、通常の制作 CLI から復帰を実行できない操作境界です。
 
-実装は `ResolutionAuthorizer` を注入し、workspace 外部の管理用 Unix domain socket を通じて署名済みの `ResolutionGrant` を検証します。標準の利用者向け `storycraft` CLI はこの socket を持たず、登録を拒否します。別 executable `storycraft-admin register-resolution` だけが socket へ要求を送り、server は peer OS UID を外部の運用者 allowlist と照合して grant を発行します。grant は `grant_id`、`operator_id`、`workspace_id`、`blocked_state_id`、許可 `cause`、発行時刻、失効時刻、署名を持ちます。grant 本体は管理 server の immutable ledger に保管し、workspace の解決記録は `grant_id` だけを参照します。server が未設定・grant が期限切れ・署名不正なら、登録せず `blocked` を維持します。試験では明示的な fake authorizer を注入します。
+実装は `ResolutionAuthorizer` を注入し、作業場所外部の管理用 Unix domain ソケットを通じて署名済みの `ResolutionGrant` を検証します。標準の利用者向け `storycraft` CLI はこのソケットを持たず、登録を拒否します。別 executable `storycraft-admin register-resolution` だけがソケットへ要求を送り、サーバーは接続元 OS UID を外部の運用者許可一覧と照合して許可証を発行します。許可証は `grant_id`、`operator_id`、`workspace_id`、`blocked_state_id`、許可 `cause`、発行時刻、失効時刻、署名を持ちます。許可証本体は管理サーバーの不変台帳に保管し、作業場所の解決記録は `grant_id` だけを参照します。サーバーが未設定・許可証が期限切れ・署名不正なら、登録せず `blocked` を維持します。試験では明示的な模擬認可器を注入します。
 
 ### 5.2 記録形式と手順
 
@@ -129,6 +129,6 @@ V1 のローカル作業場所では、同じ OS 利用者による直接ファ�
 
 `cause` は `invalid_response_limit`、`technical_retry_exhausted`、`provider_configuration_invalid`、`internal_error`、`authority_reference_inconsistency`、`volume_publication_invalid` のいずれかに閉じます。
 
-停止時には、停止理由、current selection、工程、対象、保留中確定を内容とする不変の `blocked-state-{通番}` 記録を確定する。grant はこの `blocked_state_id` に署名で束縛する。登録は、lock 取得→`blocked/manual_review_required` と blocked-state ID の照合→authorizer 検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新 snapshot の slot・公開済み巻の固定参照を検証→`current_selection_id` と戻り先を同じ state 更新で切替→`running` 復帰、の順です。crash recovery は記録と新 snapshot がともに確定済みのときだけ state を収束し、片方がない・不整合なら `blocked` を維持します。
+停止時には、停止理由、現在選択、工程、対象、保留中確定を内容とする不変の `blocked-state-{通番}` 記録を確定する。許可証はこの `blocked_state_id` に署名で束縛する。登録は、ロック取得→`blocked/manual_review_required` と blocked-state ID の照合→認可器検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新スナップショットのスロット・公開済み巻の固定参照を検証→`current_selection_id` と戻り先を同じ状態更新で切替→`running` 復帰、の順です。異常終了復旧は記録と新スナップショットがともに確定済みのときだけ状態を収束し、片方がない・不整合なら `blocked` を維持します。
 
-`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。選び直す artifact が未公開の下流 artifact の入力なら、解決記録はその artifact から未公開の依存グラフ末端までを置換または除外する閉包を示します。新 snapshot は閉包外の旧下流 slot を残してはなりません。閉包を作れない、または `recovery_stage` と `recovery_target` が新 snapshot の次に必要な slot と一致しない場合は、`blocked` を維持します。
+`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。選び直す成果物が未公開の下流成果物の入力なら、解決記録はその成果物から未公開の依存グラフ末端までを置換または除外する閉包を示します。新スナップショットは閉包外の旧下流スロットを残してはなりません。閉包を作れない、または `recovery_stage` と `recovery_target` が新スナップショットの次に必要なスロットと一致しない場合は、`blocked` を維持します。

@@ -12,67 +12,67 @@ V1 は旧設計との互換層を持ちません。旧 `run-state`、巻引継�
 
 ### 第1段階: 到達不能な共通基盤
 
-公開 CLI や既存 workflow を切り替えずに、次を新規 module と schema として実装します。
+公開 CLI や既存 workflow を切り替えずに、次を新規モジュールとスキーマとして実装します。
 
-1. 不変の選択スナップショット、その validator、`current_selection_id`。
-2. Ollama 専用 `LLMClient`、技術的再試行、構造化 operation の固定5回、call/validation/review/quality disposition 記録。
-4. `ResolutionAuthorizer`、管理 API、解決記録の schema と validator。
-5. 巻専用 builder、巻公開 record/原稿 validator、公開途中復旧 service。
+1. 不変の選択スナップショット、その検証器、`current_selection_id`。
+2. Ollama 専用 `LLMClient`、技術的再試行、構造化処理の固定5回、呼出し/検証/確認/品質判定記録。
+4. `ResolutionAuthorizer`、管理 API、解決記録のスキーマと検証器。
+5. 巻専用 builder、巻公開記録/原稿検証器、公開途中復旧 service。
 
-この段階の module は public dispatcher から到達不能です。旧 runtime と混ぜず、fake Ollama を使う module-level の契約確認だけを行います。
+この段階のモジュールは public 振分けから到達不能です。旧実行時と混ぜず、模擬 Ollama を使う module-level の契約確認だけを行います。
 
 ### 第2段階: 公開経路の原子的切替
 
-一つの変更単位で、新規 workspace の public path を v2 へ切り替えます。
+一つの変更単位で、新規作業場所の public パスを v2 へ切り替えます。
 
-1. `run-state` v2、v2 workspace layout、counter、選択 snapshot の作成を導入する。
-2. `volume_publication` Stage、handler、transition、scene commit の巻末分岐を導入する。
-3. `volume_handoff`、`completion`、旧 `publication` Stage、validator、dispatcher、固定 path 参照を同時に外す。
-4. `run`、`resume`、`step`、`status`、`validate` の CLI dispatcher を v2 だけに接続する。
+1. `run-state` v2、v2 作業場所 layout、counter、選択スナップショットの作成を導入する。
+2. `volume_publication` 工程、handler、transition、場面確定の巻末分岐を導入する。
+3. `volume_handoff`、`completion`、旧 `publication` 工程、検証器、振分け、固定パス参照を同時に外す。
+4. `run`、`resume`、`step`、`status`、`validate` の CLI 振分けを v2 だけに接続する。
 
-これにより、巻末で旧工程を外したのに代替工程へ進めない中間状態を残しません。旧 state は拒否し、互換読取は作りません。
+これにより、巻末で旧工程を外したのに代替工程へ進めない中間状態を残しません。旧状態は拒否し、互換読取は作りません。
 
 ### 第3段階: 新経路の受入と旧資料の置換
 
-1. fresh v2 workspace の CLI 受入確認を通す。
-2. 旧 handoff/completion/publication の schema、template、recovery、fixture、試験を削除または新設計の受入確認へ置換する。
-3. 公開経路・workspace validator・CLI dispatcher に旧経路への到達可能な参照がないことを静的に確認する。
+1. fresh v2 作業場所の CLI 受入確認を通す。
+2. 旧引継ぎ/完了処理/公開のスキーマ、template、復旧、試験用資料、試験を削除または新設計の受入確認へ置換する。
+3. 公開経路・作業場所検証器・CLI 振分けに旧経路への到達可能な参照がないことを静的に確認する。
 
 
 ## 3. 最小受入確認
 
-試験は設計を探索する道具ではありません。以下の少数の端から端までの契約を、決定的 fake Ollama で確認します。詳細な validator ごとの網羅的な fixture 増殖は行わず、実障害が見つかった場合だけ回帰確認を追加します。
+試験は設計を探索する道具ではありません。以下の少数の端から端までの契約を、決定的模擬 Ollama で確認します。詳細な検証器ごとの網羅的な試験用資料増殖は行わず、実障害が見つかった場合だけ回帰確認を追加します。
 
 | 受入契約 | 確認すること |
 |---|---|
 | 4巻の通常完走 | 各巻が公開済みになってから次巻計画へ進み、最終巻公開で `completed` になる |
 | 非最終巻公開 | 当該巻だけの原稿・公開記録ができ、全巻原稿・完結結果・引継ぎがない |
 | 全巻の巻公開 | 各巻が同じ公開基準で確定し、最終巻の公開後にだけ `completed` になる |
-| 形式不正5回 | seed が重複せず、5回後に採用・公開・次工程へ進まない |
+| 形式不正5回 | シードが重複せず、5回後に採用・公開・次工程へ進まない |
 | 品質上限 | 最後の構造有効版を編集上の注意付きで採用し、通常工程は進む |
-| 公開途中の中断 | 再開が既存の staging/final を検証して収束し、Provider 呼出しや二重公開を増やさない |
+| 公開途中の中断 | 再開が既存の一時保存/最終配置を検証して収束し、提供者呼出しや二重公開を増やさない |
 | 公開済み不変性 | 公開済み巻と構成元の採用参照の変更を拒否する |
-| 解決記録登録 | 通常操作では復帰できず、有効な外部 authorizer と原因別記録でだけ未公開部分へ戻る |
-| CLI 到達性 | 隔離した v2 workspace で `run`、`resume`、`step`、`status`、`validate` を subprocess で通し、復旧・検証では Provider を初期化しない |
+| 解決記録登録 | 通常操作では復帰できず、有効な外部認可器と原因別記録でだけ未公開部分へ戻る |
+| CLI 到達性 | 隔離した v2 作業場所で `run`、`resume`、`step`、`status`、`validate` を子プロセスで通し、復旧・検証では提供者を初期化しない |
 
-Ollama 実機は、自動試験とは別に、新規作業場所で最小工程を通すスモーク確認として扱います。実機確認は、共有 prompt・schema・LLM 境界を変更した後だけ実施し、生の request/response を確認してから評価します。CLI 受入は fake Ollama を明示設定して subprocess で実行し、公開サービスの直呼びだけを根拠にしません。
+Ollama 実機は、自動試験とは別に、新規作業場所で最小工程を通すスモーク確認として扱います。実機確認は、共有指示文・スキーマ・LLM 境界を変更した後だけ実施し、生の依頼/応答を確認してから評価します。CLI 受入は模擬 Ollama を明示設定して子プロセスで実行し、公開サービスの直呼びだけを根拠にしません。
 
 ## 4. 既存の未コミット変更
 
-現在の test/fixture の未コミット変更は、設計の正当性を示しません。第1段階に着手する前に、各変更を次の三分類へ置きます。
+現在の試験/試験用資料の未コミット変更は、設計の正当性を示しません。第1段階に着手する前に、各変更を次の三分類へ置きます。
 
-- 新設計どおりで、fixture だけが古い
+- 新設計どおりで、試験用資料だけが古い
 - 正常な V1 経路を止める過剰な制限
-- 旧 handoff/completion/publication を前提とする変更
+- 旧引継ぎ/完了処理/公開を前提とする変更
 
-第3類は V1 実装へ持ち込まず、新設計が確定した後に置換します。作業ツリーの既存変更を、確認なしに stage、破棄、上書きしてはなりません。
+第3類は V1 実装へ持ち込まず、新設計が確定した後に置換します。作業ツリーの既存変更を、確認なしに工程、破棄、上書きしてはなりません。
 
 ## 5. 完了条件
 
 実装移行の完了は、旧テストが緑になることではありません。次を満たしたときです。
 
 1. 新規 v2 作業場所で、設計した最小受入契約が通る。
-2. 公開経路・workspace validator・CLI dispatcher に旧 handoff/completion/series publication の到達可能な参照がない。
-3. `validate` が Provider なしで正本参照、確定状態、公開不変性、LLM 記録連鎖を検証する。
-4. 最後の共有設計・prompt・schema変更後に、新規作業場所で実機 Ollama の最小スモークが通る。
-5. 旧実装・旧 fixture・旧試験を、互換層なしで削除または新設計へ置換する。
+2. 公開経路・作業場所検証器・CLI 振分けに旧引継ぎ/完了処理/シリーズ公開の到達可能な参照がない。
+3. `validate` が提供者なしで正本参照、確定状態、公開不変性、LLM 記録連鎖を検証する。
+4. 最後の共有設計・指示文・スキーマ変更後に、新規作業場所で実機 Ollama の最小スモークが通る。
+5. 旧実装・旧試験用資料・旧試験を、互換層なしで削除または新設計へ置換する。
