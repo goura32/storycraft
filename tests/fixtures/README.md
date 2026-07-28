@@ -1,12 +1,12 @@
-# Storycraft Test Fixtures
+# Storycraft テスト fixture
 
-このdirectoryには、Storycraft Version 1の自動試験で使用する最小fixtureを置く。
+このdirectoryには、Storycraft Version 1の自動試験で使用する最小fixtureを置く。ここにある入力、原稿、設定、作品前提はテストデータであり、製品仕様・要件・作品 Canon の正本ではない。現行契約は[`../../docs/SPECIFICATION.md`](../../docs/SPECIFICATION.md)に従う。
 
 ## 方針
 
 - 実際のJSONまたはMarkdown fileを試験コードが読み込む。
 - Markdown文書内へ巨大なJSON例を複製しない。
-- 正常fixtureと不正fixtureをdirectoryで分ける。
+- 入力・成果物の不正fixtureは`invalid/`に置き、Providerの失敗応答は`provider/`に置く。
 - fixture内のIDと参照は、同じscenario内で一貫させる。
 - Credential、実Provider名、実API keyを含めない。
 - Hash、Manifest graph、Publication Gateを前提にしない。
@@ -36,6 +36,8 @@
 
 主人公の澪は、海辺の町へ戻り、失われた記憶と姉・凪の秘密を追う。
 灯台火災の夜がシリーズ全体の中心Threadであり、4巻で姉妹が真相を受け止め、町を離れずに再出発する。
+
+`provider/prose-success.txt`と`scene/prose.md`は、Provider成功応答とScene本文という別の検証目的で同じ本文を使う。片方を変更する場合は、同一本文である必要が残るかを確認する。
 
 ## 利用方法
 

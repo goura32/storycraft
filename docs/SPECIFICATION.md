@@ -41,9 +41,9 @@ Brief は題名、ジャンル、premise、必須要素、avoid、結末希望�
 | 実行位置、停止理由、現在の Generation／Publication、保留確定 | run-state |
 | 物語構造と次の作業の意図 | 採用済み Plan と Scene Card |
 | 読者向け出力 | 確定 Publication |
-| LLM 呼出しの設定・入出力・利用量・失敗 | Call audit |
+| LLM 呼出しの設定・入出力・利用量・失敗 | Call audit（呼出記録だけの正本） |
 
-Plan は予定であり事実ではありません。本文と Evidence がない限り、Canon、State、Knowledge、Thread を更新してはなりません。Handoff、Context、Review、Revision、Audit は補助成果物であり、Generation を上書きしません。
+Plan は予定であり事実ではありません。本文と Evidence がない限り、Canon、State、Knowledge、Thread を更新してはなりません。Handoff、Context、Review、Revision は補助成果物であり、Generation を上書きしません。Call audit は呼出記録の正本ですが、物語、実行状態、公開物の Authority ではありません。
 
 確定済み Generation、Scene、Plan、Handoff、Completion、Publication は不変です。変更可能な単一ファイルは完全な内容を atomic replacement し、複数ファイルの成果物は staging directory を完成させてから directory 単位で確定します。途中成果物を正本として見せず、既存の確定成果物を上書きしません。
 
@@ -57,15 +57,23 @@ Plan は予定であり事実ではありません。本文と Evidence がな�
 flowchart TD
   I[Brief または Keywords] --> D[初期設計]
   D --> S[シリーズ計画]
-  S --> V[巻計画]
-  V --> C[章計画]
-  C --> P[Scene 計画]
-  P --> K[Scene Card]
-  K --> W[本文]
-  W --> N[継続性更新]
-  N --> M[Scene Commit]
-  M --> H[巻 Handoff]
-  H --> Q[完結判定]
+  S --> V
+  subgraph V[各巻]
+    VP[巻計画] --> C
+    subgraph C[各章]
+      CP[章計画] --> P
+      subgraph P[各 Scene]
+        SP[Scene 計画] --> K[Scene Card]
+        K --> W[本文]
+        W --> N[継続性更新]
+        N --> M[Scene Commit]
+      end
+    end
+    M -->|当該巻の全 Scene 確定後| H[巻 Handoff]
+  end
+  H --> X{次の巻があるか}
+  X -->|ある| VP
+  X -->|ない| Q[完結判定]
   Q --> U[Publication]
 ```
 
@@ -79,15 +87,16 @@ Scene Card は本文執筆の局所制約、POV、許可された更新、開示
 
 LLM は創作、意味的要約、物語品質・矛盾・欠落・誤帰属の評価を担当します。ID、schema、列挙値、参照実在、状態遷移、保存、atomic確定、Recovery、Publication は決定的なコードが担当します。
 
-すべての LLM 生成 Candidate は次の手順を満たします。
+Completion Result を除くすべての LLM 生成 Candidate は次の手順を満たします。
 
 1. 生成または要約する。
 2. schema、必須項目、ID、参照、更新可能範囲をコードで検証する。
 3. 独立した LLM Review を実行する。
 4. error Issue があれば、限定された Revision を行う。
-5. 再 Review で error がない Candidate だけを採用する。
+5. Revision 後の Candidate を同じ決定的規則で再検証する。形式不正は format retry とし、意味的 error は再 Review へ進めない。
+6. 再 Review で error がない Candidate だけを採用する。
 
-Review は Candidate を書き換えません。Revision は Candidate 全体を置換し、指摘対象外を無断変更してはなりません。Issue は対象 artifact、field path または本文範囲へ解決できる `evidence_locator` を持ち、解決できない Issue を Revision 入力に渡しません。
+Review は Candidate を書き換えません。Revision は Candidate 全体を置換し、指摘対象外を無断変更してはなりません。Issue は対象 artifact、field path または本文範囲へ解決できる `evidence_locator` を持ちます。解決できない Issue は無効として Review 結果から除外し、Revision 入力にも error 判定にも使いません。
 
 Review と Revision の回数、通信 retry、形式 retry は operation ごとに上限を持ち、Call audit に残します。形式不正は再送対象、意味的な error は Revision 対象です。Review 上限後も error が残る Candidate は原則 `blocked` とし、採用してはなりません。未採用 Candidate の前提だけが失効した場合は、その Candidate を破棄し、新しい正本から同じ工程を再生成できます。既に確定した成果物を再生成して別結果を探索してはなりません。
 
@@ -105,7 +114,7 @@ Provider は LLM が必要な operation でだけ初期化します。Recovery�
 
 通信失敗、timeout、形式不正、設定・Credential 不正、意味的 error、内部 error を区別します。再試行は同じ Candidate を壊さず、回数・待機・結果を記録します。利用量、token、費用、Call 数の上限は run 開始時に見積もり、全 LLM Call に適用します。
 
-Budget 到達後は新規 LLM Call を開始しません。ただし、既存 Candidate の検証・採用、atomic確定、状態更新、Recovery、安全停止は続けます。Budget 節約を理由に必須 Review や error 後の Revision を省略して採用してはなりません。
+Budget 到達後は新規 LLM Call を開始しません。ただし、既存 Candidate の検証・採用、atomic確定、状態更新、Recovery、安全停止は続けます。Recovery が新しい LLM Call を必要とする場合は run を `blocked` とし、予算が追加されるまで `regenerate`、`resume`、`step` でその Call を開始しません。Budget 節約を理由に必須 Review や error 後の Revision を省略して採用してはなりません。
 
 ## 9. 中断と復旧
 
@@ -119,11 +128,11 @@ Recovery は前進型で、確定済み成果物を戻したり上書きした�
 
 ## 10. 完結と公開
 
-全巻が完了し、必要な Thread、Ending、Arc を根拠とともに評価できるときだけ Completion を実行します。Completion は `complete`、`complete_with_issues`、`incomplete` を返します。
+全巻が完了し、必要な Thread、Ending、Arc を根拠とともに評価できるときだけ Completion を実行します。Completion は `complete`、`complete_with_issues`、`incomplete` を返します。必須 Check が全て満たされ error Issue がない場合は `complete`、必須 Check は評価できるが非阻害 Issue が残る場合は `complete_with_issues`、評価前提または必須 Check が欠ける場合は `incomplete` とします。
 
 Completion の意味評価は一回を基本とし、望ましい status を得るために入力集合や結論を変えて再評価してはなりません。直後の Review は、評価対象、Check、Issue、Evidence、summary、status の整合だけを検査します。Revision は説明と参照の訂正だけに限り、status や Check 判定を変えません。
 
-Publication は確定済み Scene と Completion から決定的に組み立てます。新しい物語本文や設定を生成せず、作者用情報を含めません。巻・章・Scene の順序、Completion との整合、出力の完全性を検証して確定します。`complete_with_issues` は警告を明示して公開できますが、`incomplete` は通常 Publication を作りません。
+Publication は確定済み Scene と Completion から決定的に組み立てます。新しい物語本文や設定を生成せず、作者用情報を含めません。巻・章・Scene の順序、Completion との整合、出力の完全性を検証して確定します。`complete` は Publication を作成でき、`complete_with_issues` は残存 Issue を警告として明示した Publication を作成できます。`incomplete` は Publication を作成できず、V1に手動例外はありません。
 
 ## 11. 品質と受入条件
 
