@@ -57,7 +57,7 @@ def invoke_structured(operation):
 
 `FinalClosureGate` は通常の品質ループと別です。
 
-1. コードが、初期設計の必須事項集合、現在の作品状態の解決済み状態、採用済み本文、本文ハッシュ、根拠位置を照合する。
+1. コードが、初期設計の必須事項集合、現在の作品状態の解決済み状態、採用済み本文、根拠位置を照合する。
 2. 独立 LLM に固定済み根拠本文と達成条件だけを渡し、意味的充足を確認させる。
 3. 確認応答の形式不正は固定5回を適用する。
 4. 一件でも未達、または確認できないなら公開を確定せず `blocked/manual_review_required` にする。
@@ -66,7 +66,7 @@ def invoke_structured(operation):
 
 ## 5. 最小記録形式
 
-`call-record.json` は operation、role、対象候補、技術的試行番号、形式試行番号、seed、Ollama endpoint fingerprint、入力・応答 hash、transport 結果を持ちます。
+`call-record.json` は operation、role、対象候補、技術的試行番号、形式試行番号、seed、Ollama endpoint、model identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、transport 結果を持ちます。
 
 `validation-record.json` は operation、call ID、validator kind、`valid|invalid`、各 check、failure code を持ちます。
 
@@ -74,4 +74,4 @@ def invoke_structured(operation):
 
 `quality-disposition.json` は selected version、修正上限、使用回数、review refs、`accepted_clean|accepted_with_notice|blocked`、残存重大指摘、注意種別、reason code を持ちます。
 
-`status` と `validate` は Provider を呼ばず、これらの参照・hash・試行上限・seed 重複・採用連鎖を再検証します。
+`status` と `validate` は Provider を呼ばず、これらの参照、形式、試行上限、seed 重複、採用連鎖を再検証します。

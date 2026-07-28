@@ -14,7 +14,7 @@ V1 は旧設計との互換層を持ちません。旧 `run-state`、巻引継�
 
 公開 CLI や既存 workflow を切り替えずに、次を新規 module と schema として実装します。
 
-1. 不変の選択スナップショット、その validator、hash 検証、`current_selection_ref`。
+1. 不変の選択スナップショット、その validator、`current_selection_id`。
 2. Ollama 専用 `LLMClient`、技術的再試行、構造化 operation の固定5回、call/validation/review/quality disposition 記録。
 3. `FinalClosureGate`、最終確認 record の schema と決定的 validator。
 4. `ResolutionAuthorizer`、管理 API、解決記録の schema と validator。
@@ -74,6 +74,6 @@ Ollama 実機は、自動試験とは別に、新規作業場所で最小工程�
 
 1. 新規 v2 作業場所で、設計した最小受入契約が通る。
 2. 公開経路・workspace validator・CLI dispatcher に旧 handoff/completion/series publication の到達可能な参照がない。
-3. `validate` が Provider なしで正本参照、hash、確定状態、公開不変性、LLM 記録連鎖を検証する。
+3. `validate` が Provider なしで正本参照、確定状態、公開不変性、LLM 記録連鎖を検証する。
 4. 最後の共有設計・prompt・schema変更後に、新規作業場所で実機 Ollama の最小スモークが通る。
 5. 旧実装・旧 fixture・旧試験を、互換層なしで削除または新設計へ置換する。

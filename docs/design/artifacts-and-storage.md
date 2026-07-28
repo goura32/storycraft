@@ -2,7 +2,7 @@
 
 ## 1. 正本と凍結した選択スナップショット
 
-成果物の内容を複写して別の正本にしません。下流工程は、固定パス、最新探索、成果物ごとの可変な `selected` flag を使わず、`logical slot → artifact ID + payload SHA-256` を持つ不変の選択スナップショットだけを入力権限にします。
+成果物の内容を複写して別の正本にしません。下流工程は、固定パス、最新探索、成果物ごとの可変な `selected` flag を使わず、`logical slot → artifact ID` を持つ不変の選択スナップショットだけを入力権限にします。
 
 ```text
 runtime/selections/selection-000001/record.json
@@ -14,11 +14,11 @@ runtime/selections/selection-000001/record.json
   "selection_id": "selection-000001",
   "input_selection_id": null,
   "slots": {
-    "initial_design": {"artifact_id": "initial-design-v0001", "sha256": "..."},
-    "series_plan": {"artifact_id": "series-plan-0001", "sha256": "..."},
-    "current_state": {"artifact_id": "gen-000001", "sha256": "..."},
-    "volume_plan.v01": {"artifact_id": "volume-plan-v01", "sha256": "..."},
-    "scene.v01.c001.s001": {"artifact_id": "scene-v01-c001-s001", "sha256": "..."}
+    "initial_design": "initial-design-v0001",
+    "series_plan": "series-plan-0001",
+    "current_state": "gen-000001",
+    "volume_plan.v01": "volume-plan-v01",
+    "scene.v01.c001.s001": "scene-v01-c001-s001"
   },
   "created_at": "..."
 }
@@ -26,7 +26,7 @@ runtime/selections/selection-000001/record.json
 
 初期設計の採用後に最初の snapshot を作り、計画採用・場面確定・未公開部分の解決記録による参照変更のたびに、前 snapshot を入力として新 snapshot を確定します。公開済み巻の構成元 slot は後続 snapshot でも変更を拒否します。
 
-実行状態は現在の `selection_id` と hash だけを参照します。作品の事実、計画本文、公開原稿、LLM 応答は複写しません。
+実行状態は現在の `selection_id` だけを参照します。作品の事実、計画本文、公開原稿、LLM 応答は複写しません。
 
 | 情報 | 正本 | 参照だけを持つもの |
 |---|---|---|
@@ -79,9 +79,9 @@ ID は採番後に変更しません。
 
 複数ファイル成果物は必ずディレクトリ単位で確定します。
 
-1. ID を予約し、現在の選択スナップショット、必要な input slot、入力 ID と hash を固定する。
+1. ID を予約し、現在の選択スナップショットと必要な input slot を固定する。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。
-3. 形式、必須 field、参照実在、入力ハッシュ、内容の内部整合を決定的に検証する。
+3. 形式、必須 field、参照実在、採用状態、内容の内部整合を決定的に検証する。
 4. `pending_commit.phase=prepared` を保存する。
 5. staging を最終配置へ原子的に rename する。
 6. 最終配置を再検証し、`pending_commit` を `<kind>_finalized` にする。
@@ -102,6 +102,6 @@ request/response に認証情報、Authorization、secret header、思考過程�
 
 ## 5. 入力束
 
-LLM に渡す入力は、実行時に正本から組み立てる読み取り専用の束です。入力束自体を正本として固定保存しません。ただし呼出し記録は、どの成果物 ID・ハッシュ・設定スナップショットを入力に用いたかを持ちます。
+LLM に渡す入力は、実行時に正本から組み立てる読み取り専用の束です。入力束自体を正本として固定保存しません。ただし呼出し記録は、どの成果物 ID、設定スナップショット、seed、要求・応答本文を用いたかを持ちます。
 
 次巻の計画入力は、現在の選択スナップショットに固定された作品状態、シリーズ・巻・章計画、確定済み本文、公開済み巻の記録を直接参照します。本文や継続性更新から巻引継ぎ要約を抽出・確定しません。

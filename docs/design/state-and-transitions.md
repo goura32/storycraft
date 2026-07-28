@@ -19,7 +19,7 @@
   "current_stage": "scene_plan",
   "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2},
   "current_generation_id": "gen-000001",
-  "current_selection_ref": {"selection_id": "selection-000001", "sha256": "..."},
+  "current_selection_id": "selection-000001",
   "active_candidate": null,
   "active_scene_id": null,
   "pending_commit": null,
@@ -46,7 +46,7 @@
 
 ### 2.2 現在対象と保留中確定
 
-`current_selection_ref` は不変の選択スナップショットの ID と record hash を持ちます。下流工程は、この snapshot の slot だけを入力権限として読みます。`current_generation_id` は current state slot と一致するための簡便な整合性 field であり、単独で下流入力を決めません。
+`current_selection_id` は不変の選択スナップショットを指します。下流工程は、この snapshot の slot だけを入力権限として読みます。`current_generation_id` は current state slot と一致するための簡便な整合性 field であり、単独で下流入力を決めません。
 
 `current_target` は未完工程の座標と入力参照だけを持つ stage-local な値です。各工程の validator が許可 field を閉じます。正本の内容を埋め込みません。
 
@@ -104,7 +104,7 @@ volume_publication
 
 V1 のローカル作業場所では、同じ OS 利用者による直接ファイル編集を暗号学的に防ぐことは目的にしません。ここでの保護は、通常の制作 CLI から復帰を実行できない操作境界です。
 
-実装は `ResolutionAuthorizer` を注入し、workspace 外部の管理用 Unix domain socket を通じて署名済みの `ResolutionGrant` を検証します。標準の利用者向け `storycraft` CLI はこの socket を持たず、登録を拒否します。別 executable `storycraft-admin register-resolution` だけが socket へ要求を送り、server は peer OS UID を外部の運用者 allowlist と照合して grant を発行します。grant は `grant_id`、`operator_id`、`workspace_id`、`blocked_state_fingerprint`、許可 `cause`、発行時刻、失効時刻、署名を持ち、workspace 内には grant 本文でなく ID と署名 hash だけを解決記録へ残します。server が未設定・grant が期限切れ・署名不正なら、登録せず `blocked` を維持します。試験では明示的な fake authorizer を注入します。
+実装は `ResolutionAuthorizer` を注入し、workspace 外部の管理用 Unix domain socket を通じて署名済みの `ResolutionGrant` を検証します。標準の利用者向け `storycraft` CLI はこの socket を持たず、登録を拒否します。別 executable `storycraft-admin register-resolution` だけが socket へ要求を送り、server は peer OS UID を外部の運用者 allowlist と照合して grant を発行します。grant は `grant_id`、`operator_id`、`workspace_id`、`blocked_state_id`、許可 `cause`、発行時刻、失効時刻、署名を持ちます。grant 本体は管理 server の immutable ledger に保管し、workspace の解決記録は `grant_id` だけを参照します。server が未設定・grant が期限切れ・署名不正なら、登録せず `blocked` を維持します。試験では明示的な fake authorizer を注入します。
 
 ### 5.2 記録形式と手順
 
@@ -116,9 +116,9 @@ V1 のローカル作業場所では、同じ OS 利用者による直接ファ�
   "resolution_id": "resolution-000001",
   "workspace_id": "ws-000001",
   "operator_id": "operator-a",
-  "authorization_grant_ref": {"grant_id": "grant-000001", "signature_sha256": "..."},
+  "authorization_grant_id": "grant-000001",
   "created_at": "2026-07-28T00:00:00Z",
-  "blocked_state_fingerprint": "sha256:...",
+  "blocked_state_id": "blocked-state-000001",
   "cause": "authority_reference_inconsistency",
   "subject_refs": [{"artifact_type": "scene", "artifact_id": "scene-v02-c01-s03"}],
   "evidence_refs": [{"artifact_type": "scene", "artifact_id": "scene-v02-c01-s03"}],
@@ -131,6 +131,6 @@ V1 のローカル作業場所では、同じ OS 利用者による直接ファ�
 
 `cause` は `invalid_response_limit`、`technical_retry_exhausted`、`provider_configuration_invalid`、`internal_error`、`authority_reference_inconsistency`、`volume_publication_invalid`、`final_ending_requirements_unverifiable` のいずれかに閉じます。
 
-登録は、lock 取得→`blocked/manual_review_required` と state fingerprint の照合→authorizer 検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新 snapshot の slot・hash・公開済み巻の固定参照を検証→`current_selection_ref` と戻り先を同じ state 更新で切替→`running` 復帰、の順です。crash recovery は記録と新 snapshot がともに確定済みのときだけ state を収束し、片方がない・不整合なら `blocked` を維持します。
+停止時には、停止理由、current selection、工程、対象、保留中確定を内容とする不変の `blocked-state-{通番}` 記録を確定する。grant はこの `blocked_state_id` に署名で束縛する。登録は、lock 取得→`blocked/manual_review_required` と blocked-state ID の照合→authorizer 検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新 snapshot の slot・公開済み巻の固定参照を検証→`current_selection_id` と戻り先を同じ state 更新で切替→`running` 復帰、の順です。crash recovery は記録と新 snapshot がともに確定済みのときだけ state を収束し、片方がない・不整合なら `blocked` を維持します。
 
 `selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。最終巻の本文上の未達は、解決記録で公開許可へ変換できず、`blocked` を維持します。
