@@ -42,7 +42,7 @@
 
 `published_volumes` は巻番号の昇順で、重複なく `1..N` の連続列にします。各 ID は巻公開記録を参照します。単一の `current_publication_id` は廃止します。
 
-`completed` は、保留中確定がなく、公開済み巻がシリーズ計画の全巻と一致し、最終巻の公開記録が有効な最終確認記録を参照するときだけ許可します。
+`completed` は、保留中確定がなく、公開済み巻がシリーズ計画の全巻と一致し、最後の公開済み巻が最終巻であるときだけ許可します。
 
 ### 2.2 現在対象と保留中確定
 
@@ -129,8 +129,8 @@ V1 のローカル作業場所では、同じ OS 利用者による直接ファ�
 }
 ```
 
-`cause` は `invalid_response_limit`、`technical_retry_exhausted`、`provider_configuration_invalid`、`internal_error`、`authority_reference_inconsistency`、`volume_publication_invalid`、`final_ending_requirements_unverifiable` のいずれかに閉じます。
+`cause` は `invalid_response_limit`、`technical_retry_exhausted`、`provider_configuration_invalid`、`internal_error`、`authority_reference_inconsistency`、`volume_publication_invalid` のいずれかに閉じます。
 
 停止時には、停止理由、current selection、工程、対象、保留中確定を内容とする不変の `blocked-state-{通番}` 記録を確定する。grant はこの `blocked_state_id` に署名で束縛する。登録は、lock 取得→`blocked/manual_review_required` と blocked-state ID の照合→authorizer 検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新 snapshot の slot・公開済み巻の固定参照を検証→`current_selection_id` と戻り先を同じ state 更新で切替→`running` 復帰、の順です。crash recovery は記録と新 snapshot がともに確定済みのときだけ state を収束し、片方がない・不整合なら `blocked` を維持します。
 
-`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。最終巻の本文上の未達は、解決記録で公開許可へ変換できず、`blocked` を維持します。
+`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。

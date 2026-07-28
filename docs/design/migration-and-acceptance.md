@@ -16,7 +16,6 @@ V1 は旧設計との互換層を持ちません。旧 `run-state`、巻引継�
 
 1. 不変の選択スナップショット、その validator、`current_selection_id`。
 2. Ollama 専用 `LLMClient`、技術的再試行、構造化 operation の固定5回、call/validation/review/quality disposition 記録。
-3. `FinalClosureGate`、最終確認 record の schema と決定的 validator。
 4. `ResolutionAuthorizer`、管理 API、解決記録の schema と validator。
 5. 巻専用 builder、巻公開 record/原稿 validator、公開途中復旧 service。
 
@@ -48,7 +47,7 @@ V1 は旧設計との互換層を持ちません。旧 `run-state`、巻引継�
 |---|---|
 | 4巻の通常完走 | 各巻が公開済みになってから次巻計画へ進み、最終巻公開で `completed` になる |
 | 非最終巻公開 | 当該巻だけの原稿・公開記録ができ、全巻原稿・完結結果・引継ぎがない |
-| 最終巻の未達 | 構造または意味確認の未達で公開せず `blocked/manual_review_required` になる |
+| 全巻の巻公開 | 各巻が同じ公開基準で確定し、最終巻の公開後にだけ `completed` になる |
 | 形式不正5回 | seed が重複せず、5回後に採用・公開・次工程へ進まない |
 | 品質上限 | 最後の構造有効版を編集上の注意付きで採用し、通常工程は進む |
 | 公開途中の中断 | 再開が既存の staging/final を検証して収束し、Provider 呼出しや二重公開を増やさない |

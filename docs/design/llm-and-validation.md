@@ -7,7 +7,6 @@
 | `LLMClient` | Ollama の送受信、通信失敗、timeout、技術的再試行、seed、呼出し保存 | 決めない |
 | `StructuredOperation` | JSON parse、schema、ID、参照、更新範囲、形式不正5回 | 形式有効だけを決める |
 | `QualityLoop` | 生成、独立確認、修正、再確認、品質上限時の注意付き採用 | 通常工程の候補を採用する |
-| `FinalClosureGate` | 最終巻の達成条件と根拠本文の確認 | 未達時は必ず公開停止 |
 | `ArtifactState` | 不変確定、採用参照、停止、復旧 | LLM 記録を物語正本にしない |
 
 V1 の Provider は `ollama` だけです。設定 validator は他の provider を拒否します。
@@ -21,7 +20,7 @@ V1 の Provider は `ollama` だけです。設定 validator は他の provider 
 | 技術的再試行 | 接続不能、Provider エラー、初回・idle timeout、ストリーム中断 | `retry.technical_max_attempts`。作業場所作成時に固定 | `blocked/manual_review_required` |
 | 形式不正再呼出し | 空応答、parse失敗、非 object、schema・参照・根拠・更新範囲の不適合 | 各論理 operation で初回を含め固定5回 | `blocked/manual_review_required` |
 
-`candidate.generate`、`candidate.review`、`candidate.revision`、`final_closure.review` は別々の operation です。技術失敗は応答本文がないため、形式不正5回を消費しません。形式不正の各回は別の seed を使い、すべての物理呼出しを記録します。
+`candidate.generate`、`candidate.review`、`candidate.revision` は別々の operation です。技術失敗は応答本文がないため、形式不正5回を消費しません。形式不正の各回は別の seed を使い、すべての物理呼出しを記録します。
 
 ```python
 def invoke_structured(operation):
@@ -53,18 +52,7 @@ def invoke_structured(operation):
 
 品質上限で重大指摘が残った選択結果は `accepted_with_notice` とします。通常の上限到達による注意種別は `編集` です。LLM が `表現` を提案する場合も、許可された enum と根拠位置をコードが検証したときだけ `表現` を選べます。どちらも巻公開時の定型文以外を読者原稿へ出しません。
 
-## 4. 最終巻は例外
-
-`FinalClosureGate` は通常の品質ループと別です。
-
-1. コードが、初期設計の必須事項集合、現在の作品状態の解決済み状態、採用済み本文、根拠位置を照合する。
-2. 独立 LLM に固定済み根拠本文と達成条件だけを渡し、意味的充足を確認させる。
-3. 確認応答の形式不正は固定5回を適用する。
-4. 一件でも未達、または確認できないなら公開を確定せず `blocked/manual_review_required` にする。
-
-品質上限、注意付き採用、公開注意、本文の再生成では最終巻の未達を通過できません。
-
-## 5. 最小記録形式
+## 4. 最小記録形式
 
 `call-record.json` は operation、role、対象候補、技術的試行番号、形式試行番号、seed、Ollama endpoint、model identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、transport 結果を持ちます。
 

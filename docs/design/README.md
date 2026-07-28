@@ -18,7 +18,7 @@
 | [状態と遷移](state-and-transitions.md) | 実行状態 v2、工程、停止、保護された解決記録登録 |
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |
-| [巻公開](volume-publication.md) | 巻公開記録、原稿、最終巻の確認、復旧 |
+| [巻公開](volume-publication.md) | 全巻共通の巻公開記録、原稿、復旧 |
 | [移行と受入](migration-and-acceptance.md) | 旧実装の置換順序、最少の受入確認、廃止対象 |
 
 ## 3. 共通原則

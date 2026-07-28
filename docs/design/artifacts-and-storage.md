@@ -59,7 +59,6 @@ workspace/
   generations/gen-000001/
   scenes/scene-v01-c001-s001/
   publications/volume-pub-v01-000001/
-  final-confirmations/final-confirmation-v04-000001/
 ```
 
 ID は採番後に変更しません。
@@ -67,7 +66,6 @@ ID は採番後に変更しません。
 | 種類 | 形式 | カウンタ |
 |---|---|---|
 | 巻公開 | `volume-pub-v{巻番号2桁}-{通番6桁}` | `next_volume_publication` |
-| 最終確認 | `final-confirmation-v{巻番号2桁}-{通番6桁}` | `next_final_confirmation` |
 | 選択スナップショット | `selection-{通番6桁}` | `next_selection` |
 | 解決記録 | `resolution-{通番6桁}` | `next_resolution` |
 | 呼出し | `call-{通番6桁}` | `next_call` |
