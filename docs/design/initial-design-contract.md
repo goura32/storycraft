@@ -27,11 +27,11 @@
 | field | 内容 |
 |---|---|
 | `core` | 作品の核、主題、読者への約束 |
-| `cast` | 安定 ID を持つ人物、役割、関係 |
+| `cast` | 人物の名前、役割、関係。LLM は新規人物 ID を返さず、コードが採番する |
 | `world` | 世界、制度、制約 |
 | `knowledge_model` | 作者、人物、読者の知識構造 |
-| `unresolved_threads` | 安定 ID、種別、結末必須性 |
-| `ending_conditions` | 結末必須 thread ID ごとの達成条件 |
+| `unresolved_threads` | 種別、結末必須性、説明。LLM は新規 thread ID を返さず、コードが採番する |
+| `ending_conditions` | 結末必須事項の達成条件。新規 thread への対応は名称・意味内容で解決する |
 
 `initial-design` に作品事実の現在値、人物の現在知識、読者開示済み情報を複写しません。
 
