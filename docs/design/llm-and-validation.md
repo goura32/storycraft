@@ -35,12 +35,23 @@ def invoke_structured(operation):
 
 ## 3. 通常の品質ループ
 
-構造有効な候補だけを独立 LLM が確認します。
+構造有効な候補だけを独立 LLM が確認します。各論理工程の生成入力束を `generation_context`、その応答を `candidate_response`、確認応答を `review_response` と呼びます。ID は呼出し側が束縛し、LLM 応答には含めません。
+
+| operation | LLM への必須入力 |
+|---|---|
+| 生成 | `generation_context`（snapshot から組み立てた当該工程の正本入力、固定設定、許可済み context） |
+| 確認 | **同じ `generation_context` + 確認対象 `candidate_response`** |
+| 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
+| 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
+
+確認・修正・再確認は、生成時の入力束を省略、置換、最新探索してはなりません。修正を繰り返す場合も `generation_context` は同一で、直前の形式有効候補と直前の有効確認応答だけを追加します。確認応答に無効な根拠位置の issue があれば、システムが除外した後の有効 issue だけを修正入力に渡します。
 
 ```text
-生成 → 決定的検証 → 独立確認
+生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
   ├─ 重大なし: clean 採用
-  ├─ 重大あり・上限前: 修正 → 決定的検証 → 再確認
+  ├─ 重大あり・上限前: 修正(generation_context + candidate + review)
+  │                         → 決定的検証
+  │                         → 再確認(generation_context + revised candidate)
   └─ 重大あり・上限到達: 最後の構造有効版を注意付き採用
 ```
 
