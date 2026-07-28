@@ -78,12 +78,12 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 ```json
 {
   "schema_version": "candidate-response-v1",
-  "artifact_kind": "initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
+  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
   "payload": { "artifact_kind ごとの完全な候補内容。新規 ID は含めない" }
 }
 ```
 
-生成と修正の LLM 応答は完全に同じスキーマです。修正の元候補 ID、対象確認記録 ID、基準選択 ID は LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
+生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 
 ## 6. 全工程共通の確認スキーマ
 
