@@ -9,7 +9,7 @@
 | 依頼文 | 依頼内容 | 不変 `request` | `initial_design` |
 | キーワード | 1個以上の短いキーワード | 依頼候補、確認、採用済み `request` | `initial_design` |
 
-キーワード起点は `request_intake` 工程です。生成、確認、修正は共通品質ループを使います。`generation_context` はキーワード、固定設定、言語です。確認入力はこれと依頼候補、修正入力はこれと直前候補と今回確認です。候補・確認・修正の記録は最初の選択スナップショットの前に保存する監査記録であり、`input_selection_id` を持ちません。採用時だけ、採用済み `request` を唯一の初期化時成果物として `input_selection_id=null` で不変確定し、直後に最初の選択スナップショットを確定します。
+キーワード起点は `request_intake` 工程です。`init` は入力 keywords を `inputs/keywords-{通番6桁}/record.json` として不変確定し、`run` がその入力記録と不変 settings を読んで生成、確認、修正を行います。入力記録は `keywords_id`、正規化したキーワード配列、言語、created_at を持ち、selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照します。採用時だけ、採用済み `request` を唯一の初期化時成果物として `input_selection_id=null` で不変確定し、直後に最初の選択スナップショットを確定します。
 
 採用済み依頼は次を満たします。
 
@@ -40,25 +40,21 @@
 
 ## 3. 予定の連鎖
 
-シリーズ、巻、章、場面計画は未解決事項割当を持ちます。
+シリーズ計画、巻計画、章計画、場面計画は、段階ごとに次の未解決事項割当を持ちます。
 
-```json
-{
-  "thread_id": "入力 catalog から選んだ既存 ID",
-  "action": "introduce | progress | resolve",
-  "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
-  "required_conditions": ["ending-condition-000001"]
-}
-```
+- series-plan: `thread_id`、`action`、`volume_number`、`required_conditions`。結末必須事項の `resolve` 対象巻は一意。
+- volume-plan: `thread_id`、`action`、`chapter_number`、`required_conditions`。親 series-plan と同じ巻・操作・条件に限る。
+- chapter-plan: `thread_id`、`action`、`scene_number`、`required_conditions`。親 volume-plan と同じ巻・章・操作・条件に限る。
+- scene-plan: `thread_id`、`action`、完全座標 `{volume_number, chapter_number, scene_number}`、`required_conditions`。親 chapter-plan と同じ操作・条件に限る。
 
 `required_conditions` と `resolved_condition_refs` は、初期設計でコード採番した `ending_condition_id` だけを参照します。説明文を代用しません。
 
-- シリーズ計画: 結末必須未解決事項ごとに `resolve` を一つだけ予定する。
-- 巻 / 章計画: 親計画の予定を狭める。新しい `resolve` を作らない。
-- 場面計画: 親計画と同じ座標・操作・条件を持つ。
+- シリーズ計画: 結末必須未解決事項ごとに `resolve` の対象巻を一つだけ予定する。
+- 巻 / 章計画: 親計画の割当を次の座標粒度まで具体化する。新しい `resolve` を作らない。
+- 場面計画: 親章計画の割当を完全座標に具体化する。
 - 場面カード: その操作に必要な状態更新だけを許可する。
 
-親計画にない未解決事項、操作、条件、座標は形式不正です。
+親計画の各 allocation は、その `thread_id`、`action`、`required_conditions`、親座標を持つ一つ以上の子 allocation に漏れなく具体化し、子 allocation は親の座標範囲を狭めるだけです。`resolve` はシリーズ計画から場面計画まで一つの連鎖で完全具体化し、場面計画では完全座標を一意に持ちます。親計画にない未解決事項、操作、条件、または親の対象外の座標は形式不正です。
 
 ## 4. 本文から解決まで
 
@@ -75,10 +71,10 @@
 
 ## 5. 巻公開の検証
 
-巻公開は、当該巻で `resolve` を予定した未解決事項が正規形現在状態で `resolved` であることを検証します。未解決なら `volume_publication_invalid` で停止します。
+巻公開は、当該巻で `resolve` を予定した未解決事項が正規形現在状態で `resolved` であり、`resolved_condition_refs` と本文根拠位置が全 `ending_condition_id` を漏れなく参照することを決定的に検証します。いずれかが不合格なら `publication_invalid` を `last_error.code` に保存して停止します。本文が達成条件を意味的に満たすかは、`resolve` 場面の通常の独立 LLM 確認で判定し、上限到達時は他の本文と同じく最後の形式有効版を注意付き採用します。
 
-最終巻でも追加の達成条件照合、確認記録、本文再生成、注意付き公開による例外を設けません。シリーズ計画が結末必須未解決事項ごとに最終的な `resolve` 座標を一意に定め、各巻共通の公開検証が当該巻に予定された `resolve` の解決と本文根拠を検証するため、最終巻の通常公開が完了すれば全結末必須未解決事項も通常経路で検証済みになります。
+最終巻でも追加の達成条件照合、確認記録、本文再生成、注意付き公開による例外を設けません。シリーズ計画が結末必須未解決事項ごとに `resolve` の対象巻を一意に定め、巻・章・場面計画がその巻の中で具体座標を定め、各巻共通の公開検証が当該巻に予定された `resolve` の解決と本文根拠を検証するため、最終巻の通常公開が完了すれば全結末必須未解決事項も通常経路で検証済みになります。
 
 ## 6. 復旧
 
-`resolve` 場面の計画・本文・継続性更新・根拠の不整合は、`authority_reference_inconsistency` として停止する。この原因の保護された解決記録だけが、その場面計画から未公開依存末端までを選び直しまたは除外できる。公開済み巻の本文、場面、作品状態、公開記録は変更できません。
+`resolve` 場面の計画・本文・継続性更新・根拠が不整合なら停止し、その作業場所を再開しません。公開済み巻の本文、場面、作品状態、公開記録は変更できません。

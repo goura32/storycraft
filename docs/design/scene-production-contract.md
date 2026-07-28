@@ -23,10 +23,10 @@
 |---|---|
 | 責務 | 固定した場面カードと基準作品状態に従う本文候補を作る |
 | 必須入力スロット | `settings`、`current_state`、対象 `scene_plan`、対象 `scene_card`、カードが明示する許可済み文脈参照 |
-| 出力成果物 | `scene-prose` 候補。本文、対象場面座標、基準作品状態 ID、場面カード ID |
+| 出力成果物 | `scene-prose` 候補。本文、対象場面座標。基準作品状態 ID と場面カード ID は固定入力束からシステムが候補記録へ束縛する |
 | 次工程 | `scene_continuity`。本文が採用済みの場合だけ |
 
-本文生成に、カードが許可しない作者用秘密、視点人物が知らない情報、読者未開示情報、固定パスから探索した過去本文を渡しません。コードは、座標、基準作品状態、場面カード ID、必須本文項目を検証します。LLM は、視点、開示、人物知識、場面目的、予定した未解決事項の進行、文体・日本語品質を確認します。
+本文生成に、カードが許可しない作者用秘密、視点人物が知らない情報、読者未開示情報、固定パスから探索した過去本文を渡しません。コードは、入力束の座標・基準作品状態・場面カードと必須本文項目を検証します。LLM は、視点、開示、人物知識、場面目的、予定した未解決事項の進行、文体・日本語品質を確認します。
 
 ## 4. 継続性更新
 
@@ -34,10 +34,10 @@
 |---|---|
 | 責務 | 採用済み本文により生じた事実・知識・開示・未解決事項状態の変化を根拠付きで提案する |
 | 必須入力スロット | `settings`、`current_state`、対象 `scene_plan`、対象 `scene_card`、採用済み `scene_prose` |
-| 出力成果物 | `continuity-update` 候補。基準作品状態 ID、本文 ID、変更集合、各変更の本文根拠位置 |
+| 出力成果物 | `continuity-update` 候補。変更集合、各変更の本文根拠位置。基準作品状態 ID と本文 ID は固定入力束からシステムが候補記録へ束縛する |
 | 次工程 | `scene_commit`。更新が採用済みの場合だけ |
 
-コードは、各変更がカードの許可更新内にあること、本文 ID・根拠位置が実在すること、未解決事項の `progress|resolve` が場面計画の割当と一致すること、同じ事実を矛盾する値へ更新しないことを検証します。LLM は、本文に根拠があるか、変更が本文の意味を過不足なく反映するか、知識・開示の帰属が正しいかを確認します。
+コードは、各変更がカードの許可更新内にあること、入力束の本文と根拠位置が実在すること、未解決事項の `progress|resolve` が場面計画の割当と一致すること、同じ事実を矛盾する値へ更新しないことを検証します。LLM は、本文に根拠があるか、変更が本文の意味を過不足なく反映するか、知識・開示の帰属が正しいかを確認します。
 
 ## 5. 場面確定
 
@@ -61,7 +61,7 @@
 | `scene_card` | `scene_card.vNN.cMM.sKK`、`scene_card_adoption.vNN.cMM.sKK` | `scene_prose.vNN.cMM.sKK` |
 | `scene_prose` | `scene_prose.vNN.cMM.sKK`、`scene_prose_adoption.vNN.cMM.sKK`、`scene_prose_disposition.vNN.cMM.sKK` | `scene_continuity.vNN.cMM.sKK` |
 | `scene_continuity` | `continuity_update.vNN.cMM.sKK`、`continuity_adoption.vNN.cMM.sKK`、`continuity_disposition.vNN.cMM.sKK` | `scene_commit.vNN.cMM.sKK` |
-| `scene_commit` | `scene.vNN.cMM.sKK`、`current_state`、`scene_commit.vNN.cMM.sKK` | 次場面・次章・巻公開 |
+| `scene_commit` | `scene.vNN.cMM.sKK`、`current_state`、`scene_commit.vNN.cMM.sKK`、`prior_volume_plan` | 次場面・次章・巻公開 |
 
 本文採用を置換するときは、同じ場面の継続性更新、継続性採用記録、継続性品質判定スロットを後続スナップショットから除外し、新本文から再作成します。次工程は候補の固定パスや有効候補を読まず、このスロットを読むだけです。
 

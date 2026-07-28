@@ -17,7 +17,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
-| 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `retry.technical_max_attempts`。作業場所作成時に固定 | `blocked/manual_review_required` |
+| 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked/manual_review_required` |
 | 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め固定5回 | `blocked/manual_review_required` |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正5回を消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
@@ -44,7 +44,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-確認・修正・再確認は、生成時の入力束を省略、置換、最新探索してはなりません。反復番号を `r=0` を生成、`r>=1` を修正とすると、確認 `review(r)` の入力候補は `candidate(r)`、修正 `candidate(r+1)` の入力候補は **直前の `candidate(r)`**、修正入力の確認結果は **今回の `review(r)`** です。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使うことはできません。確認応答に無効な根拠位置の指摘があれば、システムが除外した後の有効指摘だけを修正入力に渡します。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を canonical JSON または本文では UTF-8 文字列として連結して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。各生成・確認・修正の最終 request 全体について、この context と candidate/review、system 指示文、user 指示文、応答 schema、固定メタデータを canonical JSON または UTF-8 文字列として順に連結した Unicode code point 数を算定し、`max_input_chars` を超えた時点で LLM を呼ばず `internal_error` にする。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使うことはできません。確認応答に無効な根拠位置の指摘があれば、システムが除外した後の有効指摘だけを修正入力に渡します。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
@@ -52,16 +52,16 @@ def invoke_structured(operation):
   ├─ 重大あり・上限前: 修正(generation_context + candidate + review)
   │                         → 決定的検証
   │                         → 再確認(generation_context + revised candidate)
-  └─ 重大あり・上限到達: 最後の構造有効版を注意付き採用
+  重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（固定5回すべて形式不正）は、`blocked` / `manual_review_required` とする。
 ```
 
-工程別の `quality.max_revision_passes` は作業場所作成時に `runtime/config.json` へ固定し、途中で変えません。品質上限は停止理由ではありません。
+`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。V1 の通常工程はこの共通上限を使います。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
 
 レビュー重要度は `重大`、`注意`、`参考` の三値です。LLM は提案し、コードが値と根拠位置を検証します。存在しない JSON パス、段落番号、本文位置を持つ指摘は `invalid_evidence_location` として除外し、修正入力・重大判定・公開注意の根拠に使いません。
 
-品質上限で重大指摘が残った選択結果は `accepted_with_notice` とします。通常の上限到達による注意種別は `編集` です。LLM が `表現` を提案する場合も、許可された列挙値と根拠位置をコードが検証したときだけ `表現` を選べます。どちらも巻公開時の定型文以外を読者原稿へ出しません。
+品質上限で重大指摘が残った選択結果は `accepted_with_notice` とします。通常の上限到達による注意種別は常に `編集` です。LLM が注意種別を提案・変更することはありません。巻公開時は定型文以外を読者原稿へ出しません。
 
 ## 4. LLM 応答からの ID 採番禁止
 
@@ -101,16 +101,16 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 }
 ```
 
-候補 ID・候補版・成果物種類・確認観点 ID・確認記録 ID・指摘 ID・除外指摘は呼出し側と永続化層が付与します。コードは、対象候補と確認観点を呼出し記録により束縛し、`decision`、重要度列挙値、根拠位置の実在と解決可能性を検証してから指摘 ID を採番します。`pass` は有効指摘が空、`issues` は有効指摘が一件以上でなければなりません。根拠位置が不正な指摘は、システム生成の確認記録の `excluded_issues` に移し、修正入力・重大判定・公開注意の根拠に使いません。
+候補 ID・候補版・成果物種類・確認観点 ID・確認記録 ID・指摘 ID・除外指摘は呼出し側と永続化層が付与します。コードは、対象候補と確認観点を呼出し記録により束縛し、`decision`、重要度列挙値、根拠位置の実在と解決可能性を検証してから指摘 ID を採番します。`pass` は有効指摘が空、`issues` は有効指摘が一件以上でなければならない。根拠位置が不正な指摘は、システム生成の確認記録の `excluded_issues` に移し、修正入力・重大判定・公開注意の根拠に使いません。除外後に `decision` と有効指摘集合がこの規則に一致しない応答は形式不正であり、当該 review 論理処理の固定5回再呼出しに数えます。
 
 `review_profile_id` は、たとえば初期設計の物語的整合、計画の親計画整合、本文の視点・開示・文体、継続性更新の本文根拠を定めます。確認観点は評価観点だけを変え、ReviewResponse の項目・列挙値・根拠表現を変えません。
 
 ## 7. 最小記録形式
 
-`call-record.json` は処理、役割、対象候補、技術的試行番号、形式試行番号、シード、Ollama endpoint、モデル identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、通信結果を持ちます。
+`call-record.json` は処理、役割、対象候補、技術的試行番号、形式試行番号、シード、Ollama endpoint、モデル identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、通信結果、前回失敗後の予定待機ミリ秒、実待機ミリ秒、待機結果を持ちます。
 
 `validation-record.json` は処理、呼出し ID、検証器種類、`valid|invalid`、各 check、失敗コードを持ちます。
 
-`quality-disposition.json` は選択済み版、修正上限、使用回数、確認参照、`accepted_clean|accepted_with_notice|blocked`、残存重大指摘、注意種別、理由コードを持ちます。
+`quality-disposition.json` は採用済み品質判定 `quality/<quality-id>/record.json` の内容を指す名称であり、別ファイルを作らない。`quality-id` は `quality-{通番6桁}`、採用記録と本文採用 slot が同じ ID を参照する。
 
 `status` と `validate` は提供者を呼ばず、これらの参照、形式、試行上限、シード重複、採用連鎖を再検証します。

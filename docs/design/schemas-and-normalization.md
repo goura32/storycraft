@@ -6,6 +6,8 @@
 
 ID はコードだけが採番します。LLM は新しい ID を返しません。LLM が既存 ID を返せるのは、入力カタログにある ID を選ぶときだけです。
 
+各工程は生成前に、system prompt、user prompt、応答スキーマ、メタデータを連結したリクエスト全体の Unicode code point 数が `max_input_chars` 以下であることを実測で検証し、超過なら LLM を呼ばず `internal_error` とする。settings の `max_input_chars` は 50000〜200000 の整数かつ `scene_text_char_range[1] * 4 + 40000` 以上とする。概算式による事前カウントは行わない。
+
 ## 2. 共通値
 
 | 値 | 形式 |
@@ -21,7 +23,7 @@ ID はコードだけが採番します。LLM は新しい ID を返しません
 
 ## 3. 保存成果物の共通外枠
 
-採用済み成果物、選択スナップショット、公開記録は、種類ごとの内容に加えて次を持ちます。候補・確認・呼出し・検証の監査記録はこの外枠の対象外であり、それぞれの記録形式を持ちます。
+採用済みの内容成果物だけは、種類ごとの内容に加えて次を持ちます。選択スナップショット、公開記録、停止状態、候補・確認・呼出し・検証の監査記録はこの外枠の対象外であり、それぞれの個別記録形式を持ちます。
 
 ```json
 {
@@ -34,7 +36,19 @@ ID はコードだけが採番します。LLM は新しい ID を返しません
 }
 ```
 
-採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、唯一の初期化時成果物であり `input_selection_id=null` を許します。それ以外の保存成果物は入力選択を必須とします。依頼採用時に、`request` と `settings` をスロットに持つ最初の選択スナップショットを原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。
+`generation` は共通外枠を持つ採用済み内容成果物で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する `payload` を持ちます。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
+
+`keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
+
+`init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を許します。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
+
+## 3.1 `init` 入力
+
+`--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
+
+- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。内容制約は依頼入口の契約に従う。
+- `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": "1〜5", "quality_revision_limit": "1〜5", "volume_chapter_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は整数の昇順ペア、`max_input_chars` は 50000〜200000 の整数かつ `scene_text_char_range[1] * 4 + 40000` 以上。endpoint は loopback HTTP だけを許可し、remote host、proxy、認証情報・header・credential 項目を拒否する。
 
 ## 4. LLM 応答
 
@@ -93,17 +107,17 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 | chapter-plan | volume_number、chapter_number、scenes、thread_allocations |
 | scene-plan | 座標、purpose、characters、thread_allocations、planned_fact_changes、next_scene_conditions |
 | scene-card | 座標、pov_character、allowed_facts、allowed_knowledge、allowed_disclosures、forbidden_disclosures、allowed_updates、prose_conditions |
-| scene-prose | 座標、base_generation、scene_card、text |
-| continuity-update | 座標、base_generation、scene_prose、changes |
+| scene-prose | 座標、text |
+| continuity-update | 座標、changes |
 | 場面 | 座標、scene_prose、continuity_update、base_generation |
 | 選択 | selection_id、input_selection_id、slots、created_at |
 | 品質判定 | selected_candidate、review_records、revision_limit、revision_count、result、remaining_major_issues、notice_type |
 
 各種類の型、列挙値、相関制約は対応する工程契約で定めます。ここにない項目を保存スキーマに追加するには、この表と工程契約を同時に更新します。
 
-## 7. 正規化後の検証
+`scene-prose` と `continuity-update` の `base_generation`、`scene_card`、`scene_prose` は LLM 応答 payload に含めません。候補記録と採用済み成果物の外枠に、工程の固定入力束からシステムが一意に束縛します。
 
-コードは、LLM 応答を解析してから次の順に検証します。
+## 7. 正規化後の検証
 
 1. 応答スキーマと成果物種類。
 2. 未知項目、型、列挙値、必須項目。

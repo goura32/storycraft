@@ -11,7 +11,7 @@
 | `revise(r+1)` | 生成入力束 + `candidate(r)` + `review(r)` | `candidate(r+1)` | `candidate_saved` |
 | `adopt` | 選択候補、品質判定 | 不変成果物、採用記録、後続スナップショット | `adopted` |
 
-`active_candidate` は候補記録 ID、反復番号、生成入力束の成果物参照、直前確認記録 ID を持つ。候補・確認が保存済みなら、`resume` は提供者を呼ばず次の未実行処理から再開します。
+`active_candidate` は `running` 中の候補工程だけに存在し、候補記録 ID、反復番号、生成入力束の成果物参照、直前確認記録 ID を持つ。これは同一 `run` の次処理を決める実行位置であり、`blocked` 後の再開には使わない。
 
 ## 2. 工程表
 
@@ -45,21 +45,18 @@
 
 他項目は拒否します。座標は親計画とスナップショットスロットの座標に一致しなければなりません。
 
-## 4. step と resume
+## 4. 実行
 
-`step` は現在工程の次の一つの永続的な確定点まで進みます。確定点は候補保存、確認保存、採用記録確定、場面確定確定、巻公開確定です。
-
-`run` は `completed` または `blocked` まで確定点を連続実行します。`resume` は保留中確定を先に収束し、その後 `run` と同じです。`status` と `validate` は確定点を変更せず提供者を初期化しません。
+`run` は `completed` または `blocked` まで確定点を連続実行し、健全で一意な保留中確定を先に収束します。`status` と `validate` は確定点を変更せず提供者を初期化しません。
 
 ## 5. 失敗と停止
 
 | 失敗 | 記録 | 状態 |
 |---|---|---|
-| 形式不正5回 | 検証記録群、有効候補 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`invalid_response_limit` |
-| 技術再試行上限 | 呼出し記録群 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`technical_retry_exhausted` |
-| 設定不正 | 検証記録 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`provider_configuration_invalid` |
-| 検証器の内部失敗 | エラー記録 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`internal_error` |
-| スナップショット参照不整合 | 検証記録 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`authority_reference_inconsistency` |
-| 公開検証器不合格 | 検証記録 | `blocked`。`stop_reason=manual_review_required`、blocked-state 原因=`volume_publication_invalid` |
+| 形式不正5回 | 検証記録群、有効候補 | `blocked`。`stop_reason=manual_review_required` |
+| 技術再試行上限 | 呼出し記録群 | `blocked`。`stop_reason=manual_review_required` |
+| 検証器の内部失敗 | エラー記録 | `blocked`。`stop_reason=manual_review_required` |
+| スナップショット参照不整合 | 検証記録 | `blocked`。`stop_reason=manual_review_required` |
+| 公開検証器不合格 | 検証記録 | `blocked`。`stop_reason=manual_review_required` |
 
-停止時は blocked-state を確定し、有効候補と保留中確定を保持します。通常 CLI は停止中を解除できません。
+設定不正は `init` 前に終了コード `2` で拒否し、作業場所を作りません。停止時は有効候補と保留中確定を保持します。通常 CLI は停止中を解除せず、その作業場所は再開しません。
