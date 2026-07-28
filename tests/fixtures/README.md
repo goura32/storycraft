@@ -1,50 +1,51 @@
-# Storycraft テスト fixture
+# Storycraft テスト用資料
 
-このdirectoryには、Storycraft Version 1の自動試験で使用する最小fixtureを置く。ここにある入力、原稿、設定、作品前提はテストデータであり、製品仕様・要件・作品 Canon の正本ではない。現行契約は[`../../docs/SPECIFICATION.md`](../../docs/SPECIFICATION.md)に従う。
+このディレクトリには、Storycraft V1 の自動試験で使う最小限のテスト用資料を置きます。ここにある入力、原稿、設定、作品の前提は試験データであり、製品仕様、要件、作品の正本ではありません。現在の契約は[仕様書](../../docs/SPECIFICATION.md)に従います。
+
+「fixture」は試験で使う入力や期待結果を指す内部用語です。この文書では「テスト用資料」と呼びます。パス名やデータ形式で必要な英字は、実装上の識別子として残ります。
 
 ## 方針
 
-- 実際のJSONまたはMarkdown fileを試験コードが読み込む。
-- Markdown文書内へ巨大なJSON例を複製しない。
-- 入力・成果物の不正fixtureは`invalid/`に置き、Providerの失敗応答は`provider/`に置く。
-- fixture内のIDと参照は、同じscenario内で一貫させる。
-- Credential、実Provider名、実API keyを含めない。
-- Hash、Manifest graph、Publication Gateを前提にしない。
+- 実際の JSON または Markdown ファイルを試験コードが読み込む。
+- Markdown 文書内へ巨大な JSON 例を複製しない。
+- 入力・成果物の不正なテスト用資料は `invalid/`、LLM 提供者の失敗応答は `provider/` に置く。
+- テスト用資料内の識別子と参照は、同じ試験場面の中で一貫させる。
+- 認証情報、実際の LLM 提供者名、実際の API キーを含めない。
+- ハッシュ値や成果物の関係図は、最小資料の前提にしない。ただし公開用資料は、確定済み入力と公開可能な完結判定結果を前提とする。
 
-## 主なscenario
+## 主な試験場面
 
-| Directory | 用途 |
+| ディレクトリ | 用途 |
 |---|---|
-| `brief/` | Brief入力 |
-| `keywords/` | Keywords入力 |
-| `initial-design/` | Initial Design |
-| `plans/` | Series／Volume／Chapter／Scene Plan |
-| `scene/` | Scene Card、本文、Continuity、Review |
-| `generation/` | Initial GenerationとScene後Generation |
-| `handoff/` | Volume Handoff |
-| `completion/` | 完結判定3状態 |
-| `publication/` | 独立した最小Publication組立scenario |
-| `workspace/` | run-state、counters、config |
-| `recovery/` | Crash位置と期待するRecovery分類 |
-| `provider/` | Provider Adapter応答 |
-| `security/` | Prompt injectionとredaction |
-| `invalid/` | 意図的に不正なfixture |
+| `brief/` | 依頼文の入力 |
+| `keywords/` | キーワードの入力 |
+| `initial-design/` | 最初の作品設計 |
+| `plans/` | シリーズ、巻、章、場面の計画 |
+| `scene/` | 場面カード、本文、継続性更新、確認 |
+| `generation/` | 最初の作品状態と場面確定後の作品状態 |
+| `handoff/` | 巻の引継ぎ |
+| `completion/` | 完結判定の三つの結果 |
+| `publication/` | 独立した最小の公開用原稿組立 |
+| `workspace/` | 実行状態、回数、設定 |
+| `recovery/` | 停止位置と期待する復旧分類 |
+| `provider/` | LLM 提供者の応答 |
+| `security/` | 指示の注入と伏せ字 |
+| `invalid/` | 意図的に不正な資料 |
 
 ## 作品の前提
 
-仮題は『潮騒の記憶』。
+仮題は『潮騒の記憶』です。
 
-主人公の澪は、海辺の町へ戻り、失われた記憶と姉・凪の秘密を追う。
-灯台火災の夜がシリーズ全体の中心Threadであり、4巻で姉妹が真相を受け止め、町を離れずに再出発する。
+主人公の澪は海辺の町へ戻り、失われた記憶と姉・凪の秘密を追います。灯台火災の夜がシリーズ全体の中心的な未解決事項であり、4巻で姉妹が真相を受け止め、町を離れずに再出発します。
 
-`provider/prose-success.txt`と`scene/prose.md`は、Provider成功応答とScene本文という別の検証目的で同じ本文を使う。片方を変更する場合は、同一本文である必要が残るかを確認する。
+`provider/prose-success.txt` と `scene/prose.md` は、LLM 提供者の成功応答と場面本文という別の検証目的で同じ本文を使います。片方を変更する場合は、同一本文である必要が残るかを確認します。
 
-`publication/`はScene fixtureとは独立した最小scenarioである。同じ題名・章名は説明用の再利用であり、`scene/prose.md`を要約・変換して作る出力例ではない。
+`publication/` は場面のテスト用資料とは独立した最小の試験場面です。同じ題名・章名は説明用の再利用であり、`scene/prose.md` を要約・変換して作る出力例ではありません。
 
 ## 利用方法
 
-試験コードは、このdirectoryをpackage source treeから直接参照せず、repository rootまたはtest resource helperから解決する。
+試験コードは、このディレクトリをパッケージのソースツリーから直接参照せず、リポジトリのルートまたは試験用の参照処理から解決します。
 
-不正fixtureは、file名または隣接する`expected.json`で期待errorを示す。
+不正なテスト用資料は、ファイル名または隣接する `expected.json` で期待する重大な指摘を示します。
 
-`provider/malformed-json.txt`は、コードフェンスや補足文を含むため応答全体が生JSONではない形式不正を表す。Recoveryの`tree.txt`はcrash時の配置だけを表し、期待する`resume`、`regenerate`、`manual`分類は同じscenarioの`expected.json`で判定する。
+`provider/malformed-json.txt` は、コードフェンスや補足文を含むため、応答全体が生の JSON ではない形式不正を表します。復旧用の `tree.txt` は停止時の配置だけを表し、期待する再開、作り直し、人手確認の分類は、同じ試験場面の `expected.json` で判定します。
