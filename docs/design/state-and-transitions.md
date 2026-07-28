@@ -66,11 +66,7 @@
 工程名は以下を残します。
 
 ```text
-input
-→ initial_concept → initial_characters → initial_relationships
-→ initial_world → initial_knowledge → initial_threads → initial_ending
-→ initial_integrate → initial_accept
-→ series_plan → volume_plan → chapter_plan → scene_plan
+`input → initial_design → series_plan → volume_plan → chapter_plan → scene_plan`
 → scene_card → scene_prose → scene_continuity → scene_commit
 → volume_publication
 ```
@@ -133,4 +129,4 @@ V1 のローカル作業場所では、同じ OS 利用者による直接ファ�
 
 停止時には、停止理由、current selection、工程、対象、保留中確定を内容とする不変の `blocked-state-{通番}` 記録を確定する。grant はこの `blocked_state_id` に署名で束縛する。登録は、lock 取得→`blocked/manual_review_required` と blocked-state ID の照合→authorizer 検証→原因別入力検証→`resolution_application/prepared` 保存→解決記録の不変確定→`record_finalized` 保存→未公開部分の `selected_authority_refs` から新しい選択スナップショットを不変確定→新 snapshot の slot・公開済み巻の固定参照を検証→`current_selection_id` と戻り先を同じ state 更新で切替→`running` 復帰、の順です。crash recovery は記録と新 snapshot がともに確定済みのときだけ state を収束し、片方がない・不整合なら `blocked` を維持します。
 
-`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。
+`selected_authority_refs` を許すのは整合性不一致だけで、未公開の論理位置に限ります。公開済み巻、その原稿、原稿の構成元への参照は選び直せません。選び直す artifact が未公開の下流 artifact の入力なら、解決記録はその artifact から未公開の依存グラフ末端までを置換または除外する閉包を示します。新 snapshot は閉包外の旧下流 slot を残してはなりません。閉包を作れない、または `recovery_stage` と `recovery_target` が新 snapshot の次に必要な slot と一致しない場合は、`blocked` を維持します。

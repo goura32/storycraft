@@ -15,6 +15,9 @@
 
 | 文書 | 決めること |
 |---|---|
+| [初期設計](initial-design-contract.md) | 一括生成・確認・修正・採用、初期作品状態、シリーズ計画への入力 |
+| [計画工程](planning-contract.md) | シリーズ・巻・章・場面計画の入力、出力、採用、検証 |
+| [場面制作](scene-production-contract.md) | カード、本文、継続性更新、場面確定の入力、出力、採用、検証 |
 | [状態と遷移](state-and-transitions.md) | 実行状態 v2、工程、停止、保護された解決記録登録 |
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |

@@ -33,19 +33,21 @@ publications/
   "volume_publication_id": "volume-pub-v04-000004",
   "volume_number": 4,
   "input_selection_id": "selection-000077",
+  "settings_id": "settings-000001",
   "series_plan_id": "series-plan-0001",
   "volume_plan_id": "volume-plan-v04",
   "current_state_id": "gen-000123",
   "chapter_plan_ids": ["chapter-plan-v04-c001"],
   "scene_ids": ["scene-v04-c001-s001"],
   "publication_notice_type": null,
+  "quality_disposition_refs": ["quality-disposition-scene-v04-c001-s001"],
   "created_at": "..."
 }
 ```
 
-`publication_notice_type` は `null`、`表現`、`編集` だけを許可します。非 `null` なら原稿先頭に仕様書の定型文を置きます。
+`publication_notice_type` は `null`、`表現`、`編集` だけを許可します。公開 record は input selection の各場面に対応する immutable `quality_disposition` を `quality_disposition_refs` として固定します。残存重大指摘が一つでもあれば、許可された disposition の注意種別を決定的に集約します。`表現` が一つでもあれば `表現`、なければ `編集` とし、残存重大指摘がなければ `null` です。非 `null` なら原稿先頭に仕様書の定型文を置きます。
 
-コードは input selection を読み、公開記録の計画・状態・場面 ID が対応する snapshot slot と完全一致し、欠落・余剰参照がないことを検証します。その後、計画順、ID の集合と重複、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
+コードは input selection を読み、公開記録の計画・状態・場面 ID、各場面の quality disposition ID、公開注意を決める設定 ID が対応する snapshot slot と完全一致し、欠落・余剰参照がないことを検証します。quality disposition の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、ID の集合と重複、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
 
 ## 3. 結末必須事項の扱い
 
