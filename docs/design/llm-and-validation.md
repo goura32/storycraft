@@ -52,13 +52,56 @@ def invoke_structured(operation):
 
 品質上限で重大指摘が残った選択結果は `accepted_with_notice` とします。通常の上限到達による注意種別は `編集` です。LLM が `表現` を提案する場合も、許可された enum と根拠位置をコードが検証したときだけ `表現` を選べます。どちらも巻公開時の定型文以外を読者原稿へ出しません。
 
-## 4. 最小記録形式
+## 4. 生成・修正の共通候補 schema
+
+生成と修正は、**全工程で同じ `CandidateEnvelope` schema** を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` schema だけです。修正専用 schema、差分だけを返す schema、部分成果物だけを返す schema は持ちません。
+
+```json
+{
+  "schema_version": "candidate-envelope-v1",
+  "candidate_id": "candidate-...",
+  "artifact_kind": "initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
+  "payload": { "artifact_kind ごとの完全な候補内容" },
+  "base_selection_id": "selection-...",
+  "parent_candidate_id": null,
+  "review_record_ids": []
+}
+```
+
+初回生成は `parent_candidate_id=null`、`review_record_ids=[]` です。修正は同じ schema を使い、元候補 ID と修正根拠となる有効 review record ID を入れます。`payload` は必ず同じ artifact kind の完全 schema を満たし、partial patch を返してはなりません。`scene-prose` を修正した場合は、新候補採用後に対応する continuity update を新たに生成します。
+
+## 5. 全工程共通の確認 schema
+
+独立 LLM 確認は、**全工程で同じ `ReviewRecordEnvelope` schema** を返します。工程固有の評価基準は `review_profile_id` が定義し、確認応答の構造を変えません。
+
+```json
+{
+  "schema_version": "review-record-envelope-v1",
+  "review_record_id": "review-...",
+  "candidate_id": "candidate-...",
+  "candidate_version": 1,
+  "artifact_kind": "...",
+  "review_profile_id": "...",
+  "decision": "pass | issues",
+  "issues": [{
+    "issue_id": "issue-...",
+    "severity": "重大 | 注意 | 参考",
+    "evidence_locations": ["JSON path | paragraph index | prose offset"],
+    "explanation": "..."
+  }],
+  "excluded_issues": []
+}
+```
+
+コードは candidate ID・artifact kind・version、`decision`、severity enum、issue ID 一意性、根拠位置の実在と解決可能性を検証します。`pass` は有効 issue が空、`issues` は有効 issue が一件以上でなければなりません。根拠位置が不正な issue は `excluded_issues` に移し、修正入力・重大判定・公開注意の根拠に使いません。
+
+`review_profile_id` は、たとえば初期設計の物語的整合、計画の親計画整合、本文の視点・開示・文体、継続性更新の本文根拠を定めます。profile は評価観点だけを変え、ReviewRecordEnvelope の field・enum・根拠表現を変えません。
+
+## 6. 最小記録形式
 
 `call-record.json` は operation、role、対象候補、技術的試行番号、形式試行番号、seed、Ollama endpoint、model identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、transport 結果を持ちます。
 
 `validation-record.json` は operation、call ID、validator kind、`valid|invalid`、各 check、failure code を持ちます。
-
-`review-record.json` は candidate ID と版、review kind、call ID、根拠位置が検証済みの issue、除外された issue を持ちます。
 
 `quality-disposition.json` は selected version、修正上限、使用回数、review refs、`accepted_clean|accepted_with_notice|blocked`、残存重大指摘、注意種別、reason code を持ちます。
 
