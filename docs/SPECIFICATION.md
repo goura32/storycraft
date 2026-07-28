@@ -89,7 +89,7 @@ LLM は創作、意味的要約、物語品質・矛盾・欠落・誤帰属の�
 
 Review は Candidate を書き換えません。Revision は Candidate 全体を置換し、指摘対象外を無断変更してはなりません。Issue は対象 artifact、field path または本文範囲へ解決できる `evidence_locator` を持ち、解決できない Issue を Revision 入力に渡しません。
 
-Review と Revision の回数、通信 retry、形式 retry は operation ごとに上限を持ち、Call audit に残します。形式不正は再送対象、意味的な error は Revision 対象です。既に確定した成果物を再生成して別結果を探索してはなりません。
+Review と Revision の回数、通信 retry、形式 retry は operation ごとに上限を持ち、Call audit に残します。形式不正は再送対象、意味的な error は Revision 対象です。Review 上限後も error が残る Candidate は原則 `blocked` とし、採用してはなりません。未採用 Candidate の前提だけが失効した場合は、その Candidate を破棄し、新しい正本から同じ工程を再生成できます。既に確定した成果物を再生成して別結果を探索してはなりません。
 
 ## 7. Context、秘密、要約
 
