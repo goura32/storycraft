@@ -44,11 +44,11 @@ storycraft validate --workspace PATH --json
 
 ## 3. 模擬 Ollama と受入試験（仕様レベル）
 
-模擬 Ollama は HTTP サーバー。依頼はモデル、シード、system 指示文、user 指示文、応答スキーマを検査する。応答は設定した `CandidateResponse` または `ReviewResponse` を返す。試験は受信依頼の入力成果物参照とシードを記録し、確認・修正が生成入力束を保つことを検証する。
+模擬 Ollama は HTTP サーバー。依頼はモデル、シード、Thinking有効化、モデル最大値の `options.num_ctx`、system 指示文、user 指示文、応答スキーマを検査する。応答は設定した `CandidateResponse` または `ReviewResponse` を返す。試験は受信依頼の入力成果物参照とシードを記録し、確認・修正が生成入力束を保つことを検証する。設定で明示されない温度等の `options` が送られないことも検証する。
 
-**模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、`messages`、シード、JSON Schema の `response_format` を検査し、`choices[0].message.content` に応答を返す。実装クラス・メソッドシグネチャはコード側で定義。
+**模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、モデル最大コンテキスト長を返す OpenAI 互換のモデル情報応答も提供する。`messages`、`think: true`、シード、`options.num_ctx`、JSON Schema の `response_format` を検査し、`choices[0].message.content` に応答を返す。温度等は設定で指定された場合だけ検査する。実装クラス・メソッドシグネチャはコード側で定義。
 
-**設定検証契約**: `init --config FILE` は JSON がスキーマ（§3.1）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各range/max_input_chars が必須。未知項目・型不一致・range順序違反・max_input_chars下限違反で終了コード 2。**provider は `ollama` 固定。endpoint は loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。max_input_chars は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。invalid_response_limit は形式不正再呼出しの上限回数（1以上の整数）。**
+**設定検証契約**: `init --config FILE` は JSON がスキーマ（§3.1）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各range/max_input_chars が必須で、`request_options` は任意。未知項目・型不一致・range順序違反・max_input_chars下限違反で終了コード 2。**provider は `ollama` 固定。endpoint は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。max_input_chars は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。invalid_response_limit は形式不正再呼出しの上限回数（1以上の整数）。**
 
 **受入試験シナリオ（10件、仕様レベル）**:
 

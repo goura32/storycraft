@@ -11,7 +11,7 @@
 
 ### 7. LLMClient.invoke インターフェース契約（仕様レベル）
 
-`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。実装インターフェースの詳細（引数順・戻り値構造・リトライ待機秒数）はコード側で定義し、契約には「Ollama 専用」「技術的再試行上限 `technical_retry_limit` 回まで」「失敗時は `internal_error`」のみを記述します。
+`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使い、`/v1/chat/completions` へ `messages` と JSON Schema の `response_format` を送信し、`choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。実装インターフェースの詳細（引数順・戻り値構造・リトライ待機秒数）はコード側で定義し、契約には「Ollama 専用」「技術的再試行上限 `technical_retry_limit` 回まで」「失敗時は `internal_error`」のみを記述します。
 
 ### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
 
@@ -22,6 +22,10 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用、形式不正上限到達時は `blocked/manual_review_required` とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「形式不正上限回数」のみを記述します。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
+
+すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を取得し、その値を request の `options.num_ctx` に指定する。利用可能な OpenAI 互換 API から最大値を決定できない場合は、推測・縮小・Ollama 既定値へのフォールバックをせず、LLM を呼ばずに `internal_error` として停止する。
+
+温度、`top_p`、`top_k`、`repeat_penalty` などの推論パラメータは `settings.request_options` で任意に指定できる。**既定では `request_options` を省略し、これらのキーを request に送らない。**指定されたキーだけを `options` に追加し、Ollama のモデル既定値を上書きしない。
 
 ## 2. 二種類の再試行
 
