@@ -11,7 +11,7 @@
 | `revise(r+1)` | 生成入力束 + `candidate(r)` + `review(r)` | `candidate(r+1)` | `candidate_saved` |
 | `adopt` | 選択候補、品質判定 | 不変成果物、採用記録、後続スナップショット | `adopted` |
 
-`active_candidate` は `running` 中の候補工程だけに存在し、候補記録 ID、反復番号、生成入力束の成果物参照、直前確認記録 ID を持つ。これは同一 `run` の次処理を決める実行位置であり、`blocked` 後の再開には使わない。
+未採用候補の途中位置は run-state に保存しない。候補工程での中断は工程先頭から新しい呼出しとして実行し、採用済み成果物だけを `pending_commit` で収束する。
 
 ## 2. 工程表
 
@@ -53,10 +53,10 @@
 
 | 失敗 | 記録 | 状態 |
 |---|---|---|
-| 形式不正**上限回数** | 検証記録群、有効候補 | `blocked`。`stop_reason=manual_review_required` |
-| 技術再試行上限 | 呼出し記録群 | `blocked`。`stop_reason=manual_review_required` |
-| 検証器の内部失敗 | エラー記録 | `blocked`。`stop_reason=manual_review_required` |
-| スナップショット参照不整合 | 検証記録 | `blocked`。`stop_reason=manual_review_required` |
-| 公開検証器不合格 | 検証記録 | `blocked`。`stop_reason=manual_review_required` |
+| 形式不正**上限回数** | 対応する call-record の checks、有効候補 | `blocked`。last_error は `invalid_response_limit` |
+| 技術再試行上限 | 呼出し記録群 | `blocked`。last_error は `technical_retry_exhausted` |
+| 検証器の内部失敗 | run-state.last_error | `blocked`。last_error は `internal_error` |
+| スナップショット参照不整合 | run-state.last_error の evidence_refs | `blocked`。last_error は `authority_inconsistency` |
+| 公開検証器不合格 | run-state.last_error の evidence_refs | `blocked`。last_error は `publication_invalid` |
 
 設定不正は `init` 前に終了コード `2` で拒否し、作業場所を作りません。停止時は有効候補と保留中確定を保持します。通常 CLI は停止中を解除せず、その作業場所は再開しません。

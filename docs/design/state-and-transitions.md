@@ -10,16 +10,13 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "workspace_id": "ws-000001",
-  "run_id": "run-000001",
   "status": "running",
-  "stop_reason": null,
   "last_error": null,
   "current_stage": "scene_plan",
   "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2},
   "current_selection_id": "selection-000001",
-  "active_candidate": null,
   "active_scene_id": null,
   "pending_commit": null,
   "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
@@ -30,9 +27,9 @@
 
 | 値 | 意味 | 不変条件 |
 |---|---|---|
-| `running` | 次工程または確定途中の収束を実行できる | `stop_reason` は `null` |
-| `blocked` | 人手確認待ちの終端状態 | `stop_reason` は必ず `manual_review_required`。通常操作で `running` に戻さない |
-| `completed` | 最終巻が公開済み | `stop_reason`、`current_stage`、`current_target`、候補、場面、保留中確定はすべて `null` |
+| `running` | 次工程または確定途中の収束を実行できる | `last_error` は `null` |
+| `blocked` | 人手確認待ちの終端状態 | `last_error` は必須。通常操作で `running` に戻さない |
+| `completed` | 最終巻が公開済み | `current_stage`、`current_target`、場面、保留中確定はすべて `null` |
 
 `initializing`、`stopping`、`stopped`、`failed` は v2 の保存値にしません。作業場所作成は、作成用一時場所を検証してから、最初から `running` の v2 状態を確定します。
 
@@ -44,7 +41,7 @@
 
 `current_selection_id` は `request_intake` だけ最初の選択前に `null` を許します。この値は `request_intake` の `running` または `blocked` だけで許可し、採用後の `initial_design` 以降は必ず不変選択を指します。
 
-`last_error` は `null` または `{ "code": "固定診断コード", "message": "短い説明", "evidence_refs": ["validation/call/artifact ID"], "occurred_at": "UTC 時刻" }` です。`blocked` では必須で、`code` は `invalid_response_limit`、`technical_retry_exhausted`、`internal_error`、`authority_inconsistency`、`publication_invalid` のいずれかとします。これは `status` と `validate` の診断用であり、CLI stderr の error `code` enum とは別です。
+`last_error` は `null` または `{ "code": "固定診断コード", "message": "短い説明", "evidence_refs": ["call/artifact ID"], "occurred_at": "UTC 時刻" }` です。`blocked` では必須で、`code` は `invalid_response_limit`、`technical_retry_exhausted`、`internal_error`、`authority_inconsistency`、`publication_invalid` のいずれかとします。これは `status` と `validate` の診断用であり、CLI stderr の error `code` enum とは別です。
 
 - `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
 - `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）

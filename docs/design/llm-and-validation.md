@@ -89,15 +89,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 ## 5. 生成・修正の共通候補スキーマ
 
-生成と修正は、**全工程で同じ ID なしの `CandidateResponse` スキーマ** を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
-
-```json
-{
-  "schema_version": "candidate-response-v1",
-  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
-  "payload": { "説明": "artifact_kind ごとの完全な候補内容。新規 ID は含めない" }
-}
-```
+生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
 
 生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 

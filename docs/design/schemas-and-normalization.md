@@ -8,13 +8,7 @@
 
 ```json
 {
-  "next_quality": 1, "next_keywords": 1, "next_generation": 1,
-  "next_settings": 1, "next_volume_publication": 1, "next_selection": 1,
-  "next_call": 1, "next_candidate": 1,
-  "next_adoption": 1, "next_review": 1, "next_request": 1,
-  "next_initial_design": 1, "next_series_plan": 1, "next_volume_plan": 1,
-  "next_chapter_plan": 1, "next_scene_plan": 1, "next_scene_card": 1,
-  "next_scene": 1, "next_continuity": 1, "next_scene_commit": 1
+  "<counter_key defined by the ID table>": 1
 }
 ```
 
