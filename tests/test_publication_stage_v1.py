@@ -1,4 +1,4 @@
-"""Storycraft V1 publication Stage試験。"""
+"""Storycraft V1 completion内Publication確定operation試験。"""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -95,7 +95,7 @@ def create_publication_workspace(
     store = RunStateStore(workspace)
     state = store.load()
     state["status"] = "running"
-    state["current_stage"] = "publication"
+    state["current_stage"] = "completion"
     state["current_target"] = {
         "series": state["workspace_id"],
         "series_plan_id": "series-plan-0001",
@@ -127,7 +127,7 @@ def prepared_inputs(
     }
 
 
-class PublicationStageV1Tests(unittest.TestCase):
+class PublicationFinalizationOperationV1Tests(unittest.TestCase):
     def run_stage(
         self,
         workspace: Path,
@@ -173,16 +173,10 @@ class PublicationStageV1Tests(unittest.TestCase):
             self.assertEqual(state["status"], "completed")
             self.assertEqual(
                 state["current_stage"],
-                "publication",
+                "completion",
             )
             self.assertEqual(
                 state["current_publication_id"],
-                "pub-000001",
-            )
-            self.assertEqual(
-                state["current_target"][
-                    "publication_id"
-                ],
                 "pub-000001",
             )
             self.assertIsNone(state["pending_commit"])
@@ -323,39 +317,27 @@ class PublicationStageV1Tests(unittest.TestCase):
 
             self.assertEqual(list(final.iterdir()), [])
 
-    def test_workflow_uses_no_model(
+    def test_publication_operation_has_no_model_parameter(
         self,
     ) -> None:
+        from inspect import signature
+
+        parameters = signature(
+            PublicationStageService.run
+        ).parameters
+        self.assertNotIn("model", parameters)
+
         with tempfile.TemporaryDirectory() as temporary:
             workspace = create_publication_workspace(
                 temporary
             )
-            model_calls: list[object] = []
-
-            with (
-                patch(
-                    "storycraft.v1_workflow."
-                    "validate_workspace_layout"
-                ),
-                patch(
-                    "storycraft.publication_stage."
-                    "validate_workspace_layout"
-                ),
-                patch.object(
-                    PublicationStageService,
-                    "_prepare_inputs",
-                    return_value=prepared_inputs(),
-                ),
-            ):
-                state = V1WorkflowService(
-                    workspace,
-                    model_factory=lambda: (
-                        model_calls.append(object())
-                    ),
-                ).step(updated_at=PUBLICATION_AT)
+            state, _ = self.run_stage(workspace)
 
             self.assertEqual(state["status"], "completed")
-            self.assertEqual(model_calls, [])
+            self.assertEqual(
+                state["current_stage"],
+                "completion",
+            )
 
     def test_workspace_publication_validator(
         self,

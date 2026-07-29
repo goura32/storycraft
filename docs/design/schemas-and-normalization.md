@@ -4,25 +4,32 @@
 
 この文書は V1 の保存 JSON と LLM 応答の共通規則を決めます。各スキーマは `schema_version` を必須とします。未知項目は拒否します。保存 JSON は UTF-8、オブジェクト、末尾改行ありとします。
 
-ID 接頭辞の完全一覧と通番桁数:
+| 接頭辞 | 例 | 用途 |
+|---|---|---|
+| `gen-` | `gen-000001` | LLM生成記録 |
+| `settings-` | `settings-000001` | 設定 |
+| `keywords-` | `keywords-000001` | キーワード入力記録 |
+| `volume-pub-v` | `volume-pub-v01-000001` | 巻公開 |
+| `selection-` | `selection-000001` | 選択スナップショット |
+| `call-` | `call-000001` | LLM呼出し記録 |
+| `validation-` | `validation-000001` | 検証記録 |
+| `quality-` | `quality-000001` | 品質判定 |
+| `series-plan-` | `series-plan-000001` | シリーズ計画 |
+| `request-` | `request-000001` | 依頼 |
+| `initial-design-` | `initial-design-000001` | 初期設計 |
+| `scene-commit-` | `scene-commit-000001` | 場面確定 |
 
-| 接頭辞 | 例 | 通番桁数 | 用途 |
-|---|---|---|---|
-| `gen-` | `gen-000001` | 6桁 | LLM生成記録（generation） |
-| `settings-` | `settings-000001` | 6桁 | 設定 |
-| `keywords-` | `keywords-000001` | 6桁 | キーワード入力記録 |
-| `volume-pub-v` | `volume-pub-v01-000001` | 6桁 | 巻公開 |
-| `selection-` | `selection-000001` | 6桁 | 選択スナップショット |
-| `call-` | `call-000001` | 6桁 | LLM呼出し記録 |
-| `validation-` | `validation-000001` | 6桁 | 検証記録 |
-| `quality-` | `quality-000001` | 6桁 | 品質判定 |
-| `series-plan-` | `series-plan-000001` | 6桁 | シリーズ計画 |
-| `volume-plan-v` | `volume-plan-v01` | 2桁巻号＋通番なし | 巻計画 |
-| `chapter-plan-v` | `chapter-plan-v01-c01` | 2桁巻号＋2桁章番号 | 章計画 |
-| `scene-plan-v` | `scene-plan-v01-c01-s01` | 2桁巻＋2桁章＋2桁場面 | 場面計画 |
-| `scene-v` | `scene-v01-c01-s01` | 同上 | 場面確定単位 |
+座標エンコード型（巻・章・場面2桁ゼロ埋め、通番なし）:
+| 種類 | 形式 | 用途 |
+|---|---|---|
+| 巻計画 | `volume-plan-v01` | 巻計画 |
+| 章計画 | `chapter-plan-v01-c01` | 章計画 |
+| 場面計画 | `scene-plan-v01-c01-s01` | 場面計画 |
+| 場面カード | `scene-card-v01-c01-s01` | 場面カード |
+| 継続性更新 | `continuity-v01-c01-s01` | 継続性更新 |
+| 場面確定 | `scene-v01-c01-s01` | 場面確定単位 |
 
-欠番は許可する。予約済み ID は再利用しない。カウンタは `runtime/counters.json` で種類ごとに独立管理し、起動時に読み込み・次の値を予約・使用後に更新する。
+通番6桁ゼロ埋め。欠番許可。予約済みID再利用不可。カウンタは `runtime/counters.json` で独立管理。
 
 ```json
 {
@@ -34,15 +41,14 @@ ID 接頭辞の完全一覧と通番桁数:
   "call": 1,
   "validation": 1,
   "quality": 1,
-  "series_plan": 1
+  "series_plan": 1,
+  "request": 1,
+  "initial_design": 1,
+  "scene_commit": 1
 }
 ```
 
-巻計画・章計画・場面計画・場面確定は座標エンコード型 ID を使うためカウンタ不要。
-
-各工程は生成前に、system prompt、user prompt、応答スキーマ、メタデータを連結したリクエスト全体の Unicode code point 数が `max_input_chars` 以下であることを実測で検証し、超過なら LLM を呼ばず `internal_error` とする。settings の `max_input_chars` は 50000〜200000 の整数かつ `scene_text_char_range[1] * 4 + 40000` 以上とする。概算式による事前カウントは行わない。
-
-## 2. 共通値
+settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。係数・定数の具体値は実装詳細であり契約には含めない。`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 5）。
 
 | 値 | 形式 |
 |---|---|
@@ -51,7 +57,7 @@ ID 接頭辞の完全一覧と通番桁数:
 | スキーマ版 | 正の整数。LLM 応答だけ `*-v1` 文字列 |
 | 成果物参照 | `artifact_type` と `artifact_id` のオブジェクト |
 | 座標 | `volume_number`、`chapter_number`、`scene_number`。すべて 1 以上の整数 |
-| 根拠位置 | JSON パス（`$.path` 形式）、段落番号（0始まり整数）、本文位置（Unicode code point オフセット、0始まり整数）のいずれか。対象本文・JSON に解決できる値 |
+| 根拠位置 | JSON パス（`$.path` 形式）、段落番号（0始まり整数、空行区切り）、本文位置（UTF-8 byte オフセット、0始まり整数）のいずれか。対象本文・JSON に解決できる値 |
 
 配列の ID は重複不可です。列挙値外、参照先なし、座標不一致、未知項目は形式不正です。
 
@@ -102,7 +108,7 @@ ID 接頭辞の完全一覧と通番桁数:
 
 - `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。内容制約は依頼入口の契約に従う。
 - `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": "1〜5", "quality_revision_limit": "0〜5", "volume_chapter_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は整数の昇順ペア、`max_input_chars` は 50000〜200000 の整数かつ `scene_text_char_range[1] * 4 + 40000` 以上。この下限は、最大場面本文文字数の4倍（Ollama 日本語トークン概算：1文字≒0.25トークン、安全係数4）にシステム/ユーザー/スキーマ/メタデータ固定予約40000を加えた値であり、**Unicode code point 数**で数える。endpoint は loopback HTTP だけを許可し、remote host、proxy、認証情報・header・credential 項目を拒否する。loopback 判定は：IPv4 `127.0.0.0/8`、IPv6 `::1`、ホスト名 `localhost` 解決結果のいずれかに一致し、ポートは `1〜65535`。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は整数の昇順ペア、`init --config FILE` 入力検証では、設定 JSON がスキーマ（§3.1）と範囲制約に従うかのみを検査する。`endpoint` は loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`max_input_chars` は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。
 
 ## 4. LLM 応答
 
@@ -123,31 +129,24 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 ### 4.2 ReviewResponse (確認の応答)
 
+仕様正本は `llm-and-validation.md` の「確認応答スキーマ（仕様正本）」を参照。ここではフィールド定義のみ記す。
+
 ```json
 {
-  "schema_version": 1,
-  "review_profile_id": "string",
-  "findings": [
-    {
-      "severity": "critical | notice | reference",
-      "code": "string",
-      "message": "string",
-      "evidence_locations": ["$.path", "paragraph:0", "prose:123"],
-      "affected_artifact_ids": ["artifact-id"]
-    }
-  ],
-  "disposition": "accept | revise | reject",
-  "revision_instruction": "string | null"
+  "schema_version": "review-response-v1",
+  "decision": "pass | issues",
+  "issues": [{
+    "severity": "critical | notice",
+    "evidence_locations": ["JSON path | paragraph index | prose offset"],
+    "explanation": "..."
+  }]
 }
 ```
 
-- `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録）、`reference`（参考・制御影響なし）
-- `code`: 検証器内部エラーコード（例: `schema.missing_field`, `ref.unresolved`, `quality.contradiction`）
-- `evidence_locations`: 根拠位置配列。JSON path / 段落番号 / 本文オフセットのいずれか。
-- `affected_artifact_ids`: 指摘対象の成果物 ID（選択スナップショットの slot 経由で解決可能）
-- `disposition`: `accept`（採用）、`revise`（修正再生成）、`reject`（候補却下・blocked 遷移）
-- `revision_instruction`: `revise` 時のみ必須、修正指示文
-
+- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない
+- `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
+- `evidence_locations`: JSON path / 段落番号 / 本文オフセットのいずれか。対象本文・JSON に解決できる値
+- `code`、`affected_artifact_ids`、`disposition`、`revision_instruction` はシステム側が確認記録作成時に付与し、LLM 応答には含めない
 ### 4.3 quality-disposition (品質判定記録) — `quality/{id}/record.json`
 
 ```json
@@ -167,7 +166,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `result`: `accepted`（重大指摘なし）、`accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）、`blocked_manual_review`（形式不正5回到達など）
+- `result`: `accepted`（重大指摘なし）、`accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）、`blocked_manual_review`（**形式不正再呼出し上限到達**など）
 - `notice_type`: `edit` または `null`。巻公開時に `publication_notice_type` へ転写される。
 
 ### 4.4 scene ペイロード (場面確定用複合成果物)
@@ -196,11 +195,9 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
       "value": "new value",
       "evidence_locations": ["prose:456"]
     }
-  ],
-  "next_scene_conditions": []
+  ]
 }
 ```
-
 ### 4.6 scene-card ペイロード
 
 ```json
@@ -215,6 +212,8 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
+- `prose_conditions`: 本文上で満たすべき達成条件を自然言語で列挙（例：「A が B に秘密を打ち明ける」「C が現場に到着する」）。コードは本文中にこれらの条件を充足する記述があるかを決定的に検証しない（LLM 確認で意味的充足を判定）。決定的検証は「配列要素が文字列であること」「空文字でないこと」のみ。
+
 ## 5. 新規要素の正規化
 
 LLM は新規人物と新規未解決事項を意味内容で返します。
@@ -226,6 +225,8 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 
 後続工程は新規 ID を作りません。人物・未解決事項を扱うときは、入力カタログの既存 ID を選びます。カタログは ID、種別、短い説明を持ち、返却値がカタログ外なら形式不正です。
 
+**重要度の二段階化に合わせて**：`ReviewResponse.findings.severity` は `critical` と `notice` のみを許可します（`reference` は廃止）。
+
 ## 6. 各内容の最低項目
 
 | 種類 | 必須内容項目 |
@@ -236,7 +237,7 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 | series-plan | 巻一覧、thread_allocations |
 | volume-plan | volume_number、chapters、thread_allocations |
 | chapter-plan | volume_number、chapter_number、scenes、thread_allocations |
-| scene-plan | 座標、purpose、characters、thread_allocations、planned_fact_changes、next_scene_conditions |
+| scene-plan | 座標、purpose、characters、thread_allocations、planned_fact_changes |
 | scene-card | 座標、pov_character、allowed_facts、allowed_knowledge、allowed_disclosures、forbidden_disclosures、allowed_updates、prose_conditions |
 | scene-prose | 座標、text |
 | continuity-update | 座標、changes |

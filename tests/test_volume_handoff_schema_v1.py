@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 import unittest
 
-from jsonschema import Draft202012Validator
-
-from storycraft.prompt_template import get_template_loader
 from storycraft.series_contracts import (
     ContractError,
     ContractValidator,
 )
-from storycraft.stages import V1_TEMPLATE_STAGES, Stage
+from storycraft.stages import V1_TEMPLATE_STAGES
 
 
+ROOT = Path(__file__).parent.parent
 GENERATION_ID = "gen-000020"
 
 
@@ -139,21 +138,6 @@ def validate(
 
 
 class VolumeHandoffSchemaV1Test(unittest.TestCase):
-    def test_schema_accepts_candidate(self) -> None:
-        schema = get_template_loader().load_schema_object(
-            "generate",
-            "volume_handoff",
-        )
-
-        self.assertEqual(
-            list(
-                Draft202012Validator(schema).iter_errors(
-                    volume_handoff_candidate()
-                )
-            ),
-            [],
-        )
-
     def test_validator_accepts_generation_authority(
         self,
     ) -> None:
@@ -218,65 +202,24 @@ class VolumeHandoffSchemaV1Test(unittest.TestCase):
         ):
             validate(invalid, adopted=True)
 
-    def test_prompts_and_template_registry(self) -> None:
-        loader = get_template_loader()
-        context = {
-            "target_volume_number": 1,
-            "current_generation": current_generation(),
-        }
-        candidate = volume_handoff_candidate()
-        critique = {
-            "issues": [
-                {
-                    "severity": "minor",
-                    "field": "ending_progress",
-                    "description": "進捗が曖昧です。",
-                    "suggestion": "入力根拠で具体化する。",
-                },
-            ],
-        }
-
-        generated = loader.render_user(
-            "generate",
+    def test_code_only_stage_has_no_llm_assets(self) -> None:
+        self.assertNotIn(
             "volume_handoff",
-            context=context,
-            output_schema=loader.load_schema(
-                "generate",
-                "volume_handoff",
-            ),
-        )
-        reviewed = loader.render_user(
-            "critique",
-            "volume_handoff",
-            candidate=candidate,
-            context=context,
-            output_schema=loader.load_schema(
-                "critique",
-                "volume_handoff",
-            ),
-        )
-        revised = loader.render_user(
-            "revision",
-            "volume_handoff",
-            candidate=candidate,
-            critique=critique,
-            context=context,
-            output_schema=loader.load_schema(
-                "revision",
-                "volume_handoff",
-            ),
-        )
-
-        self.assertIn("巻末Generation", generated)
-        self.assertIn("resolved_threads", reviewed)
-        self.assertIn(
-            "issuesで引用されたfieldだけ",
-            revised,
-        )
-        self.assertIn(
-            Stage.VOLUME_HANDOFF.value,
             V1_TEMPLATE_STAGES,
         )
+        self.assertFalse(
+            (
+                ROOT
+                / "templates/prompts/schemas/volume_handoff.json"
+            ).exists()
+        )
+        self.assertFalse(
+            (
+                ROOT
+                / "templates/prompts/user/volume_handoff"
+            ).exists()
+        )
+
 
 
 if __name__ == "__main__":

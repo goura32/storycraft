@@ -349,44 +349,7 @@ class V1WorkflowTest(unittest.TestCase):
             self.assertEqual(model_calls, [])
             self.assertEqual(FakeService.calls[0][0], ())
 
-    def test_publication_does_not_create_model(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace = self.create_workspace(
-                temporary,
-                stage="publication",
-            )
-            model_calls: list[object] = []
 
-            with (
-                patch(
-                    "storycraft.v1_workflow."
-                    "validate_workspace_layout"
-                ),
-                patch(
-                    "storycraft.v1_workflow."
-                    "PublicationStageService",
-                    FakeService,
-                ),
-            ):
-                result = V1WorkflowService(
-                    workspace,
-                    model_factory=lambda: model_calls.append(
-                        object()
-                    ),
-                ).step()
-
-            self.assertEqual(result, {"executed": True})
-            self.assertEqual(model_calls, [])
-            self.assertEqual(
-                FakeService.calls[0][0],
-                (),
-            )
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class V1WorkflowDispatchCoverageTest(unittest.TestCase):
@@ -398,7 +361,7 @@ class V1WorkflowDispatchCoverageTest(unittest.TestCase):
             Stage.INPUT,
             Stage.INITIAL_ACCEPT,
             Stage.SCENE_COMMIT,
-            Stage.PUBLICATION,
+            Stage.VOLUME_HANDOFF,
         }
         handled = (
             set(v1_workflow._MODEL_STAGE_SERVICES)
@@ -406,3 +369,6 @@ class V1WorkflowDispatchCoverageTest(unittest.TestCase):
         )
 
         self.assertEqual(handled, set(Stage))
+
+if __name__ == "__main__":
+    unittest.main()

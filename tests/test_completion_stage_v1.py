@@ -144,34 +144,23 @@ def run_with_prepared_inputs(
 
 
 class CompletionStageV1Tests(unittest.TestCase):
-    def test_complete_adopts_and_advances_to_publication(
+    def test_complete_finalizes_publication_and_completes(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = create_completion_workspace(
-                temporary
-            )
-
+            workspace = create_completion_workspace(temporary)
             state, model = run_with_prepared_inputs(
                 workspace,
                 completion_candidate(),
                 prepared_inputs(),
             )
-
+            self.assertEqual(state["status"], "completed")
+            self.assertEqual(state["current_stage"], "completion")
             self.assertEqual(
-                state["current_stage"],
-                "publication",
+                state["current_publication_id"],
+                "pub-000001",
             )
-            self.assertEqual(
-                state["current_target"],
-                {
-                    "series": "ws-test-0001",
-                    "series_plan_id": "series-plan-0001",
-                    "completion_id": "completion-000001",
-                    "completion_status": "complete",
-                    "basis_generation_id": GENERATION_ID,
-                },
-            )
+            self.assertIsNone(state["pending_commit"])
             self.assertEqual(
                 model.calls,
                 [
@@ -179,59 +168,42 @@ class CompletionStageV1Tests(unittest.TestCase):
                     ("critique", "completion"),
                 ],
             )
-
             result = json.loads(
-                (
-                    workspace
-                    / "completion"
-                    / "completion-000001"
-                    / "result.json"
-                ).read_text(encoding="utf-8")
+                (workspace / "completion/completion-000001/result.json").read_text(encoding="utf-8")
             )
-            self.assertEqual(
-                result["status"],
-                "complete",
-            )
-            self.assertEqual(
-                result["precheck_summary"],
-                prepared_inputs()["precheck_summary"],
+            self.assertEqual(result["status"], "complete")
+            self.assertTrue(
+                (workspace / "publications/pub-000001").is_dir()
             )
 
-    def test_complete_with_issues_advances(
+    def test_complete_with_issues_finalizes_publication(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = create_completion_workspace(
-                temporary
-            )
+            workspace = create_completion_workspace(temporary)
             candidate = completion_candidate()
-            candidate["status"] = (
-                "complete_with_issues"
-            )
-            candidate["character_arc_checks"][0][
-                "status"
-            ] = "partially_satisfied"
+            candidate["status"] = "complete_with_issues"
+            candidate["character_arc_checks"][0]["status"] = "partially_satisfied"
             candidate["issues"] = [{
                 "category": "minor_arc",
-                "description": (
-                    "人物Arcの余韻がやや弱い。"
-                ),
+                "description": "人物Arcの余韻がやや弱い。",
             }]
-
             state, _ = run_with_prepared_inputs(
                 workspace,
                 candidate,
                 prepared_inputs(),
             )
-
+            self.assertEqual(state["status"], "completed")
+            self.assertEqual(state["current_stage"], "completion")
             self.assertEqual(
-                state["current_stage"],
-                "publication",
+                state["current_publication_id"],
+                "pub-000001",
+            )
+            metadata = json.loads(
+                (workspace / "publications/pub-000001/metadata.json").read_text(encoding="utf-8")
             )
             self.assertEqual(
-                state["current_target"][
-                    "completion_status"
-                ],
+                metadata["completion_status"],
                 "complete_with_issues",
             )
 
@@ -350,48 +322,34 @@ class CompletionStageV1Tests(unittest.TestCase):
                     COMPLETION_RETRY_AT,
                 )
 
-    def test_workflow_dispatches_completion_model(
+    def test_workflow_dispatches_completion_model_and_finishes_publication(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = create_completion_workspace(
-                temporary
-            )
+            workspace = create_completion_workspace(temporary)
             model = AcceptModel(completion_candidate())
             factory_calls: list[object] = []
-
             with (
                 patch.object(
                     CompletionStageService,
                     "_prepare_inputs",
                     return_value=prepared_inputs(),
                 ),
-                patch(
-                    "storycraft.v1_workflow."
-                    "validate_workspace_layout"
-                ),
-                patch(
-                    "storycraft.completion_stage."
-                    "validate_workspace_layout"
-                ),
-                patch(
-                    "storycraft.reviewed_candidate_stage."
-                    "validate_workspace_layout"
-                ),
+                patch("storycraft.v1_workflow.validate_workspace_layout"),
+                patch("storycraft.completion_stage.validate_workspace_layout"),
+                patch("storycraft.reviewed_candidate_stage.validate_workspace_layout"),
             ):
                 state = V1WorkflowService(
                     workspace,
                     model_factory=lambda: (
-                        factory_calls.append(model)
-                        or model
+                        factory_calls.append(model) or model
                     ),
-                ).step(
-                    updated_at=COMPLETION_AT,
-                )
-
+                ).step(updated_at=COMPLETION_AT)
+            self.assertEqual(state["status"], "completed")
+            self.assertEqual(state["current_stage"], "completion")
             self.assertEqual(
-                state["current_stage"],
-                "publication",
+                state["current_publication_id"],
+                "pub-000001",
             )
             self.assertEqual(factory_calls, [model])
             self.assertEqual(

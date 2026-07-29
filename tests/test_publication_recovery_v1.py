@@ -1,4 +1,4 @@
-"""Storycraft V1 Publication Crash Recovery試験。"""
+"""Storycraft V1 completion内Publication確定operationのCrash Recovery試験。"""
 from __future__ import annotations
 
 import shutil
@@ -146,11 +146,22 @@ class PublicationRecoveryV1Tests(unittest.TestCase):
                 ).exists()
             )
 
+            counters_path = workspace / "runtime/counters.json"
+            counters_after_crash = counters_path.read_bytes()
+
             recovered = self._recover(workspace)
 
             self.assertEqual(
+                counters_path.read_bytes(),
+                counters_after_crash,
+            )
+            self.assertEqual(
                 recovered["status"],
                 "completed",
+            )
+            self.assertEqual(
+                recovered["current_stage"],
+                "completion",
             )
             self.assertEqual(
                 recovered["current_publication_id"],
@@ -211,6 +222,10 @@ class PublicationRecoveryV1Tests(unittest.TestCase):
                 "completed",
             )
             self.assertEqual(
+                recovered["current_stage"],
+                "completion",
+            )
+            self.assertEqual(
                 recovered["current_publication_id"],
                 "pub-000001",
             )
@@ -238,6 +253,10 @@ class PublicationRecoveryV1Tests(unittest.TestCase):
             self.assertEqual(
                 recovered["status"],
                 "completed",
+            )
+            self.assertEqual(
+                recovered["current_stage"],
+                "completion",
             )
             self.assertIsNone(
                 recovered["pending_commit"]
@@ -364,6 +383,10 @@ class PublicationRecoveryV1Tests(unittest.TestCase):
             self.assertEqual(
                 recovered["status"],
                 "completed",
+            )
+            self.assertEqual(
+                recovered["current_stage"],
+                "completion",
             )
             self.assertEqual(
                 recovered["current_publication_id"],

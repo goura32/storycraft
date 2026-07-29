@@ -81,10 +81,11 @@ class StageTransitionV1Tests(unittest.TestCase):
             }),
         )
 
-    def test_completion_allows_publication(self) -> None:
-        validate_stage_transition(
-            Stage.COMPLETION,
-            Stage.PUBLICATION,
+    def test_completion_is_terminal(self) -> None:
+        self.assertTrue(is_terminal_stage(Stage.COMPLETION))
+        self.assertEqual(
+            allowed_next_stages(Stage.COMPLETION),
+            frozenset(),
         )
 
     def test_pipeline_skip_is_rejected(self) -> None:
@@ -258,12 +259,6 @@ class StageTransitionV1Tests(unittest.TestCase):
                 updated_at="2026-07-23T10:44:00Z",
             )
 
-    def test_publication_is_terminal(self) -> None:
-        self.assertTrue(is_terminal_stage(Stage.PUBLICATION))
-        self.assertEqual(
-            allowed_next_stages(Stage.PUBLICATION),
-            frozenset(),
-        )
 
     def test_non_terminal_stage_is_not_terminal(self) -> None:
         self.assertFalse(is_terminal_stage(Stage.INPUT))

@@ -53,7 +53,7 @@
 
 | 失敗 | 記録 | 状態 |
 |---|---|---|
-| 形式不正5回 | 検証記録群、有効候補 | `blocked`。`stop_reason=manual_review_required` |
+| 形式不正**上限回数** | 検証記録群、有効候補 | `blocked`。`stop_reason=manual_review_required` |
 | 技術再試行上限 | 呼出し記録群 | `blocked`。`stop_reason=manual_review_required` |
 | 検証器の内部失敗 | エラー記録 | `blocked`。`stop_reason=manual_review_required` |
 | スナップショット参照不整合 | 検証記録 | `blocked`。`stop_reason=manual_review_required` |

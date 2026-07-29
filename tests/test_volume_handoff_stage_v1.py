@@ -1,7 +1,6 @@
 """Storycraft V1 volume_handoff Stage試験。"""
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from pathlib import Path
 import shutil
@@ -28,110 +27,6 @@ from tests.test_scene_commit_stage_v1 import (
 
 HANDOFF_AT = "2026-07-24T11:20:00Z"
 HANDOFF_RETRY_AT = "2026-07-24T11:21:00Z"
-
-
-class AcceptModel:
-    def __init__(
-        self,
-        candidate: dict | None = None,
-    ) -> None:
-        if candidate is None:
-            raise AssertionError(
-                "AcceptModelにはWorkspaceに対応する"
-                "Candidateが必要です"
-            )
-        self.candidate = deepcopy(candidate)
-        self.calls: list[tuple[str, str]] = []
-        self.contexts: list[dict] = []
-
-    def generate(
-        self,
-        stage: str,
-        context: dict,
-    ) -> dict:
-        self.calls.append(("generate", stage))
-        self.contexts.append(deepcopy(context))
-        return deepcopy(self.candidate)
-
-    def critique(
-        self,
-        stage: str,
-        candidate: dict,
-        context: dict,
-    ) -> dict:
-        self.calls.append(("critique", stage))
-        return {"issues": []}
-
-    def revision(
-        self,
-        stage: str,
-        candidate: dict,
-        critique: dict,
-        context: dict,
-    ) -> dict:
-        raise AssertionError("revision must not be called")
-
-
-def candidate_for_workspace(
-    workspace: Path,
-) -> dict:
-    """巻末GenerationのAuthorityに一致するCandidateを作る。"""
-    run_state = RunStateStore(workspace).load()
-    generation_id = run_state["current_generation_id"]
-    if not isinstance(generation_id, str):
-        raise AssertionError(run_state)
-
-    generation_state = json.loads(
-        (
-            workspace
-            / "generations"
-            / generation_id
-            / "state.json"
-        ).read_text(encoding="utf-8")
-    )
-
-    characters = generation_state["characters"]
-    relationships = generation_state["relationships"]
-    threads = generation_state["threads"]
-
-    resolved_threads = sorted(
-        thread_id
-        for thread_id, record in threads.items()
-        if record.get("status") == "resolved"
-    )
-    open_threads = sorted(
-        thread_id
-        for thread_id, record in threads.items()
-        if record.get("status") != "resolved"
-    )
-
-    return {
-        "character_states": {
-            character_id: (
-                f"{character_id}の巻末状態を"
-                "巻末Generationから引き継ぐ。"
-            )
-            for character_id in sorted(characters)
-        },
-        "relationship_states": {
-            relationship_id: (
-                f"{relationship_id}の巻末状態を"
-                "巻末Generationから引き継ぐ。"
-            )
-            for relationship_id in sorted(relationships)
-        },
-        "resolved_threads": resolved_threads,
-        "open_threads": open_threads,
-        "new_constraints": [],
-        "ending_progress": (
-            "第一巻で予定された変化が進行した。"
-        ),
-        "next_volume_requirements": [
-            "巻末Generationの未解決状態を"
-            "次巻へ引き継ぐ。",
-        ],
-        "issues": [],
-    }
 
 
 def prepare_volume_handoff_workspace(
@@ -195,25 +90,29 @@ def prepare_volume_handoff_workspace(
 
 
 class VolumeHandoffStageV1Tests(unittest.TestCase):
-    def test_adopts_handoff_and_advances_to_next_volume(
+    def test_run_has_no_model_parameter(self) -> None:
+        from inspect import signature
+
+        self.assertNotIn(
+            "model",
+            signature(VolumeHandoffStageService.run).parameters,
+        )
+
+    def test_derives_handoff_and_advances_to_next_volume(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace, _ = (
-                prepare_volume_handoff_workspace(
-                    temporary
-                )
+            workspace, _ = prepare_volume_handoff_workspace(
+                temporary
             )
-            model = AcceptModel(
-                candidate_for_workspace(workspace)
+            counters_path = workspace / "runtime/counters.json"
+            before = json.loads(
+                counters_path.read_text(encoding="utf-8")
             )
 
             state = VolumeHandoffStageService(
                 workspace
-            ).run(
-                model,
-                updated_at=HANDOFF_AT,
-            )
+            ).run(updated_at=HANDOFF_AT)
 
             self.assertEqual(
                 state["current_stage"],
@@ -223,40 +122,17 @@ class VolumeHandoffStageV1Tests(unittest.TestCase):
                 state["current_generation_id"],
                 "gen-000002",
             )
-            self.assertEqual(
-                state["current_target"],
-                {
-                    "series": "ws-test-0001",
-                    "series_plan_id": (
-                        "series-plan-0001"
-                    ),
-                    "volume_number": 2,
-                    "basis_generation_id": (
-                        "gen-000002"
-                    ),
-                },
-            )
-            self.assertIsNone(
-                state["active_candidate"]
-            )
-            self.assertIsNone(
-                state["active_scene_id"]
-            )
-            self.assertIsNone(
-                state["pending_commit"]
-            )
+            self.assertIsNone(state["active_candidate"])
+            self.assertIsNone(state["active_scene_id"])
+            self.assertIsNone(state["pending_commit"])
 
-            path = (
-                workspace
-                / "handoffs/handoff-v01/handoff.json"
-            )
             handoff = json.loads(
-                path.read_text(encoding="utf-8")
+                (
+                    workspace
+                    / "handoffs/handoff-v01/handoff.json"
+                ).read_text(encoding="utf-8")
             )
-            self.assertEqual(
-                handoff["handoff_id"],
-                "handoff-v01",
-            )
+            self.assertEqual(handoff["handoff_id"], "handoff-v01")
             self.assertEqual(
                 handoff["basis_generation_id"],
                 "gen-000002",
@@ -269,36 +145,16 @@ class VolumeHandoffStageV1Tests(unittest.TestCase):
                 handoff["completed_scene_ids"],
                 ["scene-v01-c001-s001"],
             )
-            self.assertEqual(
-                handoff["created_at"],
-                HANDOFF_AT,
-            )
 
-            self.assertEqual(
-                model.calls,
-                [
-                    ("generate", "volume_handoff"),
-                    ("critique", "volume_handoff"),
-                ],
+            after = json.loads(
+                counters_path.read_text(encoding="utf-8")
             )
-            context = model.contexts[0]
-            self.assertEqual(
-                context["target_volume_number"],
-                1,
-            )
-            self.assertFalse(
-                context["is_final_volume"]
-            )
-            self.assertEqual(
-                len(context["completed_scenes"]),
-                1,
-            )
-            self.assertEqual(
-                context["current_generation"][
-                    "commit.json"
-                ]["source_artifact_id"],
-                "scene-v01-c001-s001",
-            )
+            for key in (
+                "next_candidate",
+                "next_review",
+                "next_revision",
+            ):
+                self.assertEqual(after[key], before[key])
 
             validate_workspace_layout(workspace)
 
@@ -331,21 +187,15 @@ class VolumeHandoffStageV1Tests(unittest.TestCase):
             },
         )
 
-    def test_missing_final_scene_is_rejected_before_model(
+    def test_missing_final_scene_is_rejected(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace, _ = (
-                prepare_volume_handoff_workspace(
-                    temporary
-                )
+            workspace, _ = prepare_volume_handoff_workspace(
+                temporary
             )
             shutil.rmtree(
-                workspace
-                / "scenes/scene-v01-c001-s001"
-            )
-            model = AcceptModel(
-                candidate_for_workspace(workspace)
+                workspace / "scenes/scene-v01-c001-s001"
             )
 
             with self.assertRaisesRegex(
@@ -354,147 +204,62 @@ class VolumeHandoffStageV1Tests(unittest.TestCase):
             ):
                 VolumeHandoffStageService(
                     workspace
-                ).run(
-                    model,
-                    updated_at=HANDOFF_AT,
-                )
+                ).run(updated_at=HANDOFF_AT)
 
-            self.assertEqual(model.calls, [])
-
-    def test_invalid_thread_partition_blocks_candidate(
+    def test_existing_corrupt_handoff_is_not_overwritten(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace, _ = (
-                prepare_volume_handoff_workspace(
-                    temporary
-                )
-            )
-            candidate = candidate_for_workspace(
-                workspace
-            )
-            if not candidate["open_threads"]:
-                raise AssertionError(
-                    "試験には未解決Threadが必要です"
-                )
-            moved_thread = candidate[
-                "open_threads"
-            ].pop(0)
-            candidate["resolved_threads"].append(
-                moved_thread
-            )
-            model = AcceptModel(candidate)
-
-            state = VolumeHandoffStageService(
-                workspace
-            ).run(
-                model,
-                updated_at=HANDOFF_AT,
-            )
-
-            self.assertEqual(state["status"], "blocked")
-            self.assertEqual(
-                state["stop_reason"],
-                "manual_review_required",
-            )
-            self.assertEqual(
-                state["last_error"]["code"],
-                "VOLUME_HANDOFF_GENERATION_INVALID",
-            )
-            self.assertFalse(
-                (
-                    workspace
-                    / "handoffs/handoff-v01"
-                ).exists()
-            )
-
-    def test_existing_different_handoff_is_not_overwritten(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace, committed = (
-                prepare_volume_handoff_workspace(
-                    temporary
-                )
-            )
-
-            original = candidate_for_workspace(
-                workspace
+            workspace, committed = prepare_volume_handoff_workspace(
+                temporary
             )
             VolumeHandoffStageService(
                 workspace
-            ).run(
-                AcceptModel(original),
-                updated_at=HANDOFF_AT,
-            )
+            ).run(updated_at=HANDOFF_AT)
 
-            # Crash相当としてStage遷移前stateへ戻す。
+            path = workspace / "handoffs/handoff-v01/handoff.json"
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["ending_progress"] = "改変されたHandoff。"
+            path.write_text(
+                json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
             RunStateStore(workspace).save(committed)
 
-            changed = deepcopy(original)
-            changed["ending_progress"] = (
-                "姉妹の対話は始まったが、"
-                "信頼回復には至っていない。"
-            )
-
-            with self.assertRaisesRegex(
-                ContractError,
-                "上書き",
-            ):
+            with self.assertRaises(ContractError):
                 VolumeHandoffStageService(
                     workspace
-                ).run(
-                    AcceptModel(changed),
-                    updated_at=HANDOFF_RETRY_AT,
-                )
+                ).run(updated_at=HANDOFF_RETRY_AT)
 
-            handoff = json.loads(
-                (
-                    workspace
-                    / "handoffs/handoff-v01/handoff.json"
-                ).read_text(encoding="utf-8")
-            )
             self.assertEqual(
-                handoff["ending_progress"],
-                original["ending_progress"],
+                json.loads(path.read_text(encoding="utf-8"))[
+                    "ending_progress"
+                ],
+                "改変されたHandoff。",
             )
 
-    def test_workflow_dispatches_model_stage(
+    def test_workflow_dispatches_without_model(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            workspace, _ = (
-                prepare_volume_handoff_workspace(
-                    temporary
-                )
-            )
-            model = AcceptModel(
-                candidate_for_workspace(workspace)
+            workspace, _ = prepare_volume_handoff_workspace(
+                temporary
             )
             factory_calls: list[object] = []
 
             state = V1WorkflowService(
                 workspace,
-                model_factory=lambda: (
-                    factory_calls.append(model)
-                    or model
+                model_factory=lambda: factory_calls.append(
+                    object()
                 ),
-            ).step(
-                updated_at=HANDOFF_AT,
-            )
+            ).step(updated_at=HANDOFF_AT)
 
             self.assertEqual(
                 state["current_stage"],
                 "volume_plan",
             )
-            self.assertEqual(factory_calls, [model])
-            self.assertEqual(
-                model.calls,
-                [
-                    ("generate", "volume_handoff"),
-                    ("critique", "volume_handoff"),
-                ],
-            )
+            self.assertEqual(factory_calls, [])
+
 
 
 if __name__ == "__main__":

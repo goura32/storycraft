@@ -46,6 +46,12 @@
 
 `last_error` は `null` または `{ "code": "固定診断コード", "message": "短い説明", "evidence_refs": ["validation/call/artifact ID"], "occurred_at": "UTC 時刻" }` です。`blocked` では必須で、`code` は `invalid_response_limit`、`technical_retry_exhausted`、`internal_error`、`authority_inconsistency`、`publication_invalid` のいずれかとします。これは `status` と `validate` の診断用であり、CLI stderr の error `code` enum とは別です。
 
+- `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
+- `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）
+- `internal_error`: 内部検証器の例外、設定不正、実装不能な状態
+- `authority_inconsistency`: 正本（SPECIFICATION.md）、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` の各検証ステップで検出され、正本不整合として `blocked` にする
+- `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする
+
 `current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は run-state の値をそのまま出力します。
 
 `pending_commit` は `kind`、`staging_path`、更新前後の selection ID、状態更新内容、`targets` を持つ manifest です。`targets` の各要素は成果物 ID、成果物種類、staging からの相対パス、最終パス、内容ダイジェスト、`pending | finalized` を持ちます。復旧は manifest と実在する target だけを読み、種別・ID・ダイジェストを再検証して `pending` の対象を順に確定します。すべての対象が `finalized` で状態更新前なら状態を更新し、状態更新後なら manifest を消します。manifest と target が一致しない場合だけ `blocked` にします。
@@ -86,4 +92,4 @@ volume_publication
 
 `run` は `running` のときだけ、LLM の初期化・次工程開始の前に保存済みの確定点を共通収束表で収束させてから工程を進めます。`blocked` のときは `status` と `validate` だけを許可します。提供者を呼ばない収束処理では LLM を初期化しません。
 
-失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、形式不正の固定5回、技術再試行上限、内部エラー、公開検証不合格では `blocked/manual_review_required` にして停止します。停止した作業場所は再開せず、新しい作業場所でやり直します。
+失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、**形式不正再呼出し上限**、技術再試行上限、内部エラー、公開検証不合格では `blocked/manual_review_required` にして停止します。停止した作業場所は再開せず、新しい作業場所でやり直します。

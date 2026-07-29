@@ -71,6 +71,16 @@ ID は採番後に変更しません。
 | 選択スナップショット | `selection-{通番6桁}` | `next_selection` |
 | 呼出し | `call-{通番6桁}` | `next_call` |
 | 検証 | `validation-{通番6桁}` | `next_validation` |
+| 依頼 | `request-{通番6桁}` | `next_request` |
+| 初期設計 | `initial-design-{通番6桁}` | `next_initial_design` |
+| シリーズ計画 | `series-plan-{通番6桁}` | `next_series_plan` |
+| 巻計画 | `volume-plan-v{巻番号2桁}-{通番6桁}` | `next_volume_plan` |
+| 章計画 | `chapter-plan-v{巻番号2桁}c{章番号2桁}-{通番6桁}` | `next_chapter_plan` |
+| 場面計画 | `scene-plan-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_plan` |
+| 場面カード | `scene-card-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_card` |
+| 場面本文 | `scene-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene` |
+| 継続性更新 | `continuity-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_continuity` |
+| 場面確定 | `scene-commit-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
 
 既存の `handoffs/`、`completion/`、全巻を結合した `series.md` は V1 新形式に存在しません。
 
