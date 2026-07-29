@@ -8,18 +8,13 @@
 
 ```json
 {
-  "gen": 1,
-  "settings": 1,
-  "keywords": 1,
-  "volume_pub": 1,
-  "selection": 1,
-  "call": 1,
-  "validation": 1,
-  "quality": 1,
-  "series_plan": 1,
-  "request": 1,
-  "initial_design": 1,
-  "scene_commit": 1
+  "next_quality": 1, "next_keywords": 1, "next_generation": 1,
+  "next_settings": 1, "next_volume_publication": 1, "next_selection": 1,
+  "next_call": 1, "next_validation": 1, "next_candidate": 1,
+  "next_adoption": 1, "next_review": 1, "next_request": 1,
+  "next_initial_design": 1, "next_series_plan": 1, "next_volume_plan": 1,
+  "next_chapter_plan": 1, "next_scene_plan": 1, "next_scene_card": 1,
+  "next_scene": 1, "next_continuity": 1, "next_scene_commit": 1
 }
 ```
 
@@ -71,7 +66,7 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 
 各成果物の `content` スキーマは個別契約書（`initial-design-contract.md`、`planning-contract.md`、`scene-production-contract.md`、`volume-publication.md`）で定義します。
 
-`generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する `payload` を持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
+`generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する状態を **`content`** に持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
 
 `keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
 
@@ -83,7 +78,7 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 
 - `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。各文字列は1〜2000 Unicodeコードポイント、配列要素は各1〜500、配列は各20個以下、全文字列の合計は8000以下とする。内容制約は依頼入口の契約に従う。
 - `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は整数の昇順ペア、`init --config FILE` 入力検証では、設定 JSON がスキーマ（§3.1）と範囲制約に従うかのみを検査する。`endpoint` は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`max_input_chars` は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。`request_options` は任意の object であり、許可キーは `temperature`、`top_p`、`top_k`、`repeat_penalty` のみ。省略時は空 object として保存し、request にはこれらのキーを送らない。`num_ctx` と `think` は利用者指定を拒否し、LLM 境界の契約に従いシステムが固定する。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`init` は `max_input_chars` が50000〜200000の整数であることに加え、後述の入力予算を満たすか検証する。`endpoint` は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`invalid_response_limit` は1以上の整数。`request_options` は任意の object で、`temperature` は0以上2以下の有限数、`top_p` は0より大きく1以下の有限数、`top_k` は1以上の整数、`repeat_penalty` は0より大きい有限数だけを許可する。省略時は request にこれらのキーを送らない。`num_ctx` と `think` は利用者指定を拒否し、LLM境界の契約に従いシステムが固定する。
 
 ## 4. LLM 応答
 
@@ -141,7 +136,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `result`: `accepted`（重大指摘なし）、`accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）、`blocked_manual_review`（**形式不正再呼出し上限到達**など）
+- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）。形式不正上限到達は採用も品質判定も作らず、validation/call 記録と run-state の `blocked` だけで記録する。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 4.4 scene ペイロード (場面確定用複合成果物)
@@ -149,10 +144,10 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 ```json
 {
   "schema_version": 1,
-  "scene_prose_id": "scene-v01-c01-s01",
-  "continuity_update_id": "continuity-v01-c01-s01",
+  "scene_prose_id": "scene-v01-c01-s01-000001",
+  "continuity_update_id": "continuity-v01-c01-s01-000001",
   "current_state_id": "gen-000123",
-  "scene_card_id": "scene-card-v01-c01-s01",
+  "scene_card_id": "scene-card-v01-c01-s01-000001",
   "quality_disposition_id": "quality-000001"
 }
 ```
@@ -200,7 +195,7 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 
 後続工程は新規 ID を作りません。人物・未解決事項を扱うときは、入力カタログの既存 ID を選びます。カタログは ID、種別、短い説明を持ち、返却値がカタログ外なら形式不正です。
 
-**重要度の二段階化に合わせて**：`ReviewResponse.findings.severity` は `critical` と `notice` のみを許可します（`reference` は廃止）。
+**重要度の二段階化に合わせて**：`ReviewResponse.issues[].severity` は `critical` と `notice` のみを許可します（`reference` は廃止）。
 
 ## 6. 各内容の最低項目
 

@@ -55,7 +55,7 @@ workspace/
     chapter-plans/...
     scene-plans/...
   generations/gen-000001/
-  scenes/scene-v01-c001-s001/
+  scenes/scene-v01-c01-s01-000001/
   publications/volume-pub-v01-000001/
 ```
 

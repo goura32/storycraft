@@ -11,7 +11,7 @@
 
 ### 7. LLMClient.invoke インターフェース契約（仕様レベル）
 
-`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使い、`/v1/chat/completions` へ `messages` と JSON Schema の `response_format` を送信し、`choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。実装インターフェースの詳細（引数順・戻り値構造・リトライ待機秒数）はコード側で定義し、契約には「Ollama 専用」「技術的再試行上限 `technical_retry_limit` 回まで」「失敗時は `internal_error`」のみを記述します。
+`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得し、`id` 不一致、`context_length` 欠落・非正数、HTTP失敗は LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。技術的再試行の上限到達は `technical_retry_exhausted`、クライアント自身の契約違反・例外だけは `internal_error` とする。
 
 ### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
 
@@ -23,7 +23,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
-すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を取得し、その値を request の `options.num_ctx` に指定する。利用可能な OpenAI 互換 API から最大値を決定できない場合は、推測・縮小・Ollama 既定値へのフォールバックをせず、LLM を呼ばずに `internal_error` として停止する。
+すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を前記 endpoint から取得し、その値を request の `options.num_ctx` に指定する。`max_input_chars` はアプリケーションのUTF-8 byte上限であり、トークン数を推測する上限ではない。provider がモデルの context window 超過を返した場合は技術的失敗として再試行し、上限到達時は `technical_retry_exhausted` とする。
 
 温度、`top_p`、`top_k`、`repeat_penalty` などの推論パラメータは `settings.request_options` で任意に指定できる。**既定では `request_options` を省略し、これらのキーを request に送らない。**指定されたキーだけを `options` に追加し、Ollama のモデル既定値を上書きしない。
 
@@ -60,7 +60,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。各生成・確認・修正の最終 request 全体について、この context と candidate/review、system 指示文、user 指示文、応答 schema、固定メタデータを **同じ決定的 JSON 形式で順に連結した UTF-8 byte 数を算定し**、**`max_input_chars` を超えた時点で LLM を呼ばず `internal_error` にする**。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使うことはできません。確認応答に無効な根拠位置の指摘があれば、システムが除外した後の有効指摘だけを修正入力に渡します。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。各処理でまず system/user 指示文、応答schema、固定メタデータを連結した UTF-8 byte 数を `overhead` として測る。`B = max_input_chars - overhead` が正でなければ LLM未呼出の `internal_error` とする。generation context は `B/2` 以下、候補と有効reviewは各 `B/4` 以下だけを形式有効とし、候補/reviewが超えれば形式不正として再呼出しする。これにより修正requestを含む全必須requestは `max_input_chars` 以下になる。各生成・確認・修正の最終 request 全体について、この context と candidate/review、system 指示文、user 指示文、応答 schema、固定メタデータを **同じ決定的 JSON 形式で順に連結した UTF-8 byte 数を算定し**、**`max_input_chars` を超えた時点で LLM を呼ばず `internal_error` にする**。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使うことはできません。確認応答の `issues` は20件以下、各 `explanation` は500 Unicodeコードポイント以下、各 `evidence_locations` は5件以下とし、無効根拠位置は除外して修正入力に渡します。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)

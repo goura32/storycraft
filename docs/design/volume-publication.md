@@ -50,7 +50,7 @@ publications/
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する
 - いずれか 1 件以上で `remaining_major_issues` が非空なら `publication_notice_type = "編集"` を保存する
 - すべて空なら `publication_notice_type` キーを省略する（`null` を書かない）
-- `quality_disposition.result` が `blocked_manual_review` の場面があれば即座に公開を拒否する（`publication_invalid` で `blocked`）
+- 対象本文ごとに品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` のいずれかであることを確認する。欠落・重複・列挙外なら公開を拒否する（`publication_invalid` で `blocked`）
 
 コードは入力選択を読み、公開記録の計画・状態・場面 ID、各場面の品質判定 ID、公開注意を決める設定 ID が対応するスナップショットスロットと完全一致し、欠落・余剰参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、ID の集合と重複、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
 

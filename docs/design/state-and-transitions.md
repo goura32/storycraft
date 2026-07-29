@@ -49,7 +49,7 @@
 - `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
 - `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）
 - `internal_error`: 内部検証器の例外、設定不正、実装不能な状態
-- `authority_inconsistency`: 正本（SPECIFICATION.md）、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` の各検証ステップで検出され、正本不整合として `blocked` にする
+- `authority_inconsistency`: 正本（SPECIFICATION.md）、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
 - `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする
 
 `current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は [通常 CLI](admin-cli-and-acceptance-contract.md) が定める公開用射影を出力し、内部 run-state や manifest をそのまま出力しません。

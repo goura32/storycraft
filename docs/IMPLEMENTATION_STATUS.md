@@ -6,13 +6,14 @@
 
 この節は、仕様書と現行コードを読み合わせた記録です。以下はコード・試験・テスト用資料を変更せずに確認した差分であり、仕様を弱めるものではありません。
 
-- V1 はローカル LLM 専用ですが、現行コードは `ollama` に加え `openai`、`openrouter`、`openai_compatible` を LLM 提供者として受け付けます。
-- 注意付き巻公開の公開注意種別と、巻公開用原稿冒頭への定型文出力は未実装です。
+- V1 はローカル LLM 専用であり、公開 v2 CLI も `ollama` 以外の provider を `init` で拒否する。旧到達不能モジュールに残る provider 列挙は公開CLIの機能ではない。
+- 注意付き巻公開の `publication_notice_type="編集"` と原稿冒頭の定型文は実装・試験済み。ただし品質判定の全件参照とV1の選択スナップショット整合を含む公開契約全体は未実装です。
 - 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質上限で停止しない遷移は未実装です。現行コードは工程別設定の再試行を使い、品質上限では停止します。
 - 指摘対象だけに修正範囲を制限せず、成果物全体の整合性・品質改善のために置き換える契約は未実装です。現行コードは修正範囲を検証して制限します。
-- 現行 v2 CLI は `init`、`run`、`status`、`validate` と `--workspace`／`--json` を公開する。現行 `status --json` は仕様にない `run_state_path` と `manifest_path` を出力し、内部パスを隠す V1 の公開用 JSON 射影に未準拠である。現行 lock 取得失敗の stderr `code` は `locked` であり、V1 の `lock_unavailable` と異なる。V1 の stderr 一行 JSON と診断別終了コード `2|4|5|70|75` は未実装である。
+- 現行 v2 CLI は `init`、`run`、`status`、`validate` と `--workspace`／`--json` を公開する。現行 `status --json` は仕様にない `run_state_path` と `manifest_path` を出力し、内部パスを隠す V1 の公開用 JSON 射影に未準拠である。現行 lock は空ファイルと `flock` だけで、契約が要求する workspace/run/PID/取得時刻の記録、残存判定、`runtime_lock` 診断値を持たない。現行 lock 取得失敗の stderr `code` は `locked` であり、V1 の `lock_unavailable` と異なる。V1 の stderr 一行 JSON と診断別終了コード `2|4|5|70|75` は未実装である。
 - 正本・参照・確定物の不整合を `blocked` のまま再開せず新しい作業場所でやり直す V1 契約は未実装です。現行コードは旧来の復旧・継続経路を持ちます。
-- 公開確定の中断を表すテスト用資料は、`current_stage` が現行コードの要求する `publication` ではないため、関連試験が失敗します。
+- 現行実装の公開工程名は `volume_publication` である。旧 `publication` を使うテスト用資料は現行契約の根拠にしない。
+- OpenAI互換Ollamaの `GET /v1/models/{model}` による最大コンテキスト取得、`think: true`、`options.num_ctx`、構造化 `response_format`、および未指定 `request_options` を送らずOllama既定値を使うV1 wire契約は未実装です。
 - 巻の引継ぎを作らず、各巻の全場面と継続性更新の確定後に同じ巻単位で公開準備・確定と巻公開用原稿作成を行い、最終巻公開で完了する遷移は未実装です。現行コードは巻の引継ぎ、全巻の完結判定後のシリーズ全体一括公開を行います。
 
 これらは実装修正が必要な差分です。現行コードの公開判断には、仕様書だけでなく、現在の自動試験と配布物の動作確認を用います。

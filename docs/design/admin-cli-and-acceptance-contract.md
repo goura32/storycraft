@@ -40,7 +40,7 @@ storycraft validate --workspace PATH --json
 
 **`run` 完了時（exit 0）**: `--json` 指定時は `status --json` と同一形式。非指定時は人間用完了メッセージのみ。
 
-**人間用表示フォーマット**: 各コマンド共通で `workspace: PATH / status: running|blocked|completed / stage: XXX / target: YYY / selection: ZZZ` の1行要約を標準出力に書く。詳細は `status --json` を参照させる。
+**人間用表示フォーマット**: `status`、`validate`、`run` は `workspace: PATH / status: running|blocked|completed / stage: XXX / target: YYY / selection: ZZZ` の1行要約を標準出力に書く。`init` は作成完了メッセージのみを出す。詳細は `status --json` を参照させる。
 
 ## 3. 模擬 Ollama と受入試験（仕様レベル）
 
