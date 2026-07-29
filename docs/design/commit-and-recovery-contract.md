@@ -47,20 +47,20 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 - manifest には target ごとに `artifact_id`、`artifact_kind`、ステージング相対パス、最終配置相対パス、SHA-256 ダイジェスト、状態を持つ
 - `run` 起動時に manifest の target と最終配置を照合し、種類・ID・ダイジェストが一致しない target は「不整合」として扱う
 - 不整合 target がある場合、自動削除・自動選択・LLM 再呼出しはせず、`blocked` にする
-- 正常 target は最終配置へ原子的リネーム（同一ファイルシステム上）し、manifest を `committed` に更新、run-state を進める
+- 正常 target は最終配置へ原子的リネーム（同一ファイルシステム上）し、target 状態を `finalized` に更新、全 target が `finalized` になってから run-state を進める
 
 lock レコードの契約（仕様レベル）:
 
 - `runtime/lock` に workspace_id、run_id、pid、取得時刻を持つ
 - PID 存在・ID 一致で有効、それ以外は残存とみなす
-- 有効 lock がある間は `run` は `lock_unavailable` で終了する。**`status`/`validate` は lock を取得せず、残存 lock の有無も確認せず、状態を変更せずに実行する。**
-- `run` は起動時に残存 lock を検査し、無効なら削除して継続、有効なら `lock_unavailable` で終了
+- 有効 lock がある間は `run` は `lock_unavailable` で終了する。**`status`/`validate` は lock を取得せず、状態を変更せずに実行する。`status` は表示だけのため lock レコードを読めるが、有効性判定・削除・収束をしない。`validate` は lock レコードを読まない。**
+- `run` はまず run-state が `running` かを確認する。`blocked` または `completed` なら lock を読んだり削除したりせず終了する。`running` のときだけ残存 lock を検査し、無効なら削除して継続、有効なら `lock_unavailable` で終了する。
 
 選択スナップショット `slots` キー命名規則（仕様レベル）:
 
 - 単一成果物: `^[a-z_]+$`（例: `request`, `settings`, `series_plan`, `initial_design`, `current_state`）
 - 座標付き成果物: `^[a-z_]+\\.v[0-9]{2}(\\.c[0-9]{2})?(\\.s[0-9]{2})?$`
-- 品質判定: `^quality_disposition\\.quality-[0-9]{6}$`
+- 本文品質判定: `^scene_prose_disposition\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}$`
 - 巻公開入力: `^prior_volume_plan$`
 
 選択スナップショットの状態遷移（仕様レベル）:
@@ -69,5 +69,5 @@ lock レコードの契約（仕様レベル）:
 - `initial_design` 採用で `initial_design`、`current_state`（最初の generation）、`initial_design_adoption` を追加
 - `series_plan`、`volume_plan`、`chapter_plan`、`scene_plan`、`scene_card` 採用で各スロットを追加
 - `scene_prose`/`scene_continuity`/`scene_commit` 採用で `scene`、`current_state`（新 generation）、`scene_commit`、`prior_volume_plan`（当該巻の volume_plan）を追加
-- `volume_publication` 採用で `volume_publication` を追加、スロット変更なしで次巻へ
-- 新 selection は不変ファイルとして作成し、`runtime/run-state.json` の `current_selection_id` を原子的に書き換え
+- `volume_publication` は入力 selection を変更せず、公開記録を `published_volumes` にだけ追加して次巻または完了へ進む
+- 新 selection を作る工程だけが不変ファイルを作成し、`runtime/run-state.json` の `current_selection_id` を原子的に書き換える

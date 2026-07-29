@@ -34,17 +34,17 @@ publications/
   "volume_number": 4,
   "input_selection_id": "selection-000077",
   "settings_id": "settings-000001",
-  "series_plan_id": "series-plan-0001",
-  "volume_plan_id": "volume-plan-v04",
+  "series_plan_id": "series-plan-000001",
+  "volume_plan_id": "volume-plan-v04-000004",
   "current_state_id": "gen-000123",
-  "chapter_plan_ids": ["chapter-plan-v04-c001"],
-  "scene_ids": ["scene-v04-c001-s001"],
+  "chapter_plan_ids": ["chapter-plan-v04-c01-000001"],
+  "scene_ids": ["scene-v04-c01-s01-000001"],
   "quality_disposition_refs": ["quality-000001"],
   "created_at": "..."
 }
 ```
 
-`publication_notice_type` は `null` または `編集` だけを許可します。公開注意の対象は、公開する各場面の採用済み `scene_prose` に対応する不変 `quality_disposition` だけです。計画、カード、継続性更新の決定的検証で不整合があれば公開を拒否します。それらの品質判定は公開注意へ集約しません。公開記録は対象の本文品質判定を `quality_disposition_refs` として全場面分・計画順に固定します。残存重大指摘が一つでもあれば `編集` を値として保存し、**残存重大指摘がなければキーを省略します**（`null` を保存しない）。`編集` なら原稿先頭に定型文「編集上の注意があります。」を置きます（改行なし、全角英数）。キーが存在し、かつ値が `null` 以外で `編集` 以外の場合は公開を拒否します。
+`publication_notice_type` は、キーがある場合は `編集` だけを許可します。公開注意の対象は、公開する各場面の採用済み `scene_prose` に対応する不変 `quality_disposition` だけです。計画、カード、継続性更新の決定的検証で不整合があれば公開を拒否します。それらの品質判定は公開注意へ集約しません。公開記録は対象の本文品質判定を `quality_disposition_refs` として全場面分・計画順に固定します。残存重大指摘が一つでもあれば `編集` を値として保存し、**残存重大指摘がなければキーを省略します**（`null` を保存しない）。`編集` なら原稿先頭に定型文「編集上の注意があります。」を置きます。キーが存在し、値が `編集` 以外（`null` を含む）なら公開を拒否します。
 
 **公開注意集約規則（決定的）:**
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する

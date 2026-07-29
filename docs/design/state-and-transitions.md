@@ -52,7 +52,7 @@
 - `authority_inconsistency`: 正本（SPECIFICATION.md）、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` の各検証ステップで検出され、正本不整合として `blocked` にする
 - `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする
 
-`current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は run-state の値をそのまま出力します。
+`current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は [通常 CLI](admin-cli-and-acceptance-contract.md) が定める公開用射影を出力し、内部 run-state や manifest をそのまま出力しません。
 
 `pending_commit` は `kind`、`staging_path`、更新前後の selection ID、状態更新内容、`targets` を持つ manifest です。`targets` の各要素は成果物 ID、成果物種類、staging からの相対パス、最終パス、内容ダイジェスト、`pending | finalized` を持ちます。復旧は manifest と実在する target だけを読み、種別・ID・ダイジェストを再検証して `pending` の対象を順に確定します。すべての対象が `finalized` で状態更新前なら状態を更新し、状態更新後なら manifest を消します。manifest と target が一致しない場合だけ `blocked` にします。
 

@@ -71,16 +71,19 @@ ID は採番後に変更しません。
 | 選択スナップショット | `selection-{通番6桁}` | `next_selection` |
 | 呼出し | `call-{通番6桁}` | `next_call` |
 | 検証 | `validation-{通番6桁}` | `next_validation` |
+| 候補 | `candidate-{通番6桁}` | `next_candidate` |
+| 採用記録 | `adoption-{通番6桁}` | `next_adoption` |
+| 確認記録 | `review-{通番6桁}` | `next_review` |
 | 依頼 | `request-{通番6桁}` | `next_request` |
 | 初期設計 | `initial-design-{通番6桁}` | `next_initial_design` |
 | シリーズ計画 | `series-plan-{通番6桁}` | `next_series_plan` |
 | 巻計画 | `volume-plan-v{巻番号2桁}-{通番6桁}` | `next_volume_plan` |
-| 章計画 | `chapter-plan-v{巻番号2桁}c{章番号2桁}-{通番6桁}` | `next_chapter_plan` |
-| 場面計画 | `scene-plan-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_plan` |
-| 場面カード | `scene-card-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_card` |
-| 場面本文 | `scene-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene` |
-| 継続性更新 | `continuity-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_continuity` |
-| 場面確定 | `scene-commit-v{巻番号2桁}c{章番号2桁}s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
+| 章計画 | `chapter-plan-v{巻番号2桁}-c{章番号2桁}-{通番6桁}` | `next_chapter_plan` |
+| 場面計画 | `scene-plan-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_plan` |
+| 場面カード | `scene-card-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_card` |
+| 場面本文 | `scene-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene` |
+| 継続性更新 | `continuity-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_continuity` |
+| 場面確定 | `scene-commit-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
 
 既存の `handoffs/`、`completion/`、全巻を結合した `series.md` は V1 新形式に存在しません。
 
@@ -105,7 +108,7 @@ ID は採番後に変更しません。
 - `calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出し
 - `validations/<validation-id>/record.json`: 解析、スキーマ、参照、根拠位置などの決定的評価
 - 候補版の `review-record.json`: 形式有効な独立確認
-- `quality/<quality-id>/record.json`: 採用候補 ID、採用記録 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。
+- `quality/<quality-id>/record.json`: 採用候補 ID、採用記録 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
 
 依頼/応答に認証情報、Authorization、secret header、思考過程を保存しません。呼出し記録は作品状態や公開原稿の正本ではありません。
 

@@ -4,32 +4,7 @@
 
 この文書は V1 の保存 JSON と LLM 応答の共通規則を決めます。各スキーマは `schema_version` を必須とします。未知項目は拒否します。保存 JSON は UTF-8、オブジェクト、末尾改行ありとします。
 
-| 接頭辞 | 例 | 用途 |
-|---|---|---|
-| `gen-` | `gen-000001` | LLM生成記録 |
-| `settings-` | `settings-000001` | 設定 |
-| `keywords-` | `keywords-000001` | キーワード入力記録 |
-| `volume-pub-v` | `volume-pub-v01-000001` | 巻公開 |
-| `selection-` | `selection-000001` | 選択スナップショット |
-| `call-` | `call-000001` | LLM呼出し記録 |
-| `validation-` | `validation-000001` | 検証記録 |
-| `quality-` | `quality-000001` | 品質判定 |
-| `series-plan-` | `series-plan-000001` | シリーズ計画 |
-| `request-` | `request-000001` | 依頼 |
-| `initial-design-` | `initial-design-000001` | 初期設計 |
-| `scene-commit-` | `scene-commit-000001` | 場面確定 |
-
-座標エンコード型（巻・章・場面2桁ゼロ埋め、通番なし）:
-| 種類 | 形式 | 用途 |
-|---|---|---|
-| 巻計画 | `volume-plan-v01` | 巻計画 |
-| 章計画 | `chapter-plan-v01-c01` | 章計画 |
-| 場面計画 | `scene-plan-v01-c01-s01` | 場面計画 |
-| 場面カード | `scene-card-v01-c01-s01` | 場面カード |
-| 継続性更新 | `continuity-v01-c01-s01` | 継続性更新 |
-| 場面確定 | `scene-v01-c01-s01` | 場面確定単位 |
-
-通番6桁ゼロ埋め。欠番許可。予約済みID再利用不可。カウンタは `runtime/counters.json` で独立管理。
+成果物 ID の形式・カウンタ・配置の唯一の正本は [成果物と保存](artifacts-and-storage.md#2-配置と-id) の表とする。すべての成果物 ID は、同表の通番6桁を含む形式を使う。座標は巻・章・場面を2桁ゼロ埋めし、予約済み ID は再利用しない。カウンタは `runtime/counters.json` で独立管理する。
 
 ```json
 {
@@ -52,7 +27,7 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 
 | 値 | 形式 |
 |---|---|
-| ID | 種類ごとの固定接頭辞 + ASCII 英数字と `-`。空白なし。接頭辞一覧: `gen-` `settings-` `keywords-` `volume-pub-vNN-` `selection-` `call-` `validation-` `quality-` `series-plan-` `volume-plan-vNN` `chapter-plan-vNN-cMM` `scene-plan-vNN-cMM-sKK` `scene-vNN-cMM-sKK` `scene-card-vNN-cMM-sKK` `continuity-vNN-cMM-sKK` `request-` `initial-design-` `scene-commit-` 通番は6桁ゼロ埋め、巻・章・場面番号は2桁ゼロ埋め |
+| ID | [成果物と保存](artifacts-and-storage.md#2-配置と-id) の形式。ASCII 英数字と `-` だけを使い、通番は6桁、巻・章・場面番号は2桁ゼロ埋め |
 | 時刻 | UTC の RFC 3339 文字列 |
 | スキーマ版 | 正の整数。LLM 応答だけ `*-v1` 文字列 |
 | 成果物参照 | `artifact_type` と `artifact_id` のオブジェクト |
@@ -69,8 +44,8 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 {
   "schema_version": 1,
   "artifact_id": "string",
-  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update | generation | scene | volume-publication | quality-disposition",
-  "selection_id": "string",
+  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update | generation | scene",
+  "input_selection_id": "string | null",
   "created_at": "RFC3339",
   "content": {}
 }
@@ -89,24 +64,24 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 | 場面カード | `scene-card` | `scene_card.vNN.cMM.sKK` |
 | 場面本文 | `scene-prose` | `scene_prose.vNN.cMM.sKK` |
 | 継続性更新 | `continuity-update` | `continuity_update.vNN.cMM.sKK` |
-| LLM生成記録 | `generation` | `generation-XXXXXX` |
+| 現在作品状態 | `generation` | `current_state` |
 | 場面確定単位 | `scene` | `scene.vNN.cMM.sKK` |
-| 巻公開 | `volume-publication` | `volume_publication.vNN` |
-| 品質判定 | `quality-disposition` | `quality-{6桁}` |
+| 巻公開記録 | `volume-publication`（公開記録の個別形式） | `published_volumes` |
+| 品質判定 | `quality-disposition`（監査記録の個別形式） | `scene_prose_disposition.vNN.cMM.sKK` |
 
 各成果物の `content` スキーマは個別契約書（`initial-design-contract.md`、`planning-contract.md`、`scene-production-contract.md`、`volume-publication.md`）で定義します。
 
-`generation` は共通外枠を持つ採用済み内容成果物で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する `payload` を持ちます。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
+`generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する `payload` を持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
 
 `keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
 
-`init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を許します。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
+`init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を必須とする。他の採用済み内容成果物は、すでに確定した入力 selection ID を必須とする。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
 
 ## 3.1 `init` 入力
 
 `--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
 
-- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。内容制約は依頼入口の契約に従う。
+- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。各文字列は1〜2000 Unicodeコードポイント、配列要素は各1〜500、配列は各20個以下、全文字列の合計は8000以下とする。内容制約は依頼入口の契約に従う。
 - `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
 - `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は整数の昇順ペア、`init --config FILE` 入力検証では、設定 JSON がスキーマ（§3.1）と範囲制約に従うかのみを検査する。`endpoint` は loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`max_input_chars` は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。
 
@@ -118,13 +93,13 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 ```json
 {
-  "schema_version": 1,
-  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update | generation | scene",
+  "schema_version": "candidate-response-v1",
+  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
   "payload": {}
 }
 ```
 
-- `artifact_kind`: 列挙値のいずれか。`generation` は初期設計確認用の内部記録、`scene` は場面確定時の本文・更新・状態をまとめた複合成果物。
+- `artifact_kind`: LLM が生成・修正する候補種類だけを許可する。`generation`（現在作品状態）と `scene`（場面確定）はコードが決定的に作るため、LLM 応答には含めない。
 - `payload`: 成果物種別ごとのスキーマ（後述）に従う。
 
 ### 4.2 ReviewResponse (確認の応答)
@@ -153,21 +128,21 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 {
   "schema_version": 1,
   "quality_id": "quality-000001",
-  "candidate_id": "gen-000123",
-  "adoption_record_id": "adopt-000456",
+  "candidate_id": "candidate-000123",
+  "adoption_record_id": "adoption-000456",
   "review_record_ids": ["review-000001", "review-000002"],
   "revision_count": 2,
-  "result": "accepted | accepted_with_notice | blocked_manual_review",
+  "result": "accepted_with_notice",
   "remaining_major_issues": [
     {"code": "quality.contradiction", "message": "string", "evidence_locations": []}
   ],
-  "notice_type": "edit | null",
+  "notice_type": "編集",
   "created_at": "RFC3339"
 }
 ```
 
 - `result`: `accepted`（重大指摘なし）、`accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）、`blocked_manual_review`（**形式不正再呼出し上限到達**など）
-- `notice_type`: `edit` または `null`。巻公開時に `publication_notice_type` へ転写される。
+- `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 4.4 scene ペイロード (場面確定用複合成果物)
 
@@ -190,8 +165,8 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
   "changes": [
     {
       "op": "set | add | remove",
-      "target": "knowledge_model | cast | world | core | unresolved_threads | ending_conditions",
-      "path": "$.cast[0].knowledge",
+      "target": "story_facts | character_knowledge | reader_disclosures | unresolved_thread_states | timeline_position",
+      "path": "$.character_knowledge.character-000001",
       "value": "new value",
       "evidence_locations": ["prose:456"]
     }

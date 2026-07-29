@@ -30,13 +30,13 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
 | 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked/manual_review_required` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め**上限回数** | `blocked/manual_review_required` |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、次必須呼出しの入力上限超過 | 各論理処理で初回を含め**上限回数** | 原則 `blocked/manual_review_required`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
 ```python
 def invoke_structured(operation):
-    for structural_attempt in range(1, 6):
+    for structural_attempt in range(1, settings.invalid_response_limit + 1):
         response = call_with_technical_retries(operation, structural_attempt)
         parsed = parse_and_validate(response)
         if parsed.valid:
@@ -67,7 +67,7 @@ def invoke_structured(operation):
   重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` / `manual_review_required` とする。
 ```
 
-`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。V1 の通常工程はこの共通上限を使います。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
+`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。候補を形式有効とする前に、候補全体（確認時）または候補全体と有効確認応答（修正時）を含む次必須 request の実測バイト数が `max_input_chars` 以下であることを検証する。満たせない候補は形式不正であり、下流に渡さない。V1 の通常工程はこの共通上限を使います。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
 
@@ -90,12 +90,12 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 ```json
 {
   "schema_version": "candidate-response-v1",
-  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update | generation | scene",
+  "artifact_kind": "request | initial-design | series-plan | volume-plan | chapter-plan | scene-plan | scene-card | scene-prose | continuity-update",
   "payload": { "説明": "artifact_kind ごとの完全な候補内容。新規 ID は含めない" }
 }
 ```
 
-生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
+生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 
 確認応答スキーマ（仕様正本）:
 
