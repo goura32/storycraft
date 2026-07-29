@@ -48,7 +48,7 @@ storycraft validate --workspace PATH --json
 
 **模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、モデル最大コンテキスト長を返す OpenAI 互換のモデル情報応答も提供する。`messages`、`think: true`、シード、`options.num_ctx`、JSON Schema の `response_format` を検査し、`choices[0].message.content` に応答を返す。温度等は設定で指定された場合だけ検査する。実装クラス・メソッドシグネチャはコード側で定義。
 
-**設定検証契約**: `init --config FILE` は JSON がスキーマ（§3.1）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各range/max_input_chars が必須で、`request_options` は任意。未知項目・型不一致・range順序違反・max_input_chars下限違反で終了コード 2。**provider は `ollama` 固定。endpoint は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。max_input_chars は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。invalid_response_limit は形式不正再呼出しの上限回数（1以上の整数）。**
+**設定検証契約**: `init --config FILE` は JSON がスキーマ（§3.1）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。**provider は `ollama` 固定。endpoint は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。invalid_response_limit は形式不正再呼出しの上限回数（1以上の整数）。**
 
 **受入試験シナリオ（10件、仕様レベル）**:
 
@@ -60,7 +60,7 @@ storycraft validate --workspace PATH --json
 | 4 | 品質無制限時の修正安全上限 | 最後の形式有効候補がある場合の注意付き採用 | `quality_revision_limit=0`、有効候補への修正が `invalid_response_limit=2` 回連続で形式不正 → 直前の有効候補を `accepted_with_notice` として採用 |
 | 5 | 形式不正上限到達 | 形式不正**上限回数**の停止 | 初回から**上限回数**連続 `valid=false` → exit 4, `stop_reason=manual_review_required` |
 | 6 | 技術的再試行上限 | 技術的失敗上限到達の停止 | `technical_retry_limit=2` で3回失敗 → exit 4 |
-| 7 | max_input_chars超過 | 入力上限超過の停止 | プロンプト結合サイズ > max_input_chars で LLM未呼出、`blocked/manual_review_required`、exit 4 |
+| 7 | 最大コンテキスト超過 | 提供者のコンテキスト超過を技術的失敗として扱う | 指定モデルの最大コンテキスト超過を返す → 技術的再試行、上限到達で exit 4 |
 | 8 | 中断収束 | 異常終了後の健全pending収束 | `scene_commit` staging残存 → `run` でmanifest検証→確定→次scene_plan |
 | 9 | 巻公開決定的検証 | 公開注意あり/なしの原稿出力分岐 | 重大指摘あり → `publication_notice_type=編集`、冒頭に定型文 |
 | 10 | validate 包括検証 | 全検証項目 passed | `validate --json` で schema/id/ref/range/evidence 全チェック passed |

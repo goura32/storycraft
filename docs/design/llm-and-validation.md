@@ -23,7 +23,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
-すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を前記 endpoint から取得し、その値を request の `options.num_ctx` に指定する。`max_input_chars` はアプリケーションのUTF-8 byte上限であり、トークン数を推測する上限ではない。provider がモデルの context window 超過を返した場合は技術的失敗として再試行し、上限到達時は `technical_retry_exhausted` とする。
+すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を前記 endpoint から取得し、その値を request の `options.num_ctx` に指定する。トークン量・文字数・費用を理由に入力を配分・切詰め・停止しない。provider がモデルの context window 超過を返した場合は技術的失敗として再試行し、上限到達時は `technical_retry_exhausted` とする。
 
 温度、`top_p`、`top_k`、`repeat_penalty` などの推論パラメータは `settings.request_options` で任意に指定できる。**既定では `request_options` を省略し、これらのキーを request に送らない。**指定されたキーだけを `options` に追加し、Ollama のモデル既定値を上書きしない。
 
@@ -34,7 +34,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
 | 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked/manual_review_required` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、次必須呼出しの入力上限超過 | 各論理処理で初回を含め**上限回数** | 原則 `blocked/manual_review_required`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め**上限回数** | 原則 `blocked/manual_review_required`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
@@ -60,7 +60,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。各処理でまず system/user 指示文、応答schema、固定メタデータを連結した UTF-8 byte 数を `overhead` として測る。`B = max_input_chars - overhead` が正でなければ LLM未呼出の `internal_error` とする。generation context は `B/2` 以下、候補と有効reviewは各 `B/4` 以下だけを形式有効とし、候補/reviewが超えれば形式不正として再呼出しする。これにより修正requestを含む全必須requestは `max_input_chars` 以下になる。各生成・確認・修正の最終 request 全体について、この context と candidate/review、system 指示文、user 指示文、応答 schema、固定メタデータを **同じ決定的 JSON 形式で順に連結した UTF-8 byte 数を算定し**、**`max_input_chars` を超えた時点で LLM を呼ばず `internal_error` にする**。したがって、2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含みます。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使うことはできません。確認応答の `issues` は20件以下、各 `explanation` は500 Unicodeコードポイント以下、各 `evidence_locations` は5件以下とし、無効根拠位置は除外して修正入力に渡します。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。確認応答の `issues` は20件以下、各 `explanation` は500 Unicodeコードポイント以下、各 `evidence_locations` は5件以下とし、無効根拠位置は除外して修正入力に渡す。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
@@ -71,7 +71,7 @@ def invoke_structured(operation):
   重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` / `manual_review_required` とする。
 ```
 
-`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。候補を形式有効とする前に、候補全体（確認時）または候補全体と有効確認応答（修正時）を含む次必須 request の実測バイト数が `max_input_chars` 以下であることを検証する。満たせない候補は形式不正であり、下流に渡さない。V1 の通常工程はこの共通上限を使います。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
+`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
 

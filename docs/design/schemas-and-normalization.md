@@ -18,7 +18,7 @@
 }
 ```
 
-settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面文字数を考慮した余裕ある値」以上。係数・定数の具体値は実装詳細であり契約には含めない。`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 5）。
+`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 5）。
 
 | 値 | 形式 |
 |---|---|
@@ -78,7 +78,7 @@ settings の `max_input_chars` は 50000〜200000 の整数かつ「最大場面
 
 - `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。各文字列は1〜2000 Unicodeコードポイント、配列要素は各1〜500、配列は各20個以下、全文字列の合計は8000以下とする。内容制約は依頼入口の契約に従う。
 - `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000], "max_input_chars": 200000 }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`init` は `max_input_chars` が50000〜200000の整数であることに加え、後述の入力予算を満たすか検証する。`endpoint` は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`invalid_response_limit` は1以上の整数。`request_options` は任意の object で、`temperature` は0以上2以下の有限数、`top_p` は0より大きく1以下の有限数、`top_k` は1以上の整数、`repeat_penalty` は0より大きい有限数だけを許可する。省略時は request にこれらのキーを送らない。`num_ctx` と `think` は利用者指定を拒否し、LLM境界の契約に従いシステムが固定する。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`invalid_response_limit` は1以上の整数。`request_options` は任意の object で、`temperature` は0以上2以下の有限数、`top_p` は0より大きく1以下の有限数、`top_k` は1以上の整数、`repeat_penalty` は0より大きい有限数だけを許可する。省略時は request にこれらのキーを送らない。`num_ctx` と `think` は利用者指定を拒否し、LLM境界の契約に従いシステムが固定する。
 
 ## 4. LLM 応答
 
