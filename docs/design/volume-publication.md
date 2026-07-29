@@ -37,7 +37,7 @@ publications/
 }
 ```
 
-`publication_notice_type` は、キーがある場合は `編集` だけを許可します。公開対象の計画、場面、本文品質判定は `input_selection_id` のスロットと採用済み巻計画から決定的に導出します。計画、カード、継続性更新の決定的検証で不整合があれば公開を拒否します。それらの品質判定は公開注意へ集約しません。対象本文に残存重大指摘が一つでもあれば `編集` を値として保存し、**残存重大指摘がなければキーを省略します**（`null` を保存しない）。`編集` なら原稿先頭に定型文「編集上の注意があります。」を置きます。キーが存在し、値が `編集` 以外（`null` を含む）なら公開を拒否します。
+`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`（既存selection ID）、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。`volume_number` は input selection から導出する採用済み volume plan の巻番号と一致し、同selectionから導出する全対象 scene、scene prose、scene prose品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
 
 **公開注意集約規則（決定的）:**
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する

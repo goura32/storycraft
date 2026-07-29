@@ -24,7 +24,7 @@
 | 区分 | 内容 |
 |---|---|
 | 責務 | 一巻で扱う人物・対立・転換・未解決事項の予定と章構成を作る |
-| 必須入力スロット | 第1巻は `current_state`、`series_plan`。第2巻以降はこれらに `prior_volume_plan` を加える。`request`、`settings`、`initial_design` はこれらの採用済み正本から必要な意味内容を読み直さない |
+| 必須入力スロット | `settings`、第1巻は `current_state`、`series_plan`。第2巻以降はこれらに `prior_volume_plan` を加える。`request` と `initial_design` はこれらの採用済み正本から必要な意味内容を読み直さない。`settings` は物語の意味内容ではなく LLM 実行設定として必須 |
 | 決定的前提 | 第1巻以外は直前巻の `volume_publication` が公開済みであること |
 | 次工程 | `chapter_plan`、対象は当該巻第1章 |
 
