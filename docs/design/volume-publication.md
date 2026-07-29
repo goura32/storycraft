@@ -33,18 +33,11 @@ publications/
   "volume_publication_id": "volume-pub-v04-000004",
   "volume_number": 4,
   "input_selection_id": "selection-000077",
-  "settings_id": "settings-000001",
-  "series_plan_id": "series-plan-000001",
-  "volume_plan_id": "volume-plan-v04-000004",
-  "current_state_id": "gen-000123",
-  "chapter_plan_ids": ["chapter-plan-v04-c01-000001"],
-  "scene_ids": ["scene-v04-c01-s01-000001"],
-  "quality_disposition_refs": ["quality-000001"],
   "created_at": "..."
 }
 ```
 
-`publication_notice_type` は、キーがある場合は `編集` だけを許可します。公開注意の対象は、公開する各場面の採用済み `scene_prose` に対応する不変 `quality_disposition` だけです。計画、カード、継続性更新の決定的検証で不整合があれば公開を拒否します。それらの品質判定は公開注意へ集約しません。公開記録は対象の本文品質判定を `quality_disposition_refs` として全場面分・計画順に固定します。残存重大指摘が一つでもあれば `編集` を値として保存し、**残存重大指摘がなければキーを省略します**（`null` を保存しない）。`編集` なら原稿先頭に定型文「編集上の注意があります。」を置きます。キーが存在し、値が `編集` 以外（`null` を含む）なら公開を拒否します。
+`publication_notice_type` は、キーがある場合は `編集` だけを許可します。公開対象の計画、場面、本文品質判定は `input_selection_id` のスロットと採用済み巻計画から決定的に導出します。計画、カード、継続性更新の決定的検証で不整合があれば公開を拒否します。それらの品質判定は公開注意へ集約しません。対象本文に残存重大指摘が一つでもあれば `編集` を値として保存し、**残存重大指摘がなければキーを省略します**（`null` を保存しない）。`編集` なら原稿先頭に定型文「編集上の注意があります。」を置きます。キーが存在し、値が `編集` 以外（`null` を含む）なら公開を拒否します。
 
 **公開注意集約規則（決定的）:**
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する
@@ -52,7 +45,7 @@ publications/
 - すべて空なら `publication_notice_type` キーを省略する（`null` を書かない）
 - 対象本文ごとに品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` のいずれかであることを確認する。欠落・重複・列挙外なら公開を拒否する（`publication_invalid` で `blocked`）
 
-コードは入力選択を読み、公開記録の計画・状態・場面 ID、各場面の品質判定 ID、公開注意を決める設定 ID が対応するスナップショットスロットと完全一致し、欠落・余剰参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、ID の集合と重複、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
+コードは `input_selection_id` から対象の計画・状態・場面・本文品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
 
 ## 3. 結末必須事項の扱い
 

@@ -101,30 +101,11 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 
-確認応答スキーマ（仕様正本）:
-
-```json
-{
-  "schema_version": "review-response-v1",
-  "decision": "pass | issues",
-  "issues": [{
-    "severity": "critical | notice",
-    "evidence_locations": ["JSON path | paragraph index | prose offset"],
-    "explanation": "..."
-  }]
-}
-```
-
-- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない
-- `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
-- `evidence_locations`: JSON path / 段落番号 / 本文オフセットのいずれか。対象本文・JSON に解決できる値
-- `code`、`affected_artifact_ids`、`disposition`、`revision_instruction` はシステム側が確認記録作成時に付与し、LLM 応答には含めない
+`ReviewResponse` の JSON スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.2](schemas-and-normalization.md#42-reviewresponse-確認の応答) です。ここでは品質ループ上の入力・採用規則だけを定めます。
 
 ## 7. 最小記録形式
 
-`call-record.json` は処理、役割、対象候補、技術的試行番号、形式試行番号、シード、Ollama endpoint、モデル identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、通信結果、前回失敗後の予定待機ミリ秒、実待機ミリ秒、待機結果を持ちます。
-
-`validation-record.json` は処理、呼出し ID、検証器種類、`valid|invalid`、各 check、失敗コードを持ちます。
+`call-record.json` は処理、役割、対象候補、技術的試行番号、形式試行番号、シード、Ollama endpoint、モデル identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、通信結果、応答に対する検証器種類、`valid|invalid`、各 check、失敗コードを持ちます。待機時間の実測値は保存しません。
 
 `quality-disposition.json` は採用済み品質判定 `quality/<quality-id>/record.json` の内容を指す名称であり、別ファイルを作らない。`quality-id` は `quality-{通番6桁}`、採用記録と本文採用 slot が同じ ID を参照する。
 

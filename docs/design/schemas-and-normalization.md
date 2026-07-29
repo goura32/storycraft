@@ -10,7 +10,7 @@
 {
   "next_quality": 1, "next_keywords": 1, "next_generation": 1,
   "next_settings": 1, "next_volume_publication": 1, "next_selection": 1,
-  "next_call": 1, "next_validation": 1, "next_candidate": 1,
+  "next_call": 1, "next_candidate": 1,
   "next_adoption": 1, "next_review": 1, "next_request": 1,
   "next_initial_design": 1, "next_series_plan": 1, "next_volume_plan": 1,
   "next_chapter_plan": 1, "next_scene_plan": 1, "next_scene_card": 1,
@@ -99,7 +99,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 ### 4.2 ReviewResponse (確認の応答)
 
-仕様正本は `llm-and-validation.md` の「確認応答スキーマ（仕様正本）」を参照。ここではフィールド定義のみ記す。
+ここに記す `ReviewResponse` が唯一のスキーマ正本である。品質ループ上の利用規則は `llm-and-validation.md` を参照する。
 
 ```json
 {
@@ -136,7 +136,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）。形式不正上限到達は採用も品質判定も作らず、validation/call 記録と run-state の `blocked` だけで記録する。
+- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）。形式不正上限到達は採用も品質判定も作らず、call 記録と run-state の `blocked` だけで記録する。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 4.4 scene ペイロード (場面確定用複合成果物)

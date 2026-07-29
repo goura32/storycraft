@@ -47,7 +47,6 @@ workspace/
     staging/
     selections/selection-000001/
     calls/call-000001/
-    validations/validation-000001/
   design/
     initial/...
     series-plans/...
@@ -70,7 +69,7 @@ ID は採番後に変更しません。
 | 巻公開 | `volume-pub-v{巻番号2桁}-{通番6桁}` | `next_volume_publication` |
 | 選択スナップショット | `selection-{通番6桁}` | `next_selection` |
 | 呼出し | `call-{通番6桁}` | `next_call` |
-| 検証 | `validation-{通番6桁}` | `next_validation` |
+
 | 候補 | `candidate-{通番6桁}` | `next_candidate` |
 | 採用記録 | `adoption-{通番6桁}` | `next_adoption` |
 | 確認記録 | `review-{通番6桁}` | `next_review` |
@@ -105,8 +104,7 @@ ID は採番後に変更しません。
 
 呼出し、決定的検証、LLM 確認、品質上限の結果は不変の監査記録です。作品正本を更新するのは、採用処理と場面確定だけです。
 
-- `calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出し
-- `validations/<validation-id>/record.json`: 解析、スキーマ、参照、根拠位置などの決定的評価
+- `calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価
 - 候補版の `review-record.json`: 形式有効な独立確認
 - `quality/<quality-id>/record.json`: 採用候補 ID、採用記録 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
 

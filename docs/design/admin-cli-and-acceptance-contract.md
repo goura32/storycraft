@@ -17,7 +17,7 @@ storycraft validate --workspace PATH --json
 
 `init` は作業場所が存在しないときだけ作成する。既存なら終了コード `2` で変更しない。`--request` と `--keywords` は排他。設定は Ollama 専用で、設定不正なら作業場所を作らず終了コード `2` にする。
 
-`run` は健全で一意な保留中確定を収束してから完了まで実行し、停止中になった場合は終了コード `4`。停止中の `run` は終了コード `4` で変更しない。`status` と `validate` は提供者を初期化せず、状態を書き換えず、書込み lock を取得しない。`status` は表示のため lock レコードを読むことだけを許し、lock の有効性判定・削除・収束はしない。`validate` は lock レコードを読まない。
+`run` は健全で一意な保留中確定を収束してから完了まで実行し、停止中になった場合は終了コード `4`。停止中の `run` は終了コード `4` で変更しない。`status` と `validate` は提供者を初期化せず、状態を書き換えず、書込み lock を取得・読取・削除しない。
 
 || コード | 意味 |
 ||---|---|
@@ -32,7 +32,7 @@ storycraft validate --workspace PATH --json
 
 **エラー message 形式**: `message` には JSON pointer（`#/field/subfield` 形式）または人間用短文を入れる。`init --config` 設定検証エラー時は `#/config/field` を含める。
 
-**`status --json` 固有項目**: 共通項目に加え、`runtime_lock`（`null` または `{pid, acquired_at}`）を出力する。内部パスは出力しない。
+**`status --json` 固有項目**: 共通項目だけを出力する。内部パスとロック内部情報は出力しない。
 
 **`validate --json` 固有項目**: 共通項目に加え、`checks: [ {name: string, passed: bool, detail?: string} ]` を出力する。
 

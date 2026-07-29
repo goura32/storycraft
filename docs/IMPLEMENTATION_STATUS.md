@@ -10,7 +10,7 @@
 - 注意付き巻公開の `publication_notice_type="編集"` と原稿冒頭の定型文は実装・試験済み。ただし品質判定の全件参照とV1の選択スナップショット整合を含む公開契約全体は未実装です。
 - 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質上限で停止しない遷移は未実装です。現行コードは工程別設定の再試行を使い、品質上限では停止します。
 - 指摘対象だけに修正範囲を制限せず、成果物全体の整合性・品質改善のために置き換える契約は未実装です。現行コードは修正範囲を検証して制限します。
-- 現行 v2 CLI は `init`、`run`、`status`、`validate` と `--workspace`／`--json` を公開する。現行 `status --json` は仕様にない `run_state_path` と `manifest_path` を出力し、内部パスを隠す V1 の公開用 JSON 射影に未準拠である。現行 lock は空ファイルと `flock` だけで、契約が要求する workspace/run/PID/取得時刻の記録、残存判定、`runtime_lock` 診断値を持たない。現行 lock 取得失敗の stderr `code` は `locked` であり、V1 の `lock_unavailable` と異なる。V1 の stderr 一行 JSON と診断別終了コード `2|4|5|70|75` は未実装である。
+- 現行 v2 CLI は `init`、`run`、`status`、`validate` と `--workspace`／`--json` を公開する。現行 `status --json` は仕様にない `run_state_path` と `manifest_path` を出力し、内部パスを隠す V1 の公開用 JSON 射影に未準拠である。現行 lock は空ファイルと `flock` による排他であり、V1 のOS排他ロック方針には概ね沿うが、取得失敗の stderr `code` は `locked` であり、V1 の `lock_unavailable` と異なる。V1 の stderr 一行 JSON と診断別終了コード `2|4|5|70|75` は未実装である。
 - 正本・参照・確定物の不整合を `blocked` のまま再開せず新しい作業場所でやり直す V1 契約は未実装です。現行コードは旧来の復旧・継続経路を持ちます。
 - 現行実装の公開工程名は `volume_publication` である。旧 `publication` を使うテスト用資料は現行契約の根拠にしない。
 - OpenAI互換Ollamaの `GET /v1/models/{model}` による最大コンテキスト取得、`think: true`、`options.num_ctx`、構造化 `response_format`、および未指定 `request_options` を送らずOllama既定値を使うV1 wire契約は未実装です。
