@@ -9,6 +9,8 @@ import stat
 from typing import Iterator
 
 from .series_contracts import ContractError
+class WorkspaceLockBusy(ContractError):
+    """writer lock を取得できない場合。CLI は exit 75 に写像する。"""
 
 
 @contextmanager
@@ -57,8 +59,8 @@ def workspace_lock(
                 fcntl.LOCK_EX | fcntl.LOCK_NB,
             )
         except BlockingIOError as exc:
-            raise ContractError(
-                "このV1 workspaceは別の実行で使用中です"
+            raise WorkspaceLockBusy(
+                "workspaceは別の実行で使用中です"
             ) from exc
 
         try:

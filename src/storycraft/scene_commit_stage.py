@@ -148,7 +148,7 @@ def determine_scene_commit_transition(
         )
 
     return (
-        Stage.VOLUME_HANDOFF,
+        Stage.VOLUME_PUBLICATION,
         {
             "series": workspace_id,
             "series_plan_id": series_plan_id,

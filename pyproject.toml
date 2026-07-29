@@ -33,7 +33,7 @@ dev = [
 ]
 
 [project.scripts]
-storycraft = "storycraft.cli:main"
+storycraft = "storycraft.cli_v2:console_main"
 
 [tool.hatch.build.targets.wheel]
 packages = [
@@ -59,6 +59,6 @@ include = [
 stable_version = "1.0.0"
 development_version = "1.0.0.dev0"
 minimum_python = "3.11"
-canonical_test_command = 'python -m unittest discover -s tests -p "test_*.py"'
+canonical_test_command = 'uv run python -m unittest discover -s tests -p "test_*.py"'
 canonical_wheel_smoke_command = "bash scripts/wheel_smoke.sh"
 prompt_asset_root = "templates/prompts"

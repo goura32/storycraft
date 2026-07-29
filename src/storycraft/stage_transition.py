@@ -12,70 +12,22 @@ from .stages import SCENE_STAGES, Stage
 
 
 ALLOWED_STAGE_TRANSITIONS: Mapping[Stage, frozenset[Stage]] = {
-    Stage.INPUT: frozenset({
-        Stage.INITIAL_CONCEPT,
-    }),
-    Stage.INITIAL_CONCEPT: frozenset({
-        Stage.INITIAL_CHARACTERS,
-    }),
-    Stage.INITIAL_CHARACTERS: frozenset({
-        Stage.INITIAL_RELATIONSHIPS,
-    }),
-    Stage.INITIAL_RELATIONSHIPS: frozenset({
-        Stage.INITIAL_WORLD,
-    }),
-    Stage.INITIAL_WORLD: frozenset({
-        Stage.INITIAL_KNOWLEDGE,
-    }),
-    Stage.INITIAL_KNOWLEDGE: frozenset({
-        Stage.INITIAL_THREADS,
-    }),
-    Stage.INITIAL_THREADS: frozenset({
-        Stage.INITIAL_ENDING,
-    }),
-    Stage.INITIAL_ENDING: frozenset({
-        Stage.INITIAL_INTEGRATE,
-    }),
-    Stage.INITIAL_INTEGRATE: frozenset({
-        Stage.INITIAL_ACCEPT,
-    }),
-    Stage.INITIAL_ACCEPT: frozenset({
-        Stage.SERIES_PLAN,
-    }),
-    Stage.SERIES_PLAN: frozenset({
-        Stage.VOLUME_PLAN,
-    }),
-    Stage.VOLUME_PLAN: frozenset({
-        Stage.CHAPTER_PLAN,
-    }),
-    Stage.CHAPTER_PLAN: frozenset({
-        Stage.SCENE_PLAN,
-    }),
-    Stage.SCENE_PLAN: frozenset({
-        Stage.SCENE_CARD,
-    }),
-    Stage.SCENE_CARD: frozenset({
-        Stage.SCENE_PROSE,
-    }),
-    Stage.SCENE_PROSE: frozenset({
-        Stage.SCENE_CONTINUITY,
-    }),
-    Stage.SCENE_CONTINUITY: frozenset({
-        Stage.SCENE_COMMIT,
-    }),
+    Stage.REQUEST_INTAKE: frozenset({Stage.INITIAL_DESIGN}),
+    Stage.INITIAL_DESIGN: frozenset({Stage.SERIES_PLAN}),
+    Stage.SERIES_PLAN: frozenset({Stage.VOLUME_PLAN}),
+    Stage.VOLUME_PLAN: frozenset({Stage.CHAPTER_PLAN}),
+    Stage.CHAPTER_PLAN: frozenset({Stage.SCENE_PLAN}),
+    Stage.SCENE_PLAN: frozenset({Stage.SCENE_CARD}),
+    Stage.SCENE_CARD: frozenset({Stage.SCENE_PROSE}),
+    Stage.SCENE_PROSE: frozenset({Stage.SCENE_CONTINUITY}),
+    Stage.SCENE_CONTINUITY: frozenset({Stage.SCENE_COMMIT}),
     Stage.SCENE_COMMIT: frozenset({
         Stage.CHAPTER_PLAN,
         Stage.SCENE_PLAN,
-        Stage.VOLUME_HANDOFF,
+        Stage.VOLUME_PUBLICATION,
     }),
-    Stage.VOLUME_HANDOFF: frozenset({
-        Stage.VOLUME_PLAN,
-        Stage.COMPLETION,
-    }),
-    Stage.COMPLETION: frozenset({
-        Stage.PUBLICATION,
-    }),
-    Stage.PUBLICATION: frozenset(),
+    # 最終巻では service が completed に収束する。静的な次工程は次巻用だけ。
+    Stage.VOLUME_PUBLICATION: frozenset({Stage.VOLUME_PLAN}),
 }
 
 
@@ -142,7 +94,7 @@ def advance_run_state(
     """完了済みStageから次Stageへrun-stateを非破壊更新する。"""
     current_state = validate_run_state(state)
 
-    if current_state["status"] not in {"initializing", "running"}:
+    if current_state["status"] != "running":
         raise ContractError(
             "Stage遷移できるrun statusではありません: "
             f"{current_state['status']!r}"
@@ -163,9 +115,9 @@ def advance_run_state(
         next_stage,
     )
 
-    if not isinstance(next_target, dict) or not next_target:
+    if not isinstance(next_target, dict):
         raise ContractError(
-            "次Stageのcurrent_targetは空でないオブジェクトが必要です"
+            "次Stageのcurrent_targetはオブジェクトが必要です"
         )
 
     _validate_updated_at_progress(

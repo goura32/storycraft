@@ -3,7 +3,7 @@
   "workspace_id": "ws-demo-0001",
   "run_id": "run-000001",
   "status": "completed",
-  "current_stage": "completion",
+  "current_stage": "volume_publication",
   "current_target": {
     "publication_id": "pub-000001"
   },
