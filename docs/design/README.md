@@ -23,7 +23,7 @@
 | [工程処理](stage-operation-contract.md) | 処理、確定点、工程ごとの対象と停止 |
 | [確定と復旧](commit-and-recovery-contract.md) | ロック、原子的確定、異常終了収束表 |
 | [通常 CLI・受入](admin-cli-and-acceptance-contract.md) | 通常 CLI、模擬 Ollama、最小受入 |
-| [状態と遷移](state-and-transitions.md) | 実行状態 v2、工程、停止 |
+| [状態と遷移](state-and-transitions.md) | 実行状態、工程、停止 |
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |
 | [巻公開](volume-publication.md) | 全巻共通の巻公開記録、原稿、復旧 |

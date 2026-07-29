@@ -9,10 +9,10 @@ V1 は一人だけが一つのローカル作業場所を扱う。正本、参�
 ## 2. 通常 CLI
 
 ```text
-storycraft init --workspace PATH (--request FILE | --keywords FILE) --config FILE
-storycraft run --workspace PATH
-storycraft status --workspace PATH --json
-storycraft validate --workspace PATH --json
+storycraft init --workspace PATH (--request FILE | --keywords FILE) --config FILE [--json]
+storycraft run --workspace PATH [--json]
+storycraft status --workspace PATH [--json]
+storycraft validate --workspace PATH [--json]
 ```
 
 `init` は作業場所が存在しないときだけ作成する。既存なら終了コード `2` で変更しない。`--request` と `--keywords` は排他。設定は Ollama 専用で、設定不正なら作業場所を作らず終了コード `2` にする。
@@ -34,9 +34,9 @@ storycraft validate --workspace PATH --json
 
 **`status --json` 固有項目**: 共通項目だけを出力する。内部パスとロック内部情報は出力しない。
 
-**`validate --json` 固有項目**: 共通項目に加え、`checks: [ {name: string, passed: bool, detail?: string} ]` を出力する。
+**`validate --json` 固有項目**: 共通項目に加え、`checks` を `schema`、`id`、`reference`、`range`、`evidence` のこの順で出力する。各要素は `{name: "schema | id | reference | range | evidence", passed: bool, detail?: string}` とし、`detail` は `passed=false` のときだけ非空文字列で必須とする。
 
-**`init` 成功時出力**: `--json` 指定時 `{workspace_id, status: "created", run_id, current_selection_id}`、非指定時は人間用メッセージのみ。
+**`init` 成功時出力**: `--json` 指定時 `{workspace_id, status: "created", current_selection_id}`、非指定時は人間用メッセージのみ。
 
 **`run` 完了時（exit 0）**: `--json` 指定時は `status --json` と同一形式。非指定時は人間用完了メッセージのみ。
 
@@ -54,11 +54,11 @@ storycraft validate --workspace PATH --json
 
 | # | 名称 | 目的 | 成功基準 |
 |---|------|------|----------|
-| 1 | 依頼入口 | 依頼・キーワード排他・依頼採用 | `--request` と `--keywords` 同時指定で exit 2。片方のみで `request` 成果物確定、`current_stage=initial_design` |
+| 1 | 依頼入口 | 依頼・キーワード排他・依頼採用 | `--request` と `--keywords` 同時指定で exit 2。`--request` は init 後に request 確定・`current_stage=initial_design`。`--keywords` は keywords だけを確定して `current_stage=request_intake` とし、run の依頼採用後に request 確定・`initial_design` |
 | 2 | 4巻完走 | 全工程正常遷移 | 各巻公開後だけ次巻、最終巻で `completed` |
 | 3 | 品質上限到達 | 重大指摘上限到達時の注意付き採用 | `quality_revision_limit=2` で3回重大指摘 → `accepted_with_notice`、品質判定に `notice_type=編集` |
 | 4 | 品質無制限時の修正安全上限 | 最後の形式有効候補がある場合の注意付き採用 | `quality_revision_limit=0`、有効候補への修正が `invalid_response_limit=2` 回連続で形式不正 → 直前の有効候補を `accepted_with_notice` として採用 |
-| 5 | 形式不正上限到達 | 形式不正**上限回数**の停止 | 初回から**上限回数**連続 `valid=false` → exit 4, `stop_reason=manual_review_required` |
+| 5 | 形式不正上限到達 | 形式不正**上限回数**の停止 | 初回から**上限回数**連続 `valid=false` → exit 4、`status=blocked`、`last_error.code=invalid_response_limit` |
 | 6 | 技術的再試行上限 | 技術的失敗上限到達の停止 | `technical_retry_limit=2` で3回失敗 → exit 4 |
 | 7 | 最大コンテキスト超過 | 提供者のコンテキスト超過を技術的失敗として扱う | 指定モデルの最大コンテキスト超過を返す → 技術的再試行、上限到達で exit 4 |
 | 8 | 中断収束 | 異常終了後の健全pending収束 | `scene_commit` staging残存 → `run` でmanifest検証→確定→次scene_plan |

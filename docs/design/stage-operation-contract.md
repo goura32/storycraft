@@ -53,7 +53,7 @@
 
 | 失敗 | 記録 | 状態 |
 |---|---|---|
-| 形式不正**上限回数** | 対応する call-record の checks、有効候補 | `blocked`。last_error は `invalid_response_limit` |
+| 形式不正**上限回数** | 対応する call-record の checks、有効候補 | 原則 `blocked`、last_error は `invalid_response_limit`。ただし既存の形式有効候補がある無制限品質修正中は、その候補を `accepted_with_notice` として採用 |
 | 技術再試行上限 | 呼出し記録群 | `blocked`。last_error は `technical_retry_exhausted` |
 | 検証器の内部失敗 | run-state.last_error | `blocked`。last_error は `internal_error` |
 | スナップショット参照不整合 | run-state.last_error の evidence_refs | `blocked`。last_error は `authority_inconsistency` |

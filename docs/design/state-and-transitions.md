@@ -4,7 +4,7 @@
 
 この文書は実行状態、工程遷移、確定途中の収束、停止を定めます。作品状態、計画、本文、公開原稿の内容は [成果物と保存](artifacts-and-storage.md) に従います。
 
-## 2. 実行状態 v2
+## 2. 実行状態
 
 `runtime/run-state.json` は実行位置と参照だけを持ちます。作品の事実、計画本文、公開原稿、LLM 応答は複写しません。
 
@@ -17,7 +17,7 @@
   "current_stage": "scene_plan",
   "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2},
   "current_selection_id": "selection-000001",
-  "active_scene_id": null,
+
   "pending_commit": null,
   "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
   "created_at": "2026-07-28T00:00:00Z",
@@ -45,8 +45,8 @@
 
 - `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
 - `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）
-- `internal_error`: 内部検証器の例外、設定不正、実装不能な状態
-- `authority_inconsistency`: 正本（SPECIFICATION.md）、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
+- `internal_error`: 内部検証器の例外、実装不能な状態
+- `authority_inconsistency`: 保存済み settings、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
 - `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする
 
 `current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は [通常 CLI](admin-cli-and-acceptance-contract.md) が定める公開用射影を出力し、内部 run-state や manifest をそのまま出力しません。
@@ -89,4 +89,4 @@ volume_publication
 
 `run` は `running` のときだけ、LLM の初期化・次工程開始の前に保存済みの確定点を共通収束表で収束させてから工程を進めます。`blocked` のときは `status` と `validate` だけを許可します。提供者を呼ばない収束処理では LLM を初期化しません。
 
-失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、**形式不正再呼出し上限**、技術再試行上限、内部エラー、公開検証不合格では `blocked/manual_review_required` にして停止します。停止した作業場所は再開せず、新しい作業場所でやり直します。
+失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、**形式不正再呼出し上限**、技術再試行上限、内部エラー、公開検証不合格では `blocked` と該当する `last_error.code` を保存して停止します。停止した作業場所は再開せず、新しい作業場所でやり直します。

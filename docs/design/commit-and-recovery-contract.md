@@ -16,7 +16,7 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 | `pending` | その target の最終配置が有効・staging target なし | 更新前 | rename 後の正常な中断として、最終配置の種類・ID・ダイジェストを再検証し manifest を `finalized` に更新 |
 | `finalized` | その target の最終配置が有効・staging target なし | 更新前 | 最終配置を再検証し、全 target 完了後に状態を更新 |
 | 全て `finalized` | 全 target が有効 | 更新後 | 最終配置と状態の参照を検証して保留中を消す |
-| manifest と target が不一致 | 任意 | 任意 | `blocked`。`stop_reason=manual_review_required` |
+| manifest と target が不一致 | 任意 | 任意 | `blocked`。`last_error.code=authority_inconsistency` |
 
 「有効」はスキーマ、参照、入力選択、種類ごとの不変条件に通ることです。自動削除、自動選択、LLM 再呼出しはしません。
 
@@ -67,6 +67,6 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 - 最初の selection は `input_selection_id=null`、依頼採用時に `request` と `settings` スロットを持つ
 - `initial_design` 採用で `initial_design`、`current_state`（最初の generation）、`initial_design_adoption` を追加
 - `series_plan`、`volume_plan`、`chapter_plan`、`scene_plan`、`scene_card` 採用で各スロットを追加
-- `scene_prose`/`scene_continuity`/`scene_commit` 採用で `scene`、`current_state`（新 generation）、`scene_commit`、`prior_volume_plan`（当該巻の volume_plan）を追加
+- `scene_prose` と `scene_continuity` の採用では、対応する内容、採用記録、品質判定の各スロットだけを追加し、`scene_commit` の確定でだけ `scene`、`current_state`（新 generation）、`scene_commit`、`prior_volume_plan`（当該巻の volume_plan）を追加
 - `volume_publication` は入力 selection を変更せず、公開記録を `published_volumes` にだけ追加して次巻または完了へ進む
 - 新 selection を作る工程だけが不変ファイルを作成し、`runtime/run-state.json` の `current_selection_id` を原子的に書き換える

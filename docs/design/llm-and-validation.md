@@ -11,7 +11,7 @@
 
 ### 7. LLMClient.invoke インターフェース契約（仕様レベル）
 
-`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得し、`id` 不一致、`context_length` 欠落・非正数、HTTP失敗は LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。技術的再試行の上限到達は `technical_retry_exhausted`、クライアント自身の契約違反・例外だけは `internal_error` とする。
+`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは `technical_retry_limit` の技術的再試行対象とし、上限到達は `technical_retry_exhausted` とする。応答の `id` 不一致、`context_length` 欠落・非正数、クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
 
 ### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
 
@@ -19,7 +19,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 ### 9. QualityLoop.run_stage 契約（仕様レベル）
 
-生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用、形式不正上限到達時は `blocked/manual_review_required` とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「形式不正上限回数」のみを記述します。
+生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用とします。形式不正上限到達は原則 `blocked` だが、既存の形式有効候補がある無制限品質修正中だけは注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「形式不正上限回数」のみを記述します。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
@@ -33,8 +33,8 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
-| 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked/manual_review_required` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め**上限回数** | 原則 `blocked/manual_review_required`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
+| 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked`、`last_error.code=technical_retry_exhausted` |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め**上限回数** | 原則 `blocked`、`last_error.code=invalid_response_limit`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
@@ -46,8 +46,10 @@ def invoke_structured(operation):
         if parsed.valid:
             return parsed.value
         persist_invalid_validation(operation, structural_attempt, parsed.error)
-    block("manual_review_required", "MALFORMED_OUTPUT_EXHAUSTED")
+    return invalid_response_limit(operation)
 ```
+
+`invalid_response_limit` は、既存の形式有効候補がある無制限品質修正ならその候補を `accepted_with_notice` として返す。それ以外は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
 
 ## 3. 通常の品質ループ
 
@@ -68,7 +70,7 @@ def invoke_structured(operation):
   ├─ 重大あり・上限前: 修正(generation_context + candidate + review)
   │                         → 決定的検証
   │                         → 再確認(generation_context + revised candidate)
-  重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` / `manual_review_required` とする。
+  重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` と `last_error.code=invalid_response_limit` とする。
 ```
 
 `quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
@@ -97,7 +99,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 ## 7. 最小記録形式
 
-`call-record.json` は処理、役割、対象候補、技術的試行番号、形式試行番号、シード、Ollama endpoint、モデル identifier、設定スナップショット ID、入力成果物 ID、要求・応答本文、通信結果、応答に対する検証器種類、`valid|invalid`、各 check、失敗コードを持ちます。待機時間の実測値は保存しません。
+call record は `runtime/calls/<call-id>/record.json` に保存します。完全な保存スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.7](schemas-and-normalization.md#47-call-record-呼出し記録) です。待機時間の実測値は保存しません。
 
 `quality-disposition.json` は採用済み品質判定 `quality/<quality-id>/record.json` の内容を指す名称であり、別ファイルを作らない。`quality-id` は `quality-{通番6桁}`、採用記録と本文採用 slot が同じ ID を参照する。
 

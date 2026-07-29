@@ -39,7 +39,10 @@ runtime/selections/selection-000001/record.json
 ```text
 workspace/
   inputs/keywords-000001/record.json
+  inputs/request-000001/record.json
   quality/quality-000001/record.json
+  candidates/candidate-000001/record.json
+  reviews/review-000001/record.json
   runtime/
     run-state.json
     settings/settings-000001/record.json
@@ -47,6 +50,7 @@ workspace/
     staging/
     selections/selection-000001/
     calls/call-000001/
+    adoptions/adoption-000001/record.json
   design/
     initial/...
     series-plans/...
@@ -104,9 +108,11 @@ ID は採番後に変更しません。
 
 呼出し、決定的検証、LLM 確認、品質上限の結果は不変の監査記録です。作品正本を更新するのは、採用処理と場面確定だけです。
 
-- `calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価
-- 候補版の `review-record.json`: 形式有効な独立確認
-- `quality/<quality-id>/record.json`: 採用候補 ID、採用記録 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
+- `runtime/calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価
+- `candidates/<candidate-id>/record.json`: `schema_version`、`candidate_id`、`artifact_kind`、`input_selection_id`、`keywords_id`、`settings_id`、工程 payload、生成または修正元 candidate ID、対応する call ID、作成時刻を持つ不変候補記録。selection 前の `request_intake` だけは `keywords_id` を持ち、他工程では `null` とする。
+- `reviews/<review-id>/record.json`: `schema_version`、`review_id`、対象 candidate ID、ReviewResponse、対応する call ID、作成時刻を持つ不変確認記録
+- `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。品質判定は採用記録を参照しない。
+- `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
 
 依頼/応答に認証情報、Authorization、secret header、思考過程を保存しません。呼出し記録は作品状態や公開原稿の正本ではありません。
 

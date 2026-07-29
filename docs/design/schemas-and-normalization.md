@@ -65,6 +65,11 @@
 `keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
 
 `init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を必須とする。他の採用済み内容成果物は、すでに確定した入力 selection ID を必須とする。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
+`settings` は `{ "schema_version": 1, "settings_id": "settings-000001", "config": <§3.1 config>, "created_at": "RFC3339" }` の未知項目を拒否する不変 JSON である。`config` は §3.1 の `config` と同じ閉じたスキーマ・型・範囲・相関制約に従い、初期化後に変更しない。
+
+### 3.0 候補・確認記録
+
+`candidates/<candidate-id>/record.json` は `{schema_version, candidate_id, artifact_kind, input_selection_id, keywords_id|null, settings_id, payload, parent_candidate_id|null, review_record_id|null, call_id, created_at}`、`reviews/<review-id>/record.json` は `{schema_version, review_id, candidate_id, response, call_id, created_at}` を必須とし、未知項目を拒否する。初回生成候補は `parent_candidate_id=null` と `review_record_id=null`、修正候補は両方を必須とし、review は親 candidate を参照しなければならない。`request_intake` の候補・確認・call だけは `input_selection_id=null`、`keywords_id` と `settings_id` を必須参照とし、採用済み成果物 ID を参照してはならない。その他の工程では `input_selection_id` を必須とし、`keywords_id=null` とする。
 
 ## 3.1 `init` 入力
 
@@ -72,7 +77,7 @@
 
 - `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。各文字列は1〜2000 Unicodeコードポイント、配列要素は各1〜500、配列は各20個以下、全文字列の合計は8000以下とする。内容制約は依頼入口の契約に従う。
 - `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は OpenAI 互換 API を提供する loopback HTTP のみ許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`invalid_response_limit` は1以上の整数。`request_options` は任意の object で、`temperature` は0以上2以下の有限数、`top_p` は0より大きく1以下の有限数、`top_k` は1以上の整数、`repeat_penalty` は0より大きい有限数だけを許可する。省略時は request にこれらのキーを送らない。`num_ctx` と `think` は利用者指定を拒否し、LLM境界の契約に従いシステムが固定する。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の loopback HTTP URL だけを許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
 
 ## 4. LLM 応答
 
@@ -118,7 +123,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
   "schema_version": 1,
   "quality_id": "quality-000001",
   "candidate_id": "candidate-000123",
-  "adoption_record_id": "adoption-000456",
+
   "review_record_ids": ["review-000001", "review-000002"],
   "revision_count": 2,
   "result": "accepted_with_notice",
@@ -130,7 +135,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘ありだが上限到達で注意付き採用）。形式不正上限到達は採用も品質判定も作らず、call 記録と run-state の `blocked` だけで記録する。
+- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘あり、または既存の有効候補への修正中に形式不正上限到達）。初回生成・確認で有効候補がないまま形式不正上限に達したときだけ、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 4.4 scene ペイロード (場面確定用複合成果物)
@@ -151,6 +156,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 ```json
 {
   "schema_version": 1,
+  "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
   "changes": [
     {
       "op": "set | add | remove",
@@ -167,6 +173,8 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 ```json
 {
   "schema_version": 1,
+  "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
+  "pov_character": "character-000001",
   "allowed_facts": ["string"],
   "allowed_knowledge": ["string"],
   "allowed_disclosures": ["string"],
@@ -176,7 +184,40 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
+- `coordinate`: `current_target` と親場面計画の座標に一致する。
+- `pov_character`: 場面計画の対象人物 ID。システム側で補完せず、LLM は必ず返す。
 - `prose_conditions`: 本文上で満たすべき達成条件を自然言語で列挙（例：「A が B に秘密を打ち明ける」「C が現場に到着する」）。コードは本文中にこれらの条件を充足する記述があるかを決定的に検証しない（LLM 確認で意味的充足を判定）。決定的検証は「配列要素が文字列であること」「空文字でないこと」のみ。
+
+### 4.7 call record（呼出し記録）
+
+call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存する監査記録で、共通成果物外枠を持たない。未知項目を拒否し、次を必須とする。
+
+```json
+{
+  "schema_version": 1,
+  "call_id": "call-000001",
+  "operation": "model_capability | generate | review | revise",
+  "role": "候補生成または確認の役割名",
+  "target_candidate_id": "candidate-000001 | null",
+  "input_refs": ["artifact ID"],
+  "technical_attempt": 1,
+  "format_attempt": 1,
+  "seed": 1,
+  "endpoint": "loopback OpenAI-compatible URL",
+  "model": "model identifier",
+  "settings_id": "settings-000001",
+  "request": "送信本文 | null",
+  "response": "受信本文 | null",
+  "transport": "success | failure",
+  "validation": {"result": "valid | invalid | not_applicable", "checks": [], "failure_code": "string | null"}
+}
+```
+
+`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt=1`、`request=null` とする。
+
+### 4.8 adoption record（採用記録）
+
+`runtime/adoptions/adoption-{通番6桁}/record.json` は未知項目を拒否し、`{schema_version: 1, adoption_id, source_kind: "candidate | direct_request", candidate_id|null, quality_id|null, output_content_artifact_ids: [1件以上のID], output_selection_id, input_selection_id|null, created_at}` を必須とする。`source_kind="candidate"` では candidate は quality の `candidate_id` と一致し、両IDを必須とする。`source_kind="direct_request"` は `init --request` だけで許可し、candidate ID と quality ID は `null`、`output_content_artifact_ids` は request だけとする。この場合だけ `input_selection_id=null` で、output selection は確定済み settings と request を最初の slots として持つ。`source_kind="candidate"` の output selection は input selection を複写して当該採用の slot だけを追加・置換した不変 selection でなければならない。`output_content_artifact_ids` は同じ採用manifestの内容成果物 target と完全一致する。adoption record と selection target 自身はこの配列に含めない。
 
 ## 5. 新規要素の正規化
 
@@ -207,7 +248,7 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 | continuity-update | 座標、changes |
 | 場面 | 座標、scene_prose、continuity_update、base_generation |
 | 選択 | selection_id、input_selection_id、slots、created_at |
-| 品質判定 | selected_candidate、review_records、revision_limit、revision_count、result、remaining_major_issues、notice_type |
+| 品質判定 | quality_id、candidate_id、review_record_ids、revision_count、result、remaining_major_issues、accepted_with_notice 時だけ notice_type、created_at |
 
 各種類の型、列挙値、相関制約は対応する工程契約で定めます。ここにない項目を保存スキーマに追加するには、この表と工程契約を同時に更新します。
 
