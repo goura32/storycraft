@@ -1,4 +1,4 @@
-"""docs/design/state-and-transitions.md に従う run-state v2。"""
+"""run-state v3 の形と工程横断の不変条件を検証する。"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -25,6 +25,7 @@ RUNNING_STAGES = frozenset({
     "volume_publication",
 })
 
+
 _STAGE_TARGET_FIELDS: dict[str, frozenset[str]] = {
     "request_intake": frozenset(),
     "initial_design": frozenset(),
@@ -39,12 +40,11 @@ _STAGE_TARGET_FIELDS: dict[str, frozenset[str]] = {
     "volume_publication": frozenset({"volume_number"}),
 }
 
+# V1 (schema_version 3) required fields: note that run_id and stop_reason are removed.
 _REQUIRED_FIELDS = frozenset({
     "schema_version",
     "workspace_id",
-    "run_id",
     "status",
-    "stop_reason",
     "last_error",
     "current_stage",
     "current_target",
@@ -66,14 +66,17 @@ _ERROR_CODES = frozenset({
 
 
 def validate_run_state(state: object) -> dict[str, Any]:
-    """run-state v2 の形と工程横断の不変条件を検証する。"""
+    """run-state v3 の形と工程横断の不変条件を検証する。"""
     if not isinstance(state, dict):
         raise ContractError("run-stateはオブジェクトでなければなりません")
-    _require_exact_fields(state, _REQUIRED_FIELDS, "run-state")
-    if state["schema_version"] != 2:
-        raise ContractError("run-state.schema_versionは2でなければなりません")
+    # Required fields must be present; extra fields are allowed.
+    missing = _REQUIRED_FIELDS - set(state.keys())
+    if missing:
+        raise ContractError(f"run-stateに必須フィールドがありません: {missing}")
+    if state["schema_version"] != 3:
+        raise ContractError("run-state.schema_versionは3でなければなりません")
     _require_id(state["workspace_id"], "ws-", "workspace_id")
-    _require_id(state["run_id"], "run-", "run_id")
+    # run_id is not required in v3
     _validate_timestamps(state)
     _validate_published_volumes(state["published_volumes"])
 
@@ -90,20 +93,21 @@ def validate_run_state(state: object) -> dict[str, Any]:
 
 
 def _validate_running(state: dict[str, Any]) -> None:
-    if state["stop_reason"] is not None or state["last_error"] is not None:
-        raise ContractError("runningではstop_reasonとlast_errorはnullでなければなりません")
+    # runningではlast_errorはnullでなければならない（stop_reasonは存在しない）
+    if state["last_error"] is not None:
+        raise ContractError("runningではlast_errorはnullでなければなりません")
     _validate_current_work(state, allow_null_selection=state["current_stage"] == "request_intake")
 
 
 def _validate_blocked(state: dict[str, Any]) -> None:
-    if state["stop_reason"] != "manual_review_required":
-        raise ContractError("blockedではstop_reasonはmanual_review_requiredでなければなりません")
+    # blockedではlast_errorが必要で、そのcodeがエラーコードのいずれかであること
     _validate_error(state["last_error"])
     _validate_current_work(state, allow_null_selection=True)
 
 
 def _validate_completed(state: dict[str, Any]) -> None:
-    for field in ("stop_reason", "last_error", "current_stage", "current_target", "active_candidate", "active_scene_id", "pending_commit"):
+    # completedでは以下のフィールドはnullでなければならない
+    for field in ("last_error", "current_stage", "current_target", "active_candidate", "active_scene_id", "pending_commit"):
         if state[field] is not None:
             raise ContractError(f"completedでは{field}はnullでなければなりません")
     _require_id(state["current_selection_id"], "selection-", "current_selection_id")
@@ -114,7 +118,7 @@ def _validate_completed(state: dict[str, Any]) -> None:
 def _validate_current_work(state: dict[str, Any], *, allow_null_selection: bool) -> None:
     stage = state["current_stage"]
     if stage not in RUNNING_STAGES:
-        raise ContractError(f"run-state.current_stageがV2工程ではありません: {stage!r}")
+        raise ContractError(f"run-state.current_stageがV3工程ではありません: {stage!r}")
     target = state["current_target"]
     _validate_target(stage, target)
     selection_id = state["current_selection_id"]
@@ -253,7 +257,7 @@ def _validate_optional_id(value: object, prefix: str, label: str) -> None:
         _require_id(value, prefix, label)
 
 
-# v2 は manifest 自体で正常な中断を表現する。旧特殊状態は受け付けない。
+# v3 は manifest 自体で正常な中断を表現する。旧特殊状態は受け付けない。
 def validate_recovery_run_state(state: object) -> dict[str, Any]:
     return validate_run_state(state)
 
@@ -263,7 +267,7 @@ def is_stale_scene_commit_recovery_state(state: object) -> bool:
 
 
 class RunStateStore:
-    """runtime/run-state.json の原子的な v2 永続化。"""
+    """runtime/run-state.json の原子的な v3 永続化。"""
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.expanduser()

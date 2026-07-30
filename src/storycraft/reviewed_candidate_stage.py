@@ -155,7 +155,6 @@ class ReviewedCandidateStageRunner:
             blocked = stop_state(
                 state,
                 status="blocked",
-                stop_reason="manual_review_required",
                 last_error={
                     "code": (
                         f"{self.spec.stage.upper()}_GENERATION_INVALID"
@@ -212,7 +211,6 @@ class ReviewedCandidateStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="manual_review_required",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}_REVIEW_INVALID"
@@ -231,10 +229,13 @@ class ReviewedCandidateStageRunner:
 
             issues = critique["issues"]
             accepted = not issues
-            exhausted = (
-                bool(issues)
-                and revisions_used >= revision_limit
-            )
+            # V1 spec: quality_revision_limit = 0 means unlimited revisions
+            # But safety cap: invalid_response_limit prevents infinite loops
+            if revision_limit == 0:
+                # Unlimited revisions - never exhaust due to quality limit
+                exhausted = False
+            else:
+                exhausted = bool(issues) and revisions_used >= revision_limit
 
             if accepted:
                 candidate_status = "accepted"
@@ -278,7 +279,6 @@ class ReviewedCandidateStageRunner:
                 "candidate_id": candidate_id,
                 "version": version,
             }
-            active_state["stop_reason"] = None
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
 
@@ -319,7 +319,6 @@ class ReviewedCandidateStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="revision_limit",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}_REVISION_LIMIT"
@@ -364,7 +363,6 @@ class ReviewedCandidateStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="manual_review_required",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}_REVISION_INVALID"
@@ -790,15 +788,13 @@ def stop_state(
     state: dict[str, Any],
     *,
     status: str,
-    stop_reason: str,
     last_error: str | dict[str, Any],
     updated_at: str,
     active_candidate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """run-stateを停止状態へ非破壊更新する。"""
+    """run-stateを停止状態へ非破壊更新する（v3ではstop_reasonは保存しない）。"""
     stopped = deepcopy(state)
     stopped["status"] = status
-    stopped["stop_reason"] = stop_reason
     stopped["last_error"] = deepcopy(last_error)
     stopped["updated_at"] = updated_at
     if active_candidate is not None:

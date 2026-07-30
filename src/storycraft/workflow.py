@@ -15,7 +15,7 @@ class RunUnavailable(ContractError):
     """健全だが未実装の次工程、または停止済み run を示す。"""
 
 
-def run_v2(workspace_root: Path) -> dict[str, Any]:
+def run(workspace_root: Path) -> dict[str, Any]:
     """最初に保存済み確定を収束する。LLMは必要になるまで初期化しない。"""
     root = workspace_root.expanduser()
     with workspace_lock(root):
@@ -33,7 +33,7 @@ def run_v2(workspace_root: Path) -> dict[str, Any]:
                 return execute_publication_recovery(root, state)
             except ContractError as exc:
                 blocked = dict(state)
-                blocked.update({"status": "blocked", "stop_reason": "manual_review_required", "last_error": {"code": "publication_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
+                blocked.update({"status": "blocked", "last_error": {"code": "publication_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
                 store.save(blocked)
                 raise RunUnavailable("publication_invalid") from exc
         if state["current_stage"] == "volume_publication":
@@ -41,7 +41,7 @@ def run_v2(workspace_root: Path) -> dict[str, Any]:
                 return VolumePublicationStageService(root).run(updated_at=state["updated_at"])
             except ContractError as exc:
                 blocked = dict(state)
-                blocked.update({"status": "blocked", "stop_reason": "manual_review_required", "last_error": {"code": "publication_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
+                blocked.update({"status": "blocked", "last_error": {"code": "publication_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
                 store.save(blocked)
                 raise RunUnavailable("publication_invalid") from exc
         raise RunUnavailable("このv2工程のdispatcherは未実装です")

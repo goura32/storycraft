@@ -1,4 +1,4 @@
-"""正本 docs/design/state-and-transitions.md に基づく run-state v2 契約。"""
+"""正本 docs/design/state-and-transitions.md に基づく run-state v3 契約。"""
 from __future__ import annotations
 
 import copy
@@ -9,11 +9,9 @@ from storycraft.series_contracts import ContractError
 
 
 BASE_STATE = {
-    "schema_version": 2,
+    "schema_version": 3,
     "workspace_id": "ws-000001",
-    "run_id": "run-000001",
     "status": "running",
-    "stop_reason": None,
     "last_error": None,
     "current_stage": "scene_plan",
     "current_target": {
@@ -73,7 +71,6 @@ class RunStateV2Tests(unittest.TestCase):
         state = copy.deepcopy(BASE_STATE)
         state.update(
             status="blocked",
-            stop_reason="manual_review_required",
             last_error={
                 "code": "publication_invalid",
                 "message": "公開参照が不整合です",

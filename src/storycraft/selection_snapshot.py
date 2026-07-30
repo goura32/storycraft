@@ -5,8 +5,10 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any
 
+from .artifact_ids import reserve_counter
 from .series_contracts import ContractError
 
 
@@ -35,7 +37,7 @@ def validate_selection_snapshot(value: object) -> dict[str, Any]:
     if not isinstance(slots, dict) or not slots:
         raise ContractError("slotsは空でないオブジェクトでなければなりません")
     for slot, artifact_id in slots.items():
-        if not isinstance(slot, str) or not slot or not isinstance(artifact_id, str) or not artifact_id:
+        if not isinstance(slot, str) or not _is_valid_slot(slot) or not isinstance(artifact_id, str) or not artifact_id:
             raise ContractError("slotsが不正です")
         if artifact_id.startswith("selection-"):
             raise ContractError("slotsはselection snapshotを参照できません")
@@ -97,23 +99,15 @@ class SelectionSnapshotStore:
         return validated
 
     def _reserve_id(self) -> str:
-        self.counter_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            counters = json.loads(self.counter_path.read_text(encoding="utf-8")) if self.counter_path.exists() else {}
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError("counters.jsonを読み込めません") from exc
-        value = counters.get("next_selection", 1)
-        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-            raise ContractError("next_selectionが不正です")
-        counters["next_selection"] = value + 1
-        temporary = self.counter_path.with_suffix(".json.tmp")
-        try:
-            temporary.write_text(json.dumps(counters, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            os.replace(temporary, self.counter_path)
-        except OSError as exc:
-            temporary.unlink(missing_ok=True)
-            raise ContractError("counters.jsonを保存できません") from exc
-        return f"selection-{value:06d}"
+        return f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"
+
+
+def _is_valid_slot(slot: str) -> bool:
+    return bool(
+        re.fullmatch(r"[a-z_]+", slot)
+        or re.fullmatch(r"[a-z_]+\.v[0-9]{2}(\.c[0-9]{2})?(\.s[0-9]{2})?", slot)
+        or re.fullmatch(r"scene_prose_disposition\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}", slot)
+    )
 
 
 def _require_id(value: object, prefix: str, label: str) -> None:

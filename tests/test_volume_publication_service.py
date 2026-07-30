@@ -6,10 +6,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from storycraft.artifact_ids import initial_counters
 from storycraft.publication_recovery import execute_publication_recovery
 from storycraft.run_state import RunStateStore
 from storycraft.selection_snapshot import SelectionSnapshotStore
-from storycraft.workflow_v2 import run_v2
+from storycraft.workflow import run
 from storycraft.volume_publication_stage import VolumePublicationStageService
 
 
@@ -39,6 +40,8 @@ def workspace(*, volume_count: int) -> tuple[tempfile.TemporaryDirectory[str], P
     write_record(root, "scenes", scene_id, {"scene_id": scene_id, "volume_number": 1, "chapter_number": 1, "scene_number": 1, "prose": "第一巻の本文。"})
     write_record(root, "quality", quality_id, {"quality_id": quality_id, "result": "accepted", "remaining_major_issues": []})
     write_record(root, "generations", state_id, {"generation_id": state_id})
+    (root / "runtime").mkdir(parents=True, exist_ok=True)
+    (root / "runtime" / "counters.json").write_text(json.dumps(initial_counters()), encoding="utf-8")
     selection = SelectionSnapshotStore(root).create(
         slots={
             "settings": settings_id, "series_plan": series_id, "volume_plan.v01": volume_id,
@@ -48,12 +51,19 @@ def workspace(*, volume_count: int) -> tuple[tempfile.TemporaryDirectory[str], P
         created_at=NOW,
     )
     state = {
-        "schema_version": 2, "workspace_id": "ws-test", "run_id": "run-test",
-        "status": "running", "stop_reason": None, "last_error": None,
-        "current_stage": "volume_publication", "current_target": {"volume_number": 1},
-        "current_selection_id": selection["selection_id"], "active_candidate": None,
-        "active_scene_id": None, "pending_commit": None, "published_volumes": [],
-        "created_at": NOW, "updated_at": NOW,
+        "schema_version": 3,
+        "workspace_id": "ws-test",
+        "status": "running",
+        "last_error": None,
+        "current_stage": "volume_publication",
+        "current_target": {"volume_number": 1},
+        "current_selection_id": selection["selection_id"],
+        "active_candidate": None,
+        "active_scene_id": None,
+        "pending_commit": None,
+        "published_volumes": [],
+        "created_at": NOW,
+        "updated_at": NOW,
     }
     RunStateStore(root).save(state)
     (root / "runtime" / "lock").touch()
@@ -74,7 +84,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
     def test_workflow_dispatches_volume_publication_without_provider(self) -> None:
         temporary, root, _ = workspace(volume_count=2)
         self.addCleanup(temporary.cleanup)
-        state = run_v2(root)
+        state = run(root)
         self.assertEqual(state["current_stage"], "volume_plan")
         self.assertEqual(len(state["published_volumes"]), 1)
 

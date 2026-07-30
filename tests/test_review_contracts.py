@@ -29,8 +29,10 @@ class ReviewContractsTest(unittest.TestCase):
     def test_field_tokens_decodes_json_escape(
         self,
     ) -> None:
+        # JSON string: items["escaped\"key"] -> in Python source: 'items["escaped\\"key"]'
+        # The parser should decode the escaped quote
         self.assertEqual(
-            field_tokens('items["escaped\\\"key"]'),
+            field_tokens(r'items["escaped\"key"]'),
             ("items", 'escaped"key'),
         )
 
@@ -103,9 +105,12 @@ class ReviewContractsTest(unittest.TestCase):
             critique,
         )
 
-    def test_revision_rejects_uncited_change(
+    def test_revision_allows_uncited_changes_per_v1_spec(
         self,
     ) -> None:
+        """V1 spec: revisions can replace entire artifact, not restricted to cited fields.
+        指摘は優先して直すべき問題を示しますが、修正可能範囲を制限しません。
+        全体の整合性または品質改善のため、指摘対象外も変更できます。"""
         candidate = {
             "characters": [
                 {
@@ -118,7 +123,7 @@ class ReviewContractsTest(unittest.TestCase):
             "characters": [
                 {
                     "emotion": "平静",
-                    "goal": "手紙を探す",
+                    "goal": "手紙を探す",  # 未指摘のフィールドも変更可
                 }
             ]
         }
@@ -130,15 +135,12 @@ class ReviewContractsTest(unittest.TestCase):
             ]
         }
 
-        with self.assertRaisesRegex(
-            ContractError,
-            "引用されていないfield",
-        ):
-            validate_revision_scope(
-                candidate,
-                revised,
-                critique,
-            )
+        # V1 では uncited change も許可される（形式・必須項目・識別子・参照・更新可能範囲の契約は別途検証）
+        validate_revision_scope(
+            candidate,
+            revised,
+            critique,
+        )
 
 
 if __name__ == "__main__":

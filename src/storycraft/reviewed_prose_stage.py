@@ -145,7 +145,6 @@ class ReviewedProseStageRunner:
             blocked = stop_state(
                 state,
                 status="blocked",
-                stop_reason="manual_review_required",
                 last_error={
                     "code": (
                         f"{self.spec.stage.upper()}"
@@ -199,7 +198,6 @@ class ReviewedProseStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="manual_review_required",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}"
@@ -266,7 +264,6 @@ class ReviewedProseStageRunner:
                 "candidate_id": candidate_id,
                 "version": version,
             }
-            active_state["stop_reason"] = None
             active_state["last_error"] = None
             active_state["updated_at"] = timestamp
 
@@ -296,7 +293,6 @@ class ReviewedProseStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="revision_limit",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}"
@@ -338,7 +334,6 @@ class ReviewedProseStageRunner:
                 blocked = stop_state(
                     state,
                     status="blocked",
-                    stop_reason="manual_review_required",
                     last_error={
                         "code": (
                             f"{self.spec.stage.upper()}"

@@ -94,9 +94,9 @@ class VolumePublicationStageService:
         result["published_volumes"] = [*state["published_volumes"], {"volume_number": volume_number, "publication_id": publication_id}]
         volume_count = inputs["volume_count"]
         if volume_number == volume_count:
-            result.update({"status": "completed", "stop_reason": None, "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
+            result.update({"status": "completed", "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
         else:
-            result.update({"current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}, "status": "running", "stop_reason": None, "last_error": None})
+            result.update({"current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}, "status": "running", "last_error": None})
         result["updated_at"] = updated_at
         validate_run_state(result)
         self.state_store.save(result)
@@ -159,9 +159,9 @@ class VolumePublicationStageService:
         result["pending_commit"] = None
         result["published_volumes"] = [*state["published_volumes"], {"volume_number": volume_number, "publication_id": publication_id}]
         if volume_number == inputs["volume_count"]:
-            result.update({"status": "completed", "stop_reason": None, "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
+            result.update({"status": "completed", "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
         else:
-            result.update({"status": "running", "stop_reason": None, "last_error": None, "current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}})
+            result.update({"status": "running", "last_error": None, "current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}})
         result["updated_at"] = updated_at
         validate_run_state(result)
         self.state_store.save(result)

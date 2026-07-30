@@ -33,7 +33,7 @@ def field_tokens(field: str) -> FieldPath:
                 position += index_match.end()
             else:
                 key_match = re.match(
-                    r'\[("(?:[^"\\]|\\.)*")\]',
+                    r'\[("([^"\\]|\\.)*")\]',
                     field[position:],
                 )
                 if key_match is None:
@@ -109,64 +109,12 @@ def validate_revision_scope(
     revised: dict[str, Any],
     critique: dict[str, Any],
 ) -> None:
-    """RevisionがReviewで指摘されたfieldだけを変更したか検証する。"""
-    allowed = [
-        field_tokens(issue["field"])
-        for issue in critique["issues"]
-    ]
+    """RevisionがReviewで指摘されたfieldだけを変更したか検証する。
 
-    for path in _changed_paths(candidate, revised):
-        if not any(
-            path[: len(cited)] == cited
-            for cited in allowed
-        ):
-            raise ContractError(
-                "修正版が批評で引用されていないfieldを"
-                "変更しています"
-            )
-
-
-def _changed_paths(
-    before: Any,
-    after: Any,
-    prefix: FieldPath = (),
-) -> set[FieldPath]:
-    """二つのJSON互換値で変更された末端pathを返す。"""
-    if type(before) is not type(after):
-        return {prefix}
-
-    if isinstance(before, dict):
-        paths: set[FieldPath] = set()
-
-        for key in set(before) | set(after):
-            child_path = prefix + (key,)
-
-            if key not in before or key not in after:
-                paths.add(child_path)
-            else:
-                paths |= _changed_paths(
-                    before[key],
-                    after[key],
-                    child_path,
-                )
-
-        return paths
-
-    if isinstance(before, list):
-        if len(before) != len(after):
-            return {prefix}
-
-        paths: set[FieldPath] = set()
-
-        for index, (old, new) in enumerate(
-            zip(before, after)
-        ):
-            paths |= _changed_paths(
-                old,
-                new,
-                prefix + (index,),
-            )
-
-        return paths
-
-    return {prefix} if before != after else set()
+    V1 spec: 修正は生成物全体を置き換えられます。指摘は優先して直すべき問題を示しますが、
+    修正可能範囲を制限しません。全体の整合性または品質改善のため、指摘対象外も変更できます。
+    ただし、形式、必須項目、識別子、参照、更新可能範囲の契約は必ず守ります。
+    """
+    # V1では修正範囲を制限しない。ただし、形式・必須項目・識別子・参照・更新可能範囲の契約は必ず守る必要がある。
+    # それらは別途 validator で検証されるため、ここでは何もしない。
+    return

@@ -131,7 +131,6 @@ def advance_run_state(
     advanced["current_target"] = deepcopy(next_target)
     advanced["active_candidate"] = None
     advanced["pending_commit"] = None
-    advanced["stop_reason"] = None
     advanced["last_error"] = None
     advanced["updated_at"] = updated_at
 
