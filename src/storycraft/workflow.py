@@ -44,4 +44,85 @@ def run(workspace_root: Path) -> dict[str, Any]:
                 blocked.update({"status": "blocked", "last_error": {"code": "publication_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
                 store.save(blocked)
                 raise RunUnavailable("publication_invalid") from exc
-        raise RunUnavailable("このv2工程のdispatcherは未実装です")
+
+        # ワークスペース検証をLLM初期化前に行う
+        from .workspace import validate_workspace
+        try:
+            validate_workspace(root)
+        except ContractError as exc:
+            blocked = dict(state)
+            blocked.update({"status": "blocked", "last_error": {"code": "workspace_invalid", "message": str(exc), "evidence_refs": [], "occurred_at": state["updated_at"]}})
+            store.save(blocked)
+            raise RunUnavailable("workspace_invalid") from exc
+
+        # 初期設計以降の工程をディスパッチ
+        from .initial_design_stage import InitialDesignStageService
+        from .series_plan_stage import SeriesPlanStageService
+        from .volume_plan_stage import VolumePlanStageService
+        from .chapter_plan_stage import ChapterPlanStageService
+        from .scene_plan_stage import ScenePlanStageService
+        from .scene_card_stage import SceneCardStageService
+        from .scene_prose_stage import SceneProseStageService
+        from .scene_continuity_stage import SceneContinuityStageService
+        from .scene_commit_stage import SceneCommitStageService
+        from .series_model import OpenAIStoryModel
+        from .reviewed_candidate_stage import read_json
+
+        # 設定は runtime/settings/settings-000001/record.json の payload に保存されている
+        selection_id = state["current_selection_id"]
+        selection = read_json(root / "runtime/selections" / selection_id / "record.json")
+        settings_id = selection["slots"]["settings"]
+
+        settings_record = read_json(root / "runtime/settings" / settings_id / "record.json")
+        payload = settings_record.get("payload", {})
+
+        # Ollama設定をOpenAI互換APIクライアントが期待する形式に変換
+        llm_config = {
+            "provider": payload.get("provider", "ollama"),
+            "base_url": payload.get("endpoint", "http://127.0.0.1:11434"),
+            "model": payload.get("model", "qwen3:35b"),
+            "thinking": True,
+            "stream": True,
+            "first_event_timeout_seconds": 3600,
+            "idle_timeout_seconds": 600,
+            "stream_progress_log_interval_seconds": 60,
+        }
+
+        # Settings.llmが期待されるため辞書でラップ
+        class SettingsWrapper:
+            def __init__(self, llm_dict):
+                self.llm = llm_dict
+
+        model = OpenAIStoryModel(SettingsWrapper(llm_config), root / "runtime/raw_logs")
+
+        stage = state["current_stage"]
+
+        if stage == "initial_design":
+            service = InitialDesignStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "series_plan":
+            service = SeriesPlanStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "volume_plan":
+            service = VolumePlanStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "chapter_plan":
+            service = ChapterPlanStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "scene_plan":
+            service = ScenePlanStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "scene_card":
+            service = SceneCardStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "scene_prose":
+            service = SceneProseStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "scene_continuity":
+            service = SceneContinuityStageService(root)
+            return service.run(model, updated_at=state["updated_at"])
+        elif stage == "scene_commit":
+            service = SceneCommitStageService(root)
+            return service.run(updated_at=state["updated_at"])
+
+        raise RunUnavailable(f"このv2工程のdispatcherは未実装です: {stage}")

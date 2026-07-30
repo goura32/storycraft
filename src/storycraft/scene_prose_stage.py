@@ -32,7 +32,7 @@ _SPEC = ReviewedProseSpec(
     artifact_type="scene_prose",
     review_category="scene_prose_quality",
     next_stage="scene_continuity",
-    model_stage="scene_prose_v1",
+    model_stage="scene_prose",
 )
 
 

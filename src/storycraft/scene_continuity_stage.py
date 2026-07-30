@@ -41,7 +41,7 @@ _SPEC = ReviewedCandidateSpec(
     artifact_type="scene_continuity",
     review_category="scene_continuity_accuracy",
     next_stage="scene_commit",
-    model_stage="scene_continuity_v1",
+    model_stage="scene_continuity",
 )
 
 

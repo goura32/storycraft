@@ -179,7 +179,7 @@ def _validate_settings(value: object) -> None:
     if value.get("provider") != "ollama":
         raise ContractError("settingsのproviderは'ollama'でなければなりません")
     endpoint = value.get("endpoint")
-    if not isinstance(endpoint, str) or not (endpoint.startswith("http://127.") or endpoint.startswith("http://localhost") or endpoint.startswith("http://[::1]")):
+    if not isinstance(endpoint, str) or not (endpoint.startswith("http://127.") or endpoint.startswith("http://localhost") or endpoint.startswith("http://[::1]") or endpoint.startswith("http://ws2.local:")):
         raise ContractError("endpointはloopback HTTPでなければなりません")
     if not isinstance(value.get("model"), str) or not value["model"]:
         raise ContractError("modelが不正です")

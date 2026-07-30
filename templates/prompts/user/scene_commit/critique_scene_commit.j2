@@ -1,0 +1,28 @@
+# scene_commit の確認
+
+## 実行指示
+
+採用済みScene Prose、Scene Card、Continuity Update、基準Generationから構築されたScene Commitを確認する。
+
+- 入力が同一場面座標・同一基準作品状態を指すことを確認
+- 更新が検証済みであることを確認
+- 更新適用後の状態スキーマ・ID・知識・未解決事項状態が整合することを確認
+- 一時保存、場面、後続の作品状態、場面確定記録、後続選択スナップショット、次の `current_target` が原子的確定で更新されることを確認
+- 二重適用・二重確定・新規 LLM 呼出しがないことを確認
+
+## 指摘の重要度
+
+- `critical`: 修正必須・上限判定対象
+- `notice`: 採用可・注意記録のみ
+
+## 入力
+
+- 採用済みScene Prose
+- 採用済みScene Card
+- 採用済みContinuity Update
+- 基準Generation
+- 構築済みScene Commit Candidate全体
+
+## 出力スキーマ
+
+{{ output_schema }}

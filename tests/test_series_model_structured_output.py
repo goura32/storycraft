@@ -143,7 +143,7 @@ class StructuredOutputTests(unittest.TestCase):
                 OpenAIStoryModel
                 ._response_format(
                     "critique",
-                    "scene_prose_v1",
+                    "scene_prose",
                 )
             )
 

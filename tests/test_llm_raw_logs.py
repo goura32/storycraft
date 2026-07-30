@@ -77,13 +77,13 @@ class RawLogMarkdownTests(unittest.TestCase):
 
         client.save_raw(
             CallRecord(
-                kind="critique", phase="scene_prose_v1", ref="v:1/4 c:6/8 s:2/3", attempt=1, seed=1, content="{}",
+                kind="critique", phase="scene_prose", ref="v:1/4 c:6/8 s:2/3", attempt=1, seed=1, content="{}",
             ),
             [],
         )
 
-        self.assertTrue((raw_dir / "0000_critique_scene_prose_v1_v1_c6_s2.json").exists())
-        self.assertTrue((raw_dir / "0000_critique_scene_prose_v1_v1_c6_s2.md").exists())
+        self.assertTrue((raw_dir / "0000_critique_scene_prose_v1_c6_s2.json").exists())
+        self.assertTrue((raw_dir / "0000_critique_scene_prose_v1_c6_s2.md").exists())
 
     def test_save_raw_sanitizes_progress_ref_only_in_filename(self) -> None:
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-parent-")) / "raw"
@@ -91,7 +91,7 @@ class RawLogMarkdownTests(unittest.TestCase):
         client.raw_dir = raw_dir
         record = CallRecord(
             kind="generate",
-            phase="scene_prose_v1",
+            phase="scene_prose",
             ref="v:1/4 c:6/8 s:2/3",
             attempt=1,
             seed=1,
@@ -100,7 +100,7 @@ class RawLogMarkdownTests(unittest.TestCase):
 
         client.save_raw(record, [])
 
-        json_path = raw_dir / "0000_generate_scene_prose_v1_v1_c6_s2.json"
+        json_path = raw_dir / "0000_generate_scene_prose_v1_c6_s2.json"
         self.assertTrue(json_path.exists())
         self.assertEqual(list(raw_dir.rglob("*.json")), [json_path])
         self.assertEqual(json.loads(json_path.read_text(encoding="utf-8"))["received"]["ref"], record.ref)

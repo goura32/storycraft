@@ -24,7 +24,7 @@ from .review_contracts import (
     validate_revision_scope,
 )
 from .stage_transition import advance_run_state
-from .workspace import validate_workspace_layout
+from .workspace import validate_workspace
 
 
 CandidateValidator = Callable[[object], None]

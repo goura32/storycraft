@@ -71,9 +71,9 @@ def _raw_filename(rec: "CallRecord", index: int) -> str:
         "volume_plan": ("v",),
         "chapter_plan": ("v", "c"),
         "scene_plan": ("v", "c", "s"),
-        "scene_card_v1": ("v", "c", "s"),
-        "scene_prose_v1": ("v", "c", "s"),
-        "scene_continuity_v1": ("v", "c", "s"),
+        "scene_card": ("v", "c", "s"),
+        "scene_prose": ("v", "c", "s"),
+        "scene_continuity": ("v", "c", "s"),
         "volume_handoff": ("v",),
     }
     for coordinate in scope_by_stage.get(rec.phase, ()):

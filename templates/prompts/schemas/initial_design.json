@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "storycraft://schemas/initial_design.json",
+  "title": "Storycraft V1 Initial Design",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "core",
+    "cast",
+    "world",
+    "knowledge_model",
+    "unresolved_threads",
+    "ending_conditions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logline", "premise", "central_question", "themes", "dramatic_engine", "tone", "reader_promise", "ending_direction"],
+      "properties": {
+        "logline": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "premise": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "central_question": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "themes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+        },
+        "dramatic_engine": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "tone": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+        },
+        "reader_promise": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "ending_direction": { "type": "string", "minLength": 1, "maxLength": 600 }
+      }
+    },
+    "cast": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "role", "description", "relationships"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "relationships": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["settings", "constraints", "institutions"],
+      "properties": {
+        "settings": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "constraints": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "institutions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "knowledge_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author_knows", "character_knows", "reader_knows"],
+      "properties": {
+        "author_knows": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "character_knows": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        "reader_knows": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "unresolved_threads": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "required_for_ending", "description"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "required_for_ending": { "type": "boolean" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "ending_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread_name", "condition"],
+        "properties": {
+          "thread_name": { "type": "string", "minLength": 1 },
+          "condition": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -109,7 +109,7 @@ class OpenAIStoryModel:
         """工程に応じたOpenAI互換response formatを返す。"""
         if (
             kind == "critique"
-            and stage == "scene_prose_v1"
+            and stage == "scene_prose"
         ):
             return {
                 "type": "json_object",

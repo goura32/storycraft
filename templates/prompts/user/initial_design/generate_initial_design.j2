@@ -1,20 +1,19 @@
-# initial_concept の生成
+# initial_design の生成
 
 ## 実行指示
 
-採用済みBriefだけを根拠として、シリーズ全体のStory Conceptを作る。
+採用済みBrief（正式依頼またはKeywords起点の生成依頼）だけを根拠として、シリーズ全体の **Initial Design** を作る。
 
 この工程が所有するのは次だけである。
 
-- 作品の中心設定
-- 中心的な問い
-- テーマ
-- 読者への約束
-- 複数巻を動かし続けるdramatic engine
-- Endingの方向
+- 作品の中心設定（core）
+- 人物の名前・役割・関係（cast）
+- 世界・制度・制約（world）
+- 作者・人物・読者の知識構造（knowledge_model）
+- 未解決事項の種別・結末必須性・説明（unresolved_threads）
+- 結末必須事項の達成条件（ending_conditions）
 
-人物の詳細プロフィール、人物間関係、世界設定の詳細、秘密の真相、
-伏線台帳、巻別構成、章・Scene内容は作らない。
+人物の詳細プロフィール、人物間関係の詳細、世界設定の詳細、秘密の真相、伏線台帳、巻別構成、章・Scene内容は作らない。
 
 ## 必須条件
 
@@ -32,14 +31,14 @@
 
 ## field責任
 
-- `logline`: 主体、中心対立、シリーズ規模の方向を一文で示す
-- `premise`: 物語開始条件とシリーズ全体の対立構造を示す
-- `central_question`: 最終巻まで答えを保てる中心的な問い
-- `themes`: 作品が繰り返し扱う概念
-- `dramatic_engine`: 各巻で新しい進展と対立を生む反復可能な仕組み
-- `tone`: Briefと整合する語調・読後感
-- `reader_promise`: 読者が各巻で期待できる体験
-- `ending_direction`: 結末の価値判断と到達方向。具体的な最終Sceneは書かない
+- `core`: 作品の核、主題、読者への約束
+- `cast`: 人物の名前、役割、関係。LLM は新規人物 ID を返さず、コードが採番する
+- `world`: 世界、制度、制約
+- `knowledge_model`: 作者、人物、読者の知識構造
+- `unresolved_threads`: 種別、結末必須性、説明。LLM は新規未解決事項 ID を返さず、コードが採番する
+- `ending_conditions`: 結末必須事項の達成条件。各条件にコードが `ending_condition_id` を採番する。新規未解決事項への対応は名称・意味内容で解決する
+
+`initial-design` に作品事実の現在値、人物の現在知識、読者開示済み情報を複写しません。
 
 ## 入力
 

@@ -1,0 +1,29 @@
+# initial_design の修正
+
+## 実行指示
+
+指摘を踏まえ、Initial Design Candidate 全体を修正する。元候補 ID と確認記録 ID は、システム側の候補記録だけが持つ。
+
+## 必須条件
+
+- Briefのpremise、required_elements、genre、toneを保持する
+- `tone`配列にはBriefの`tone`の全要素を、文字列を一切変更せずそのまま含める
+- Briefの`tone`を言い換え、語尾追加、語句結合、類義語置換してはならない
+- 必要ならBrief由来のtoneに追加要素を加えてよいが、元の要素は必ず完全一致で残す
+- Briefのvolume_countで継続可能な構造にする
+- Briefのending_preferenceと矛盾しない
+- Briefのavoidに該当する内容を導入しない
+- 一巻だけで完結する仕組みにしない
+- 未入力の固有名詞、制度、診断名、場所、事件の具体的事実を補わない
+- 自然な日本語で書く
+- 各fieldの役割を重複させない
+
+## 入力
+
+- 採用済みBrief
+- 現在の Candidate 全体
+- 有効な確認記録 全体
+
+## 出力スキーマ
+
+{{ output_schema }}

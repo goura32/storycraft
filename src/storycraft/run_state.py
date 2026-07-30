@@ -62,6 +62,7 @@ _ERROR_CODES = frozenset({
     "internal_error",
     "authority_inconsistency",
     "publication_invalid",
+    "workspace_invalid",
 })
 
 
