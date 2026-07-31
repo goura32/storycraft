@@ -17,15 +17,9 @@ from .series_contracts import ContractError
 
 LLM_PROVIDERS = frozenset({
     "ollama",
-    "openai",
-    "openrouter",
-    "openai_compatible",
 })
 
-_PROVIDER_API_KEY_ENV = {
-    "openai": "OPENAI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
+_PROVIDER_API_KEY_ENV = {}
 
 _ENV_NAME_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*$"
@@ -165,6 +159,18 @@ def _validate_base_url(value: object) -> str:
     ):
         raise ContractError(
             "llm.base_urlはhttpまたはhttps URLが必要です"
+        )
+
+    # Loopback-only enforcement per design spec: allow only
+    # 127.0.0.0/8, ::1, localhost (admin-cli-and-acceptance-contract §51)
+    host = parsed.hostname
+    if host is None:
+        raise ContractError(
+            "llm.base_urlへホスト名が必要です"
+        )
+    if host != "localhost" and not host.startswith("127."):
+        raise ContractError(
+            "llm.base_urlはloopbackアドレスのみ許可されます"
         )
 
     if (
