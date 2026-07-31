@@ -28,7 +28,7 @@ from .series_contracts import (
     ProseStoryModel,
 )
 from .stage_transition import advance_run_state
-from .workspace import validate_workspace_layout
+from .workspace import validate_workspace as validate_workspace_layout
 
 
 ProseValidator = Callable[[object], None]

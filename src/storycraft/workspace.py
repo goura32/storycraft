@@ -2,24 +2,31 @@
 from __future__ import annotations
 
 import json
+import ipaddress
+import math
 import os
 from pathlib import Path
+import socket
 import tempfile
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from .artifact_ids import initial_counters
+from .artifact_record import validate_call_record, validate_candidate_record, validate_record, validate_review_record
+from .artifact_registry import ARTIFACT_SPECS
+from .publication_builder import validate_volume_publication_files
 from .run_state import RunStateStore
 from .selection_authority import resolve_selection
-from .selection_snapshot import SelectionSnapshotStore
+from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError
 
 
 _V2_DIRECTORIES = (
-    "inputs", "quality", "runtime", "runtime/settings", "runtime/staging",
-    "runtime/selections", "runtime/calls", "runtime/validations", "design",
-    "design/initial", "design/series-plans", "design/volume-plans",
-    "design/chapter-plans", "design/scene-plans", "generations", "scenes",
-    "publications",
+    "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
+    "runtime/staging", "runtime/selections", "runtime/calls", "runtime/validations",
+    "runtime/adoptions", "design", "design/initial", "design/series-plans",
+    "design/volume-plans", "design/chapter-plans", "design/scene-plans", "generations",
+    "scenes", "publications",
 )
 
 
@@ -54,6 +61,7 @@ def create_workspace(
     try:
         for relative in _V2_DIRECTORIES:
             (staging / relative).mkdir(parents=True, exist_ok=True)
+        (staging / "design/scene-cards").mkdir(parents=True, exist_ok=True)
         settings_id = "settings-000001"
         _write_json(staging / "runtime/settings" / settings_id / "record.json", {
             "schema_version": 1,
@@ -67,8 +75,10 @@ def create_workspace(
             request_id = "request-000001"
             _write_json(staging / "inputs" / request_id / "record.json", {
                 "schema_version": 1,
-                "request_id": request_id,
-                "payload": request,
+                "artifact_id": request_id,
+                "artifact_kind": "request",
+                "input_selection_id": None,
+                "content": request,
                 "created_at": created_at,
             })
             counters["next_request"] = 2
@@ -90,7 +100,6 @@ def create_workspace(
             counters["next_keywords"] = 2
             _write_json(staging / "runtime/counters.json", counters)
             stage, selection_id = "request_intake", None
-        _write_json(staging / "runtime/counters.json", counters)
         state = {
             "schema_version": 3,  # V1 の schema_version に合わせる
             "workspace_id": workspace_id,
@@ -100,8 +109,6 @@ def create_workspace(
             "current_stage": stage,
             "current_target": {},
             "current_selection_id": selection_id,
-            "active_candidate": None,
-            "active_scene_id": None,
             "pending_commit": None,
             "published_volumes": [],
             "created_at": created_at,
@@ -132,10 +139,161 @@ def validate_workspace(workspace_root: Path) -> None:
     if selection_id is None:
         if state["current_stage"] != "request_intake":
             raise ContractError("selectionなしのstageが不正です")
-        return
-    assert isinstance(selection_id, str)
-    snapshot = SelectionSnapshotStore(root).load(selection_id)
-    resolve_selection(root, snapshot)
+        resolved: dict[str, dict[str, Any]] = {}
+    else:
+        assert isinstance(selection_id, str)
+        snapshot = SelectionSnapshotStore(root).load(selection_id)
+        resolved = resolve_selection(root, snapshot)
+    _validate_persisted_records(root)
+    if selection_id is not None:
+        _validate_selection_ancestry(root, selection_id)
+    _validate_published_publications(root, state, resolved)
+
+
+def _validate_selection_ancestry(root: Path, selection_id: str) -> None:
+    """Validate the current selection and every immutable parent snapshot."""
+    store = SelectionSnapshotStore(root)
+    seen: set[str] = set()
+    current_id: str | None = selection_id
+    while current_id is not None:
+        if current_id in seen:
+            raise ContractError("ancestor selection chainが循環しています")
+        seen.add(current_id)
+        try:
+            snapshot = store.load(current_id)
+            resolve_selection(root, snapshot)
+        except ContractError as exc:
+            raise ContractError("ancestor selectionが不正です") from exc
+        current_id = snapshot["input_selection_id"]
+
+
+def _validate_persisted_records(root: Path) -> None:
+    """Validate every immutable/audit record, then bind its references by ID."""
+    records: dict[str, dict[str, Any]] = {}
+    special = {"adoption", "selection", "volume-publication", "quality-disposition"}
+    roots = {spec.directory_root for kind, spec in ARTIFACT_SPECS.items() if kind not in special}
+    for relative in sorted(roots):
+        for identifier, record in _records(root / relative, "artifact record"):
+            kind = record.get("artifact_kind") if isinstance(record.get("artifact_kind"), str) else next((name for name, spec in ARTIFACT_SPECS.items() if name not in special and spec.directory_root == relative and _matches_identifier(name, identifier)), None)
+            if not isinstance(kind, str) or kind not in ARTIFACT_SPECS or kind in special or ARTIFACT_SPECS[kind].directory_root != relative:
+                raise ContractError("artifact recordのkindまたは配置が不正です")
+            validate_record(kind, identifier, record)
+            records[identifier] = record
+    selections = dict(_records(root / "runtime/selections", "selection record"))
+    for identifier, record in selections.items():
+        if validate_selection_snapshot(record)["selection_id"] != identifier:
+            raise ContractError("selection recordのIDが配置IDと一致しません")
+        resolve_selection(root, record)
+    candidates = dict(_records(root / "candidates", "candidate record"))
+    reviews = dict(_records(root / "reviews", "review record"))
+    qualities = dict(_records(root / "quality", "quality record"))
+    adoptions = dict(_records(root / "runtime/adoptions", "adoption record"))
+    calls = dict(_records(root / "runtime/calls", "call record"))
+    for identifier, record in candidates.items(): validate_candidate_record(identifier, record)
+    for identifier, record in reviews.items(): validate_review_record(identifier, record)
+    for identifier, record in qualities.items(): validate_record("quality-disposition", identifier, record)
+    for identifier, record in adoptions.items(): validate_record("adoption", identifier, record)
+    for identifier, record in calls.items(): validate_call_record(identifier, record)
+    known = set(records) | set(selections) | set(candidates) | set(reviews) | set(qualities) | set(adoptions) | set(calls)
+    for identifier, record in calls.items():
+        _require_references(record["input_refs"], known, f"call {identifier} input_refs")
+        _require_reference(record["settings_id"], records, f"call {identifier} settings_id")
+        target = record["target_candidate_id"]
+        if target is not None: _require_reference(target, candidates, f"call {identifier} target_candidate_id")
+    for identifier, record in candidates.items():
+        _require_reference(record["settings_id"], records, f"candidate {identifier} settings_id")
+        _require_reference(record["call_id"], calls, f"candidate {identifier} call_id")
+        if record["input_selection_id"] is not None: _require_reference(record["input_selection_id"], selections, f"candidate {identifier} input_selection_id")
+        if record["keywords_id"] is not None: _require_reference(record["keywords_id"], records, f"candidate {identifier} keywords_id")
+        if record["parent_candidate_id"] is not None:
+            _require_reference(record["parent_candidate_id"], candidates, f"candidate {identifier} parent_candidate_id")
+            review = _reference(record["review_record_id"], reviews, f"candidate {identifier} review_record_id")
+            if review["candidate_id"] != record["parent_candidate_id"]:
+                raise ContractError("candidate revision reviewが親candidateを参照しません")
+    for identifier, record in reviews.items():
+        _require_reference(record["candidate_id"], candidates, f"review {identifier} candidate_id")
+        _require_reference(record["call_id"], calls, f"review {identifier} call_id")
+    for identifier, record in qualities.items():
+        _require_reference(record["candidate_id"], candidates, f"quality {identifier} candidate_id")
+        _require_references(record["review_record_ids"], reviews, f"quality {identifier} review_record_ids")
+        for review_id in record["review_record_ids"]:
+            if reviews[review_id]["candidate_id"] != record["candidate_id"]:
+                raise ContractError("quality reviewがquality candidateを参照しません")
+    for identifier, record in adoptions.items():
+        _require_reference(record["output_selection_id"], selections, f"adoption {identifier} output_selection_id")
+        if record["input_selection_id"] is not None: _require_reference(record["input_selection_id"], selections, f"adoption {identifier} input_selection_id")
+        _require_references(record["output_content_artifact_ids"], records, f"adoption {identifier} output content")
+        if record["source_kind"] == "candidate":
+            candidate = _reference(record["candidate_id"], candidates, f"adoption {identifier} candidate_id")
+            quality = _reference(record["quality_id"], qualities, f"adoption {identifier} quality_id")
+            if quality["candidate_id"] != candidate["candidate_id"]:
+                raise ContractError("adoptionのcandidate/quality参照が一致しません")
+
+
+def _records(directory: Path, label: str) -> list[tuple[str, dict[str, Any]]]:
+    result: list[tuple[str, dict[str, Any]]] = []
+    if directory.is_symlink():
+        raise ContractError(f"{label}の配置が不正です")
+    if not directory.exists():
+        return result
+    for child in sorted(directory.iterdir(), key=lambda path: path.name):
+        if child.is_symlink() or not child.is_dir() or {path.name for path in child.iterdir()} != {"record.json"}:
+            raise ContractError(f"{label}の配置が不正です")
+        path = child / "record.json"
+        if path.is_symlink() or not path.is_file():
+            raise ContractError(f"{label}の配置が不正です")
+        try: value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc: raise ContractError(f"{label}を読めません") from exc
+        if not isinstance(value, dict): raise ContractError(f"{label}はobjectでなければなりません")
+        result.append((child.name, value))
+    return result
+
+
+def _matches_identifier(kind: str, identifier: str) -> bool:
+    try:
+        ARTIFACT_SPECS[kind].match_id(identifier)
+    except ContractError:
+        return False
+    return True
+
+
+def _reference(identifier: object, mapping: dict[str, dict[str, Any]], label: str) -> dict[str, Any]:
+    if not isinstance(identifier, str) or identifier not in mapping: raise ContractError(f"{label}の参照先がありません")
+    return mapping[identifier]
+
+
+def _require_reference(identifier: object, mapping: dict[str, dict[str, Any]], label: str) -> None:
+    _reference(identifier, mapping, label)
+
+
+def _require_references(identifiers: object, mapping: dict[str, dict[str, Any]] | set[str], label: str) -> None:
+    if not isinstance(identifiers, list) or any(not isinstance(identifier, str) or identifier not in mapping for identifier in identifiers):
+        raise ContractError(f"{label}の参照先がありません")
+
+
+def _validate_published_publications(root: Path, state: dict[str, Any], resolved: dict[str, dict[str, Any]]) -> None:
+    """Validate every publication declared by run-state, including active runs."""
+    entries = state["published_volumes"]
+    assert isinstance(entries, list)
+    expected = {entry["publication_id"] for entry in entries}
+    actual = {child.name for child in root.joinpath("publications").iterdir() if child.is_dir() and not child.is_symlink()}
+    if actual != expected:
+        raise ContractError("published_volumesと公開record集合が一致しません")
+    if state["status"] == "completed":
+        series = resolved.get("series_plan")
+        volumes = series.get("content", {}).get("volumes") if isinstance(series, dict) and isinstance(series.get("content"), dict) else None
+        if not isinstance(volumes, list) or [item.get("volume_number") if isinstance(item, dict) else None for item in volumes] != list(range(1, len(volumes) + 1)) or len(entries) != len(volumes):
+            raise ContractError("completedのpublished_volumesとseries plan巻数が一致しません")
+    for entry in entries:
+        directory = root / "publications" / entry["publication_id"]
+        if directory.is_symlink() or not directory.is_dir() or {path.name for path in directory.iterdir()} != {"record.json", "manuscript.md"}:
+            raise ContractError("published publicationファイル構成が不正です")
+        try: files = {"record.json": json.loads((directory / "record.json").read_text(encoding="utf-8")), "manuscript.md": (directory / "manuscript.md").read_text(encoding="utf-8")}
+        except (OSError, json.JSONDecodeError) as exc: raise ContractError("published publicationを読めません") from exc
+        validate_volume_publication_files(files)
+        record = files["record.json"]
+        if record["volume_publication_id"] != entry["publication_id"] or record["volume_number"] != entry["volume_number"]:
+            raise ContractError("published_volumesがpublication recordと一致しません")
 
 
 def _validate_request(value: Optional[dict[str, Any]]) -> None:
@@ -167,30 +325,92 @@ def _validate_keywords(value: Optional[dict[str, Any]]) -> None:
 
 
 def _validate_settings(value: object) -> None:
-    # V1 では max_input_chars は存在しないので必須フィールドから除く（ただし許容する）
-    # V1 では request_options は任意（ただし許容する）
     required_fields = {"provider", "endpoint", "model", "technical_retry_limit", "quality_revision_limit", "invalid_response_limit",
               "chapter_per_volume_range", "chapter_scene_range", "scene_text_char_range"}
+    optional_fields = {"request_options"}
     if not isinstance(value, dict):
         raise ContractError("settings schemaが不正です")
     missing = required_fields - set(value.keys())
     if missing:
-        raise ContractError(f"settingsに必須フィールドがありません: {missing}")
+        raise ContractError(f"#/config/{sorted(missing)[0]}: 必須フィールドがありません")
+    unknown = set(value) - required_fields - optional_fields
+    if unknown:
+        raise ContractError(f"#/config/{sorted(unknown)[0]}: 未知項目です")
     if value.get("provider") != "ollama":
-        raise ContractError("settingsのproviderは'ollama'でなければなりません")
-    endpoint = value.get("endpoint")
-    if not isinstance(endpoint, str) or not (endpoint.startswith("http://127.") or endpoint.startswith("http://localhost") or endpoint.startswith("http://[::1]") or endpoint.startswith("http://ws2.local:")):
-        raise ContractError("endpointはloopback HTTPでなければなりません")
+        raise ContractError("#/config/provider: 'ollama'でなければなりません")
+    _validate_loopback_endpoint(value.get("endpoint"))
     if not isinstance(value.get("model"), str) or not value["model"]:
-        raise ContractError("modelが不正です")
+        raise ContractError("#/config/model: 空でない文字列が必要です")
     for key, minimum in (("technical_retry_limit", 1), ("quality_revision_limit", 0), ("invalid_response_limit", 1)):
         item = value.get(key)
         if not isinstance(item, int) or isinstance(item, bool) or item < minimum:
-            raise ContractError(f"{key}が不正です")
+            raise ContractError(f"#/config/{key}: 不正です")
     for key in ("chapter_per_volume_range", "chapter_scene_range", "scene_text_char_range"):
         pair = value.get(key)
-        if not isinstance(pair, list) or len(pair) != 2 or any(not isinstance(x, int) or isinstance(x, bool) for x in pair) or pair[0] > pair[1]:
-            raise ContractError(f"{key}が不正です")
+        if not isinstance(pair, list) or len(pair) != 2 or any(not isinstance(x, int) or isinstance(x, bool) or x < 1 for x in pair) or pair[0] > pair[1]:
+            raise ContractError(f"#/config/{key}: 1以上の昇順整数ペアが必要です")
+    _validate_request_options(value.get("request_options"))
+
+
+def _validate_loopback_endpoint(endpoint: object) -> None:
+    if not isinstance(endpoint, str):
+        raise ContractError("#/config/endpoint: loopback HTTP URLが必要です")
+    try:
+        parsed = urlsplit(endpoint)
+        port = parsed.port
+    except ValueError as exc:
+        raise ContractError("#/config/endpoint: 不正なHTTP URLです") from exc
+    if (
+        parsed.scheme != "http"
+        or not parsed.hostname
+        or (port is None and parsed.netloc.endswith(":"))
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ContractError("#/config/endpoint: userinfo、query、fragmentなしのloopback HTTP URLが必要です")
+    host = parsed.hostname
+    if host == "localhost":
+        try:
+            addresses = {entry[4][0] for entry in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)}
+        except OSError as exc:
+            raise ContractError("#/config/endpoint: localhostを解決できません") from exc
+        if not addresses or any(not ipaddress.ip_address(address).is_loopback for address in addresses):
+            raise ContractError("#/config/endpoint: localhostの解決先はloopbackだけでなければなりません")
+        return
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise ContractError("#/config/endpoint: loopback hostが必要です") from exc
+    if not address.is_loopback:
+        raise ContractError("#/config/endpoint: loopback hostが必要です")
+
+
+def _validate_request_options(options: object) -> None:
+    if options is None:
+        return
+    if not isinstance(options, dict):
+        raise ContractError("#/config/request_options: objectが必要です")
+    allowed = {"temperature", "top_p", "top_k", "repeat_penalty"}
+    unknown = set(options) - allowed
+    if unknown:
+        raise ContractError(f"#/config/request_options/{sorted(unknown)[0]}: 未知または禁止されたoptionです")
+    for key, lower, upper, exclusive_lower in (("temperature", 0, 2, False), ("top_p", 0, 1, True), ("repeat_penalty", 0, None, True)):
+        if key not in options:
+            continue
+        item = options[key]
+        if (
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(item)
+            or (item <= lower if exclusive_lower else item < lower)
+            or (upper is not None and item > upper)
+        ):
+            raise ContractError(f"#/config/request_options/{key}: 範囲外です")
+    top_k = options.get("top_k")
+    if top_k is not None and (not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1):
+        raise ContractError("#/config/request_options/top_k: 1以上の整数が必要です")
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:

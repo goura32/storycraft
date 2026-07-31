@@ -11,6 +11,7 @@ from .series_contracts import ContractError
 _COUNTERS: Final[frozenset[str]] = frozenset({
     "next_request", "next_settings", "next_keywords", "next_selection",
     "next_generation", "next_quality", "next_call", "next_validation",
+    "next_candidate", "next_review", "next_adoption",
     "next_initial_design", "next_series_plan", "next_volume_plan",
     "next_chapter_plan", "next_scene_plan", "next_scene_card", "next_scene",
     "next_continuity", "next_scene_commit", "next_volume_publication",

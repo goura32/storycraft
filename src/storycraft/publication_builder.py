@@ -59,7 +59,7 @@ def validate_volume_publication_files(files: object) -> None:
     if not isinstance(scene_ids, list) or not scene_ids or len(scene_ids) != len(set(scene_ids)) or not isinstance(refs, list) or len(refs) != len(scene_ids) or not all(isinstance(item, str) and item.startswith("quality-") for item in refs): raise ContractError("巻公開record.json scene参照が不正です")
     _timestamp(record["created_at"])
     notice = record.get("publication_notice_type")
-    if notice not in (None, "編集"): raise ContractError("publication_notice_typeは編集のみ許可されます")
+    if "publication_notice_type" in record and notice != "編集": raise ContractError("publication_notice_typeは編集のみ許可されます")
     prefix = "編集上の注意があります。\n\n" if notice == "編集" else ""
     if not manuscript.startswith(prefix) or not manuscript.endswith("\n") or not manuscript[len(prefix):].strip(): raise ContractError("巻公開manuscript.mdが公開注意または本文契約を満たしません")
 

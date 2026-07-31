@@ -47,12 +47,9 @@ _FORBIDDEN_LLM_FIELDS = frozenset({
     "headers",
     "default_headers",
 })
-
-
 DEFAULTS: dict[str, Any] = {
     "llm": {
         "provider": "ollama",
-        "base_url": "http://ws1.local:11434/v1",
         "model": "qwen3.6:35b-a3b-mtp-q4_K_M",
         "api_key_env": None,
         "headers_env": {},
@@ -64,9 +61,11 @@ DEFAULTS: dict[str, Any] = {
     },
     "retry": {
         "max_attempts": 4,
+        "technical_retry_limit": 3,
     },
     "quality": {
         "max_critique_passes": 1,
+        "invalid_response_limit": 3,
         "improvement_directions": [
             "地の文を削り、くどさを排除する",
             "対話を自然にする",
@@ -524,10 +523,48 @@ class Settings:
                 max_critique_passes,
                 int,
             )
-            or max_critique_passes < 1
+            or max_critique_passes < 0
         ):
             raise ContractError(
                 "quality.max_critique_passesは"
+                "0以上の整数で指定してください"
+            )
+
+        invalid_response_limit = config[
+            "quality"
+        ].get("invalid_response_limit")
+        if (
+            isinstance(
+                invalid_response_limit,
+                bool,
+            )
+            or not isinstance(
+                invalid_response_limit,
+                int,
+            )
+            or invalid_response_limit < 1
+        ):
+            raise ContractError(
+                "quality.invalid_response_limitは"
+                "1以上の整数で指定してください"
+            )
+
+        technical_retry_limit = config[
+            "retry"
+        ].get("technical_retry_limit")
+        if (
+            isinstance(
+                technical_retry_limit,
+                bool,
+            )
+            or not isinstance(
+                technical_retry_limit,
+                int,
+            )
+            or technical_retry_limit < 1
+        ):
+            raise ContractError(
+                "retry.technical_retry_limitは"
                 "1以上の整数で指定してください"
             )
 

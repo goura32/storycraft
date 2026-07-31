@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from .artifact_ids import reserve_counter
+from .artifact_registry import artifact_spec
 from .series_contracts import ContractError
 
 
@@ -111,7 +112,9 @@ def _is_valid_slot(slot: str) -> bool:
 
 
 def _require_id(value: object, prefix: str, label: str) -> None:
-    if not isinstance(value, str) or not value.startswith(prefix) or len(value) == len(prefix):
+    try:
+        artifact_spec("selection").match_id(value)
+    except ContractError:
         raise ContractError(f"{label}が不正です")
 
 

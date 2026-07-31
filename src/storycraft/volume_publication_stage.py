@@ -1,51 +1,62 @@
-"""selection snapshot に基づき一巻だけを確定する公開工程。"""
+"""V2 provider-free volume publication through the generic commit manifest."""
 from __future__ import annotations
 
 from copy import deepcopy
-import hashlib
+from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-from .publication_builder import (
-    build_volume_publication_files,
-    validate_volume_publication_files,
-)
-from .run_state import RunStateStore, validate_run_state
+from .artifact_ids import reserve_counter
+from .commit_recovery import recover_pending_commit
+from .publication_builder import build_volume_publication_files, validate_volume_publication_files
+from .run_state import RunStateStore
+from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
+from .workspace import validate_workspace
+
+
+def create_volume_publication_stage_service(workspace_root: Path) -> "VolumePublicationStageService":
+    return VolumePublicationStageService(workspace_root)
 
 
 class VolumePublicationStageService:
-    """LLMを呼ばず、現在selectionの対象巻を一度だけ公開する。"""
+    """Publish exactly the committed scene sources selected for one volume."""
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.expanduser()
         self.state_store = RunStateStore(self.workspace_root)
-        self.selection_store = SelectionSnapshotStore(self.workspace_root)
 
-    def run(self, *, updated_at: str) -> dict[str, Any]:
+    def run(
+        self,
+        model: Any | None = None,
+        *,
+        workspace_already_validated: bool = False,
+        updated_at: str | None = None,
+    ) -> dict[str, Any]:
+        del model
+        if not workspace_already_validated:
+            validate_workspace(self.workspace_root)
         state = self.state_store.load()
         if state["status"] != "running" or state["current_stage"] != "volume_publication":
             raise ContractError("現在のrun-stateは実行可能なvolume_publicationではありません")
-        if state["active_candidate"] is not None or state["active_scene_id"] is not None:
-            raise ContractError("volume_publication開始時にactive成果物を残せません")
         if state["pending_commit"] is not None:
-            raise ContractError("pending_commitは復旧処理で先に収束する必要があります")
-        target = state["current_target"]
-        volume_number = target.get("volume_number") if isinstance(target, dict) else None
-        if not isinstance(volume_number, int) or isinstance(volume_number, bool) or volume_number < 1:
-            raise ContractError("volume_publication.current_target.volume_numberが不正です")
-        selection_id = state["current_selection_id"]
-        assert isinstance(selection_id, str)
-        snapshot = self.selection_store.load(selection_id)
-        inputs = self._resolve_inputs(snapshot["slots"], volume_number)
-        publication_id = self._reserve_identifier(volume_number)
+            return recover_pending_commit(self.workspace_root)
+        timestamp = updated_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        volume_number = self._volume_number(state["current_target"])
+        input_selection_id = state["current_selection_id"]
+        assert isinstance(input_selection_id, str)
+        slots = resolve_selection(
+            self.workspace_root,
+            SelectionSnapshotStore(self.workspace_root).load(input_selection_id),
+        )
+        inputs = self._publication_inputs(slots, volume_number)
+        publication_id = f"volume-pub-v{volume_number:02d}-{reserve_counter(self.workspace_root, 'next_volume_publication'):06d}"
         files = build_volume_publication_files(
             publication_id=publication_id,
             volume_number=volume_number,
-            input_selection_id=selection_id,
+            input_selection_id=input_selection_id,
             settings_id=inputs["settings_id"],
             series_plan_id=inputs["series_plan_id"],
             volume_plan_id=inputs["volume_plan_id"],
@@ -54,217 +65,184 @@ class VolumePublicationStageService:
             scene_ids=inputs["scene_ids"],
             quality_disposition_refs=inputs["quality_ids"],
             scenes=inputs["scenes"],
-            remaining_major_issues=inputs["remaining_major_issues"],
-            created_at=updated_at,
+            remaining_major_issues=inputs["has_remaining_major_issues"],
+            created_at=timestamp,
         )
         validate_volume_publication_files(files)
-        staging = self.workspace_root / "runtime/staging" / f"volume-publication-{publication_id}"
-        final = self.workspace_root / "publications" / publication_id
-        if staging.exists() or final.exists() or staging.is_symlink() or final.is_symlink():
-            raise ContractError("巻公開の不変配置を上書きできません")
-        staging.mkdir(parents=True)
-        self._write_files(staging, files)
-        digest = self._digest(files)
-        prepared = deepcopy(state)
-        prepared["pending_commit"] = {
+        staging_root = f"runtime/staging/volume-publication-{publication_id}"
+        staging_target = f"{staging_root}/{publication_id}"
+        self._write_files(staging_target, files)
+        if volume_number == inputs["volume_count"]:
+            state_update = {
+                "status": "completed",
+                "last_error": None,
+                "current_selection_id": input_selection_id,
+                "current_stage": None,
+                "current_target": None,
+                "published_volumes": [
+                    *state["published_volumes"],
+                    {"volume_number": volume_number, "publication_id": publication_id},
+                ],
+            }
+        else:
+            state_update = {
+                "current_selection_id": input_selection_id,
+                "current_stage": "volume_plan",
+                "current_target": {"volume_number": volume_number + 1},
+                "published_volumes": [
+                    *state["published_volumes"],
+                    {"volume_number": volume_number, "publication_id": publication_id},
+                ],
+            }
+        pending = {
             "kind": "volume_publication",
-            "staging_path": str(staging.relative_to(self.workspace_root)),
-            "input_selection_id": selection_id,
+            "staging_path": staging_root,
+            "input_selection_id": input_selection_id,
             "output_selection_id": None,
-            "state_update": {"volume_number": volume_number, "publication_id": publication_id},
+            "state_update": state_update,
             "targets": [{
                 "artifact_id": publication_id,
-                "artifact_kind": "volume_publication",
-                "staging_path": str(staging.relative_to(self.workspace_root)),
-                "final_path": str(final.relative_to(self.workspace_root)),
-                "sha256": digest,
+                "artifact_kind": "volume-publication",
+                "staging_path": staging_target,
+                "final_path": f"publications/{publication_id}",
                 "status": "pending",
             }],
         }
-        prepared["updated_at"] = updated_at
-        self.state_store.save(prepared)
-        try:
-            final.parent.mkdir(parents=True, exist_ok=True)
-            os.rename(staging, final)
-        except OSError as exc:
-            raise ContractError("巻公開directoryを確定できません") from exc
-        self._validate_final(final, files, digest)
-        result = deepcopy(prepared)
-        result["pending_commit"] = None
-        result["published_volumes"] = [*state["published_volumes"], {"volume_number": volume_number, "publication_id": publication_id}]
-        volume_count = inputs["volume_count"]
-        if volume_number == volume_count:
-            result.update({"status": "completed", "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
-        else:
-            result.update({"current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}, "status": "running", "last_error": None})
-        result["updated_at"] = updated_at
-        validate_run_state(result)
-        self.state_store.save(result)
-        return result
-
-    def recover_pending(self, *, updated_at: str) -> dict[str, Any]:
-        """manifest と staging/final の配置を照合し、providerなしで公開を収束する。"""
-        state = self.state_store.load()
-        pending = state["pending_commit"]
-        if not isinstance(pending, dict) or pending.get("kind") != "volume_publication":
-            raise ContractError("volume_publicationのpending_commitがありません")
-        targets = pending.get("targets")
-        update = pending.get("state_update")
-        if not isinstance(targets, list) or len(targets) != 1 or not isinstance(update, dict):
-            raise ContractError("volume_publication manifestが不正です")
-        target = targets[0]
-        if not isinstance(target, dict):
-            raise ContractError("volume_publication manifest targetが不正です")
-        publication_id = target.get("artifact_id")
-        volume_number = update.get("volume_number")
-        if (
-            target.get("artifact_kind") != "volume_publication"
-            or target.get("status") not in {"pending", "finalized"}
-            or update.get("publication_id") != publication_id
-            or not isinstance(publication_id, str)
-            or not isinstance(volume_number, int)
-            or isinstance(volume_number, bool)
-        ):
-            raise ContractError("volume_publication manifest参照が不正です")
-        staging_rel = target.get("staging_path")
-        final_rel = target.get("final_path")
-        if not isinstance(staging_rel, str) or not isinstance(final_rel, str):
-            raise ContractError("volume_publication manifest pathが不正です")
-        staging = self.workspace_root / staging_rel
-        final = self.workspace_root / final_rel
-        if staging.is_symlink() or final.is_symlink() or (staging.exists() and final.exists()):
-            raise ContractError("publication_invalid: staging/final配置が不整合です")
-        if staging.exists():
-            try:
-                final.parent.mkdir(parents=True, exist_ok=True)
-                os.rename(staging, final)
-            except OSError as exc:
-                raise ContractError("巻公開recoveryでfinalizeできません") from exc
-        if not final.is_dir():
-            raise ContractError("publication_invalid: 公開targetが存在しません")
-        try:
-            actual = {
-                "record.json": json.loads((final / "record.json").read_text(encoding="utf-8")),
-                "manuscript.md": (final / "manuscript.md").read_text(encoding="utf-8"),
-            }
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError("publication_invalid: 公開targetを読めません") from exc
-        validate_volume_publication_files(actual)
-        if actual["record.json"].get("volume_publication_id") != publication_id or self._digest(actual) != target.get("sha256"):
-            raise ContractError("publication_invalid: 公開targetがmanifestと一致しません")
-        selection_id = state["current_selection_id"]
-        assert isinstance(selection_id, str)
-        inputs = self._resolve_inputs(self.selection_store.load(selection_id)["slots"], volume_number)
-        result = deepcopy(state)
-        result["pending_commit"] = None
-        result["published_volumes"] = [*state["published_volumes"], {"volume_number": volume_number, "publication_id": publication_id}]
-        if volume_number == inputs["volume_count"]:
-            result.update({"status": "completed", "last_error": None, "current_stage": None, "current_target": None, "active_candidate": None, "active_scene_id": None})
-        else:
-            result.update({"status": "running", "last_error": None, "current_stage": "volume_plan", "current_target": {"volume_number": volume_number + 1}})
-        result["updated_at"] = updated_at
-        validate_run_state(result)
-        self.state_store.save(result)
-        return result
-
-    def _resolve_inputs(self, slots: object, volume_number: int) -> dict[str, Any]:
-        if not isinstance(slots, dict):
-            raise ContractError("selection slotsが不正です")
-        required = ("settings", "series_plan", f"volume_plan.v{volume_number:02d}", "current_state")
-        if any(key not in slots for key in required):
-            raise ContractError("巻公開に必要なselection slotがありません")
-        settings_id = slots["settings"]
-        series_plan_id = slots["series_plan"]
-        volume_plan_id = slots[f"volume_plan.v{volume_number:02d}"]
-        current_state_id = slots["current_state"]
-        settings = self._read("runtime/settings", settings_id)
-        series = self._read("design/series-plans", series_plan_id)
-        volume = self._read("design/volume-plans", volume_plan_id)
-        self._read("generations", current_state_id)
-        if settings.get("settings_id") != settings_id or series.get("series_plan_id") != series_plan_id or volume.get("volume_plan_id") != volume_plan_id or volume.get("volume_number") != volume_number:
-            raise ContractError("巻公開入力のselection参照が成果物と一致しません")
-        volume_count = series.get("volume_count")
-        if not isinstance(volume_count, int) or isinstance(volume_count, bool) or volume_count < volume_number:
-            raise ContractError("series-planのvolume_countが不正です")
-        prefix = f".v{volume_number:02d}"
-        chapter_slots = sorted((key, value) for key, value in slots.items() if key.startswith("chapter_plan" + prefix))
-        scene_slots = sorted((key, value) for key, value in slots.items() if key.startswith("scene" + prefix) and not key.startswith("scene_prose"))
-        quality_slots = sorted((key, value) for key, value in slots.items() if key.startswith("scene_prose_disposition" + prefix))
-        if not chapter_slots or not scene_slots or len(quality_slots) != len(scene_slots):
-            raise ContractError("巻公開の章・場面・品質判定slotが不完全です")
-        chapter_ids = [value for _, value in chapter_slots]
-        scenes: list[dict[str, str]] = []
-        for _, scene_id in scene_slots:
-            record = self._read("scenes", scene_id)
-            prose = record.get("prose")
-            if record.get("scene_id") != scene_id or not isinstance(prose, str):
-                raise ContractError("scene成果物が不正です")
-            scenes.append({"scene_id": scene_id, "prose": prose})
-        quality_ids = [value for _, value in quality_slots]
-        remaining = False
-        for quality_id in quality_ids:
-            quality = self._read("quality", quality_id)
-            if quality.get("quality_id") != quality_id or quality.get("result") == "blocked_manual_review":
-                raise ContractError("publication_invalid: quality dispositionが公開不能です")
-            issues = quality.get("remaining_major_issues")
-            if not isinstance(issues, list):
-                raise ContractError("quality dispositionが不正です")
-            remaining = remaining or bool(issues)
-        return {"settings_id": settings_id, "series_plan_id": series_plan_id, "volume_plan_id": volume_plan_id, "current_state_id": current_state_id, "chapter_plan_ids": chapter_ids, "scene_ids": [item["scene_id"] for item in scenes], "quality_ids": quality_ids, "scenes": scenes, "remaining_major_issues": remaining, "volume_count": volume_count}
-
-    def _read(self, directory: str, artifact_id: object) -> dict[str, Any]:
-        if not isinstance(artifact_id, str):
-            raise ContractError("artifact IDが不正です")
-        path = self.workspace_root / directory / artifact_id / "record.json"
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError(f"公開入力成果物を読めません: {artifact_id}") from exc
-        if not isinstance(value, dict):
-            raise ContractError("公開入力成果物がobjectではありません")
-        return value
-
-    def _reserve_identifier(self, volume_number: int) -> str:
-        path = self.workspace_root / "runtime/counters.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            counters = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError("counters.jsonを読めません") from exc
-        number = counters.get("next_volume_publication", 1)
-        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
-            raise ContractError("next_volume_publicationが不正です")
-        counters["next_volume_publication"] = number + 1
-        temporary = path.with_suffix(".json.tmp")
-        try:
-            with temporary.open("x", encoding="utf-8") as handle:
-                json.dump(counters, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except OSError as exc:
-            temporary.unlink(missing_ok=True)
-            raise ContractError("next_volume_publicationを原子的に予約できません") from exc
-        return f"volume-pub-v{volume_number:02d}-{number:06d}"
+        working = deepcopy(state)
+        working["updated_at"] = timestamp
+        working["pending_commit"] = pending
+        self.state_store.save(working)
+        return recover_pending_commit(self.workspace_root)
 
     @staticmethod
-    def _write_files(directory: Path, files: dict[str, dict[str, Any] | str]) -> None:
+    def _volume_number(target: object) -> int:
+        if not isinstance(target, dict) or set(target) != {"volume_number"}:
+            raise ContractError("volume_publication.current_targetが不正です")
+        number = target["volume_number"]
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+            raise ContractError("volume_publication.current_target.volume_numberが不正です")
+        return number
+
+    def _publication_inputs(self, slots: dict[str, dict[str, Any]], volume: int) -> dict[str, Any]:
+        settings = self._slot(slots, "settings")
+        series = self._slot(slots, "series_plan")
+        volume_plan = self._slot(slots, f"volume_plan.v{volume:02d}")
+        current_state = self._slot(slots, "current_state")
+        settings_id = self._record_id(settings, "settings_id")
+        series_id = self._record_id(series, "artifact_id")
+        volume_id = self._record_id(volume_plan, "artifact_id")
+        current_state_id = self._record_id(current_state, "artifact_id")
+        if volume_plan.get("artifact_kind") != "volume-plan" or current_state.get("artifact_kind") != "generation":
+            raise ContractError("巻公開selectionのvolume planまたはcurrent stateが不正です")
+        volume_content = volume_plan.get("content")
+        if not isinstance(volume_content, dict) or volume_content.get("volume_number") != volume:
+            raise ContractError("巻公開selectionのvolume plan座標が不正です")
+        volume_count = self._volume_count(series, volume)
+        chapter_numbers = self._ordered_numbers(volume_content, "chapters", "chapter_number")
+        chapter_slots = {f"chapter_plan.v{volume:02d}.c{number:02d}" for number in chapter_numbers}
+        selected_chapter_slots = {key for key in slots if key.startswith(f"chapter_plan.v{volume:02d}.")}
+        if selected_chapter_slots != chapter_slots:
+            raise ContractError("巻公開selectionのchapter plan集合が計画と一致しません")
+        chapter_ids: list[str] = []
+        scene_ids: list[str] = []
+        quality_ids: list[str] = []
+        scenes: list[dict[str, str]] = []
+        has_remaining_major_issues = False
+        for chapter in chapter_numbers:
+            chapter_record = self._slot(slots, f"chapter_plan.v{volume:02d}.c{chapter:02d}")
+            if chapter_record.get("artifact_kind") != "chapter-plan":
+                raise ContractError("巻公開selectionのchapter planが不正です")
+            chapter_content = chapter_record.get("content")
+            if not isinstance(chapter_content, dict) or chapter_content.get("volume_number") != volume or chapter_content.get("chapter_number") != chapter:
+                raise ContractError("巻公開selectionのchapter plan座標が不正です")
+            chapter_ids.append(self._record_id(chapter_record, "artifact_id"))
+            for scene in self._ordered_numbers(chapter_content, "scenes", "scene_number"):
+                coordinate = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
+                committed = self._slot(slots, f"scene.{coordinate}")
+                prose = self._slot(slots, f"scene_prose.{coordinate}")
+                quality = self._slot(slots, f"scene_prose_disposition.{coordinate}")
+                self._validate_committed_source(committed, prose, quality, volume, chapter, scene)
+                scene_ids.append(self._record_id(committed, "artifact_id"))
+                quality_ids.append(self._record_id(quality, "quality_id"))
+                prose_content = prose["content"]
+                assert isinstance(prose_content, dict)
+                scenes.append({"scene_id": scene_ids[-1], "prose": prose_content["text"]})
+                issues = quality["remaining_major_issues"]
+                assert isinstance(issues, list)
+                has_remaining_major_issues = has_remaining_major_issues or bool(issues)
+        if not scene_ids:
+            raise ContractError("巻公開には少なくとも一場面の確定が必要です")
+        return {
+            "settings_id": settings_id, "series_plan_id": series_id, "volume_plan_id": volume_id,
+            "current_state_id": current_state_id, "chapter_plan_ids": chapter_ids, "scene_ids": scene_ids,
+            "quality_ids": quality_ids, "scenes": scenes,
+            "has_remaining_major_issues": has_remaining_major_issues, "volume_count": volume_count,
+        }
+
+    @staticmethod
+    def _slot(slots: dict[str, dict[str, Any]], name: str) -> dict[str, Any]:
+        record = slots.get(name)
+        if not isinstance(record, dict):
+            raise ContractError(f"巻公開に必要なselection slotがありません: {name}")
+        return record
+
+    @staticmethod
+    def _record_id(record: dict[str, Any], name: str) -> str:
+        value = record.get(name)
+        if not isinstance(value, str) or not value:
+            raise ContractError("巻公開selection recordのIDが不正です")
+        return value
+
+    @staticmethod
+    def _ordered_numbers(content: object, field: str, number_field: str) -> list[int]:
+        if not isinstance(content, dict) or not isinstance(content.get(field), list):
+            raise ContractError(f"巻公開の{field}計画が不正です")
+        result: list[int] = []
+        for item in content[field]:
+            number = item.get(number_field) if isinstance(item, dict) else None
+            if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+                raise ContractError(f"巻公開の{field}計画番号が不正です")
+            result.append(number)
+        if not result or result != sorted(set(result)):
+            raise ContractError(f"巻公開の{field}計画は重複なし昇順でなければなりません")
+        return result
+
+    def _volume_count(self, series: dict[str, Any], volume: int) -> int:
+        if series.get("artifact_kind") != "series-plan":
+            raise ContractError("巻公開selectionのseries planが不正です")
+        numbers = self._ordered_numbers(series.get("content"), "volumes", "volume_number")
+        if numbers != list(range(1, len(numbers) + 1)) or volume not in numbers:
+            raise ContractError("巻公開selectionのseries plan巻集合が不正です")
+        return len(numbers)
+
+    @staticmethod
+    def _validate_committed_source(
+        committed: dict[str, Any], prose: dict[str, Any], quality: dict[str, Any],
+        volume: int, chapter: int, scene: int,
+    ) -> None:
+        coordinate = {"volume_number": volume, "chapter_number": chapter, "scene_number": scene}
+        committed_content = committed.get("content")
+        prose_content = prose.get("content")
+        if (
+            committed.get("artifact_kind") != "scene" or prose.get("artifact_kind") != "scene-prose"
+            or not isinstance(committed_content, dict) or not isinstance(prose_content, dict)
+            or committed_content.get("coordinate") != coordinate or prose_content.get("coordinate") != coordinate
+            or committed_content.get("scene_prose_id") != prose.get("artifact_id")
+            or committed_content.get("quality_disposition_id") != quality.get("quality_id")
+            or not isinstance(prose_content.get("text"), str) or not prose_content["text"].strip()
+        ):
+            raise ContractError("巻公開の確定場面sourceがselectionと一致しません")
+        if quality.get("result") not in {"accepted", "accepted_with_notice"}:
+            raise ContractError("巻公開のscene prose品質判定が公開可能ではありません")
+        if not isinstance(quality.get("remaining_major_issues"), list):
+            raise ContractError("巻公開のscene prose品質判定が不正です")
+
+    def _write_files(self, staging_root: str, files: dict[str, dict[str, Any] | str]) -> None:
+        directory = self.workspace_root / staging_root
+        if directory.exists() or directory.is_symlink():
+            raise ContractError("巻公開staging directoryを上書きできません")
+        directory.mkdir(parents=True)
         for name, value in files.items():
             path = directory / name
             text = json.dumps(value, ensure_ascii=False, indent=2) + "\n" if isinstance(value, dict) else value
             path.write_text(text, encoding="utf-8")
-
-    @staticmethod
-    def _digest(files: dict[str, dict[str, Any] | str]) -> str:
-        record = json.dumps(files["record.json"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256((record + "\n" + str(files["manuscript.md"])).encode()).hexdigest()
-
-    def _validate_final(self, directory: Path, expected: dict[str, dict[str, Any] | str], digest: str) -> None:
-        try:
-            actual = {"record.json": json.loads((directory / "record.json").read_text(encoding="utf-8")), "manuscript.md": (directory / "manuscript.md").read_text(encoding="utf-8")}
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError("確定済み巻公開を検証できません") from exc
-        validate_volume_publication_files(actual)
-        if actual != expected or self._digest(actual) != digest:
-            raise ContractError("確定済み巻公開の内容がmanifestと一致しません")

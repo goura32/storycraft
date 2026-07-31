@@ -66,7 +66,10 @@ ARTIFACT_SPECS: Mapping[str, ArtifactSpec] = MappingProxyType({
     "scene-prose": ArtifactSpec(rf"scene-{_COORDINATE_PATTERNS['scene']}-{_COUNTER}", "scenes", "scene_prose.v{volume}.c{chapter}.s{scene}"),
     "continuity-update": ArtifactSpec(rf"continuity-{_COORDINATE_PATTERNS['scene']}-{_COUNTER}", "scenes", "continuity_update.v{volume}.c{chapter}.s{scene}"),
     "generation": ArtifactSpec(rf"gen-{_COUNTER}", "generations", "current_state"),
-    "scene": ArtifactSpec(rf"scene-commit-{_COORDINATE_PATTERNS['scene']}-{_COUNTER}", "scenes", "scene.v{volume}.c{chapter}.s{scene}"),
+    "scene": ArtifactSpec(rf"scene-artifact-{_COORDINATE_PATTERNS['scene']}-{_COUNTER}", "scenes", "scene.v{volume}.c{chapter}.s{scene}"),
+    "scene-commit": ArtifactSpec(rf"scene-commit-{_COORDINATE_PATTERNS['scene']}-{_COUNTER}", "scenes", "scene_commit.v{volume}.c{chapter}.s{scene}"),
+    "selection": ArtifactSpec(rf"selection-{_COUNTER}", "runtime/selections", None),
+    "adoption": ArtifactSpec(rf"adoption-{_COUNTER}", "runtime/adoptions", None),
     "volume-publication": ArtifactSpec(rf"volume-pub-{_COORDINATE_PATTERNS['volume']}-{_COUNTER}", "publications", "volume_publication.v{volume}"),
     "quality-disposition": ArtifactSpec(rf"quality-{_COUNTER}", "quality", None),
 })
@@ -95,9 +98,22 @@ def validate_artifact_reference(artifact_kind: object, artifact_id: object, slot
     spec = artifact_spec(artifact_kind)
     if artifact_kind == "quality-disposition":
         spec.match_id(artifact_id)
-        if not isinstance(slot, str) or re.fullmatch(r"scene_prose_disposition\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}", slot) is None:
+        slot_str = str(slot) if isinstance(slot, str) else ""
+        if not slot_str.startswith("scene_prose_disposition.") and not slot_str.startswith("continuity_disposition."):
             raise ContractError("quality-dispositionのslotが不正です")
         return
+    if artifact_kind == "adoption":
+        spec.match_id(artifact_id)
+        if not isinstance(slot, str) or re.fullmatch(r"(?:initial_design|series_plan|volume_plan|chapter_plan|scene_plan|scene_card|scene_prose|continuity)_adoption(?:\.v[0-9]{2}(?:\.c[0-9]{2})?(?:\.s[0-9]{2})?)?", slot) is None:
+            raise ContractError("adoptionのslotが不正です")
+        return
+    # Special sentinel slots that don't match the canonical pattern but are valid for this kind.
+    special_sentinels: dict[str, set[str]] = {
+        "volume-plan": {"prior_volume_plan"},
+        "generation": {"current_state"},
+    }
     expected = spec.slot_for(artifact_id)
-    if not isinstance(slot, str) or slot != expected:
+    if not isinstance(slot, str):
+        raise ContractError("artifact_kind、artifact_id、slotが一致しません")
+    if slot != expected and slot not in special_sentinels.get(str(artifact_kind), set()):
         raise ContractError("artifact_kind、artifact_id、slotが一致しません")

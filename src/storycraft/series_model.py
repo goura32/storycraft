@@ -26,6 +26,20 @@ class OpenAIStoryModel:
         """品質ループ回次。LLM通信retryとは別の運用ログ用メタデータ。"""
         self._log_quality_pass = quality_pass
 
+    def set_call_context(
+        self,
+        *,
+        settings_id: str,
+        input_refs: list[str],
+        target_candidate_id: str | None = None,
+    ) -> None:
+        """Bind the next V2 operation to immutable workspace provenance."""
+        self._call_context = {
+            "settings_id": settings_id,
+            "input_refs": list(input_refs),
+            "target_candidate_id": target_candidate_id,
+        }
+
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         return self._call("generate", stage, self._render("generate", stage, context=context))
 
@@ -34,6 +48,15 @@ class OpenAIStoryModel:
 
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         return self._call("revision", stage, self._render("revision", stage, candidate=candidate, critique=critique, context=context))
+
+    # CandidateStage is the public V2 workflow surface.  Keep the older names for
+    # V1 callers, but make the V2 protocol explicit rather than asking adapters to
+    # probe for legacy methods.
+    def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+        return self._call("review", stage, self._render("review", stage, candidate=candidate, context=context))
+
+    def revise(self, stage: str, context: dict[str, Any], candidate: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+        return self._call("revise", stage, self._render("revise", stage, candidate=candidate, critique=review, context=context))
 
     def generate_prose(
         self,
@@ -87,12 +110,45 @@ class OpenAIStoryModel:
         if stage not in ACTIVE_TEMPLATE_STAGES:
             raise ContractError(f"未知の生成工程です: {stage}")
         loader = get_template_loader()
-        output_schema = loader.load_schema_text(kind, stage)
-        if kind == "generate":
-            return loader.render_user("generate", stage, stage=stage, output_schema=output_schema, **kwargs)
-        if kind == "critique":
-            return loader.render_user(kind, stage, stage=stage, output_schema=output_schema, **kwargs)
-        return loader.render_user(kind, stage, stage=stage, output_schema=output_schema, **kwargs)
+        template_kind = {"review": "critique", "revise": "revision"}.get(kind, kind)
+        output_schema = json.dumps(OpenAIStoryModel._response_schema(kind, stage), ensure_ascii=False, indent=2)
+        return loader.render_user(template_kind, stage, stage=stage, output_schema=output_schema, **kwargs)
+
+    @staticmethod
+    def _response_schema(kind: str, stage: str) -> dict[str, Any]:
+        if kind in {"generate", "revise"}:
+            payload_schema = get_template_loader().load_schema_object("generate", stage)
+            artifact_kind = {
+                "request_intake": "request",
+                "scene_continuity": "continuity-update",
+            }.get(stage, stage.replace("_", "-"))
+            return {
+                "type": "object", "additionalProperties": False,
+                "required": ["schema_version", "artifact_kind", "payload"],
+                "properties": {
+                    "schema_version": {"const": "candidate-response-v1"},
+                    "artifact_kind": {"const": artifact_kind},
+                    "payload": payload_schema,
+                },
+            }
+        if kind in {"review", "critique"}:
+            return {
+                "type": "object", "additionalProperties": False,
+                "required": ["schema_version", "decision", "issues"],
+                "properties": {
+                    "schema_version": {"const": "review-response-v1"},
+                    "decision": {"enum": ["pass", "issues"]},
+                    "issues": {
+                        "type": "array",
+                        "items": {"type": "object", "additionalProperties": False,
+                                  "required": ["severity", "evidence_locations", "explanation"],
+                                  "properties": {"severity": {"enum": ["critical", "notice"]},
+                                                 "evidence_locations": {"type": "array", "items": {"type": "string"}},
+                                                 "explanation": {"type": "string", "minLength": 1}}},
+                    },
+                },
+            }
+        return get_template_loader().load_schema_object(kind, stage)
 
     @staticmethod
     def _safe_error_type(error: str) -> str:
@@ -107,21 +163,7 @@ class OpenAIStoryModel:
         stage: str,
     ) -> dict[str, Any]:
         """工程に応じたOpenAI互換response formatを返す。"""
-        if (
-            kind == "critique"
-            and stage == "scene_prose"
-        ):
-            return {
-                "type": "json_object",
-            }
-
-        schema = (
-            get_template_loader()
-            .load_schema_object(
-                kind,
-                stage,
-            )
-        )
+        schema = OpenAIStoryModel._response_schema(kind, stage)
 
         return {
             "type": "json_schema",
@@ -144,8 +186,12 @@ class OpenAIStoryModel:
         )
 
         for retry_attempt in range(1, attempts + 1):
-            self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1
-            seed = self._seed_sequence
+            # V2 records model discovery and completion as two physical calls.
+            # Reserve a distinct monotonic seed for each physical call record.
+            llm_settings = getattr(self.client.settings, "llm", {})
+            seed_step = 2 if llm_settings.get("v2_openai_ollama", False) else 1
+            seed = getattr(self, "_seed_sequence", 0) + 1
+            self._seed_sequence = seed + seed_step - 1
             messages = [
                 {"role": "system", "content": get_template_loader().render_system()},
                 {"role": "user", "content": user_prompt},
@@ -153,6 +199,7 @@ class OpenAIStoryModel:
                     "__kind": kind, "__phase": stage, "__ref": ref,
                     "__attempt": retry_attempt, "__retry_total": attempts,
                     "__quality_pass": getattr(self, "_log_quality_pass", ""),
+                    **getattr(self, "_call_context", {}),
                 },
             ]
             record = self.client.call_once(
@@ -161,6 +208,7 @@ class OpenAIStoryModel:
                 seed,
             )
             self.client.save_raw(record, messages)
+            self.last_call_id = getattr(record, "call_id", None)
             if record.error:
                 failure_reason = f"transport:{self._safe_error_type(record.error)}"
                 logger.error(
@@ -171,19 +219,13 @@ class OpenAIStoryModel:
             try:
                 value = json.loads(record.content)
             except json.JSONDecodeError as exc:
-                failure_reason = "json_decode_error"
-                logger.error(
-                    "LLM JSONパースエラー: stage=%s kind=%s attempt=%s/%s error=%s",
-                    stage, kind, retry_attempt, attempts, exc,
-                )
-                continue
+                # Structural retries belong to the candidate operation, where the
+                # immutable invalid_response_limit is available; this is not a
+                # transport/technical exhaustion.
+                raise ContractError(f"{stage} のLLM応答JSONが不正です") from exc
             if isinstance(value, dict):
                 return value
-            failure_reason = "json_non_object"
-            logger.error(
-                "LLM JSON形式エラー: stage=%s kind=%s attempt=%s/%s actual=%s",
-                stage, kind, retry_attempt, attempts, type(value).__name__,
-            )
+            raise ContractError(f"{stage} のLLM応答はobjectでなければなりません")
         raise LLMCallError(f"{stage} のLLM呼び出しに失敗しました: reason={failure_reason}")
 
     def _call_text(

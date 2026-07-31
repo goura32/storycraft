@@ -19,8 +19,7 @@
             "type": "string",
             "enum": [
               "critical",
-              "major",
-              "minor"
+              "notice"
             ]
           },
           "field": {

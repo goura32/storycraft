@@ -5,7 +5,7 @@ from pathlib import Path
 from storycraft.run_state import RunStateStore
 from storycraft.workspace import create_workspace
 
-SETTINGS={"provider":"ollama","endpoint":"http://127.0.0.1:11434","model":"test","technical_retry_limit":1,"quality_revision_limit":0,"invalid_response_limit":1,"chapter_per_volume_range":[1,1],"chapter_scene_range":[1,1],"scene_text_char_range":[1000,1000],"max_input_chars":50000}
+SETTINGS={"provider":"ollama","endpoint":"http://127.0.0.1:11434","model":"test","technical_retry_limit":1,"quality_revision_limit":0,"invalid_response_limit":1,"chapter_per_volume_range":[1,1],"chapter_scene_range":[1,1],"scene_text_char_range":[1000,1000]}
 class KeywordsWorkspaceTests(unittest.TestCase):
  def test_keywords_starts_request_intake_without_selection(self):
   with tempfile.TemporaryDirectory() as temp:

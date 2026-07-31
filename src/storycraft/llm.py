@@ -28,6 +28,7 @@ from .error_sanitizer import (
     sanitize_text,
 )
 from .log import logger
+from .ollama import OllamaResponseFormatError, generate as ollama_generate
 from .series_contracts import ContractError
 
 STATUS_THINKING = "thinking"
@@ -97,6 +98,7 @@ class CallRecord:
     content: str = ""
     meta_chunks: list[dict] = field(default_factory=list)  # {t, kind, chars}
     error: str | None = None
+    call_id: str | None = None
 
     def log_identity(self) -> str:
         quality = f" quality_pass={self.quality_pass}" if self.quality_pass else ""
@@ -516,7 +518,41 @@ class LLMClient:
         return rec
 
     def call_once(self, messages, response_format, seed: int) -> CallRecord:
-        return self._make_call(messages, response_format, seed)
+        if not self.settings.llm.get("v2_openai_ollama", False):
+            return self._make_call(messages, response_format, seed)
+        meta = messages[-1] if messages and isinstance(messages[-1], dict) else {}
+        visible_messages = [
+            message for message in messages
+            if isinstance(message, dict) and isinstance(message.get("role"), str)
+            and isinstance(message.get("content"), str)
+        ]
+        rec = CallRecord(
+            kind=meta.get("__kind", "gen"), phase=meta.get("__phase", ""),
+            ref=meta.get("__ref", ""), attempt=meta.get("__attempt", 1), seed=seed,
+            retry_total=meta.get("__retry_total", 1), quality_pass=meta.get("__quality_pass", ""),
+        )
+        schema = {"type": "object"}
+        if isinstance(response_format, dict):
+            schema = response_format.get("json_schema", {}).get("schema", schema)
+        try:
+            value = ollama_generate(
+                self.settings.llm["base_url"], self.settings.llm["model"],
+                visible_messages[-1]["content"] if visible_messages else "", schema,
+                request_options=self.settings.llm.get("request_options"),
+                messages=visible_messages, call_record_dir=self.raw_dir.parent / "calls",
+                technical_attempt=rec.attempt, format_attempt=1, seed=seed,
+                operation=rec.kind, call_id_sink=lambda call_id: setattr(rec, "call_id", call_id),
+                settings_id=meta.get("settings_id"), input_refs=meta.get("input_refs", []),
+                target_candidate_id=meta.get("target_candidate_id"),
+            )
+            rec.content = json.dumps(value, ensure_ascii=False)
+        except OllamaResponseFormatError:
+            rec.finished_at = time.time()
+            raise
+        except Exception as error:
+            rec.error = safe_exception_message(error)
+        rec.finished_at = time.time()
+        return rec
 
     @staticmethod
     def _raw_markdown(filename: str, sent_messages: list, content: str) -> str:

@@ -10,7 +10,7 @@ briefはkeywordsを参考情報として創作する初回企画である。独�
 5. **後工程への安全性**: 人物名、関係、世界状態、結末イメージの間に、後続台帳の基礎を壊す自己矛盾や曖昧な否定がないか。`avoid` が `want`、題材、endingと矛盾していないか。
 6. **日本語品質の再点検**: 不自然な複合名詞、助詞の欠落、一般的な日本語として意味が定まりにくい造語・抽象語も確認する。抽象語の組合せが一般的な日本語の述語関係を作れているかを確認し、人物関係を「境界を結ぶ」のような比喩で曖昧にした文、対象が不明な「評価」を並べた文はissueにする。言い換えの好みではなく、読者が通常の日本語として一義的に理解できるかで判断する。
 
-`issues: []` を返す前に候補の全string fieldを一つずつ再点検する。issue は確認できる問題だけを出し、fieldは候補を実際に指す有効パスに限る。descriptionには候補に実在する文字列をそのまま引用し、候補外の入力・推測・語句を混ぜない。各 issue に `severity`（必須：`critical`/`major`/`minor` のいずれか）、`field`（有効なJSONパスのみ。例：`protagonist.initial_wish`、`key_people[0].initial_relation_to_protagonist`、`avoid` 等。存在しないパスは書かない）、`description`（候補中の問題の根拠。問題の語句は候補からそのまま引用し、候補にない誤字・表現・事実を作らない）、`suggestion`（固定操作：削除/候補に基づき書き直し/日本語修正）を入れる。**issueごとに必ず4キーを同じobject内に置く。issue objectを閉じる前に各issue objectの4キー（`severity`、`field`、`description`、`suggestion`）がすべてあり、各キーと文字列値が正しくダブルクォートで閉じていることを確認する。** `issues` 配列の外に issue のキーを書かず、issue の途中で `]` や `}` を書かない。各 issue はこの4キーのみを持ち、キーの重複や誤ったキー名を書かない。問題がなければ `issues: []` のみを返す。
+`issues: []` を返す前に候補の全string fieldを一つずつ再点検する。issue は確認できる問題だけを出し、fieldは候補を実際に指す有効パスに限る。descriptionには候補に実在する文字列をそのまま引用し、候補外の入力・推測・語句を混ぜない。各 issue に `severity`（必須：`critical`/`notice` のいずれか）、`field`（有効なJSONパスのみ。例：`protagonist.initial_wish`、`key_people[0].initial_relation_to_protagonist`、`avoid` 等。存在しないパスは書かない）、`description`（候補中の問題の根拠。問題の語句は候補からそのまま引用し、候補にない誤字・表現・事実を作らない）、`suggestion`（固定操作：削除/候補に基づき書き直し/日本語修正）を入れる。**issueごとに必ず4キーを同じobject内に置く。issue objectを閉じる前に各issue objectの4キー（`severity`、`field`、`description`、`suggestion`）がすべてあり、各キーと文字列値が正しくダブルクォートで閉じていることを確認する。** `issues` 配列の外に issue のキーを書かず、issue の途中で `]` や `}` を書かない。各 issue はこの4キーのみを持ち、キーの重複や誤ったキー名を書かない。問題がなければ `issues: []` のみを返す。
 
 ## 候補
 

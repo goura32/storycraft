@@ -65,6 +65,33 @@ class ReviewedCandidateStageRunner:
         self.spec = spec
         self.state_store = RunStateStore(self.workspace_root)
 
+    def _selected_quality_config(self, state: dict[str, Any]) -> dict[str, Any]:
+        """可変 runtime/config.json を読まず、選択済み settings から品質値を得る。"""
+        selection_id = state["current_selection_id"]
+        if not isinstance(selection_id, str):
+            raise ContractError("Candidate工程にはsettingsを持つselectionが必要です")
+        selection = read_json(
+            self.workspace_root / "runtime/selections" / selection_id / "record.json"
+        )
+        slots = selection.get("slots")
+        if not isinstance(slots, dict) or not isinstance(slots.get("settings"), str):
+            raise ContractError("selectionにsettings slotがありません")
+        record = read_json(
+            self.workspace_root
+            / "runtime/settings"
+            / slots["settings"]
+            / "record.json"
+        )
+        payload = record.get("payload")
+        if not isinstance(payload, dict):
+            raise ContractError("settings record payloadが不正です")
+        return {
+            "quality": {
+                "max_critique_passes": payload.get("quality_revision_limit"),
+                "invalid_response_limit": payload.get("invalid_response_limit"),
+            }
+        }
+
     def run(
         self,
         model: StoryModel | None,
@@ -83,7 +110,8 @@ class ReviewedCandidateStageRunner:
         updated_at: str | None = None,
     ) -> dict[str, Any]:
         if not workspace_already_validated:
-            validate_workspace_layout(
+            from .workspace import validate_workspace
+            validate_workspace(
                 self.workspace_root
             )
 
@@ -133,10 +161,10 @@ class ReviewedCandidateStageRunner:
 
         timestamp = updated_at or utc_now()
         model_stage = self.spec.model_stage or self.spec.stage
-        config = read_json(
-            self.workspace_root / "runtime/config.json"
-        )
+        config = self._selected_quality_config(state)
         revision_limit = revision_limit_from_config(config)
+        quality = config["quality"]
+        invalid_response_limit = quality["invalid_response_limit"]
 
         candidate_id = reserve_identifier(
             self.workspace_root,
@@ -232,8 +260,14 @@ class ReviewedCandidateStageRunner:
             # V1 spec: quality_revision_limit = 0 means unlimited revisions
             # But safety cap: invalid_response_limit prevents infinite loops
             if revision_limit == 0:
-                # Unlimited revisions - never exhaust due to quality limit
-                exhausted = False
+                # Unlimited revisions - but safety cap at invalid_response_limit
+                if revisions_used >= invalid_response_limit:
+                    # Safety cap reached - accept last valid version with notice
+                    exhausted = True
+                    decision = "accept"
+                    candidate_status = "accepted"
+                else:
+                    exhausted = False
             else:
                 exhausted = bool(issues) and revisions_used >= revision_limit
 
@@ -472,9 +506,9 @@ class ReviewedCandidateStageRunner:
                 ) from exc
             raise
 
-        validate_workspace_layout(
-            self.workspace_root,
-            run_state=prepared,
+        from .workspace import validate_workspace
+        validate_workspace(
+            self.workspace_root
         )
 
         phase = prepared["pending_commit"]["phase"]
@@ -774,11 +808,11 @@ def revision_limit_from_config(config: dict[str, Any]) -> int:
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or value < 1
+        or value < 0
     ):
         raise ContractError(
             "config.quality.max_critique_passesは"
-            "1以上の整数が必要です"
+            "0以上の整数が必要です"
         )
 
     return value

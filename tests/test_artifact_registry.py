@@ -27,16 +27,33 @@ class ArtifactRegistryV2Tests(unittest.TestCase):
             ("scene-prose", "scene-v01-c02-s03-000001", "scenes/scene-v01-c02-s03-000001", "scene_prose.v01.c02.s03"),
             ("continuity-update", "continuity-v01-c02-s03-000001", "scenes/continuity-v01-c02-s03-000001", "continuity_update.v01.c02.s03"),
             ("generation", "gen-000001", "generations/gen-000001", "current_state"),
-            ("scene", "scene-commit-v01-c02-s03-000001", "scenes/scene-commit-v01-c02-s03-000001", "scene.v01.c02.s03"),
+            ("scene", "scene-artifact-v01-c02-s03-000001", "scenes/scene-artifact-v01-c02-s03-000001", "scene.v01.c02.s03"),
+            ("scene-commit", "scene-commit-v01-c02-s03-000001", "scenes/scene-commit-v01-c02-s03-000001", "scene_commit.v01.c02.s03"),
+            ("selection", "selection-000001", "runtime/selections/selection-000001", None),
+            ("adoption", "adoption-000001", "runtime/adoptions/adoption-000001", None),
             ("volume-publication", "volume-pub-v01-000001", "publications/volume-pub-v01-000001", "volume_publication.v01"),
         )
 
         self.assertEqual(set(ARTIFACT_SPECS), {kind for kind, *_ in cases} | {"quality-disposition"})
         for kind, artifact_id, directory, slot in cases:
             with self.subTest(kind=kind):
-                validate_artifact_reference(kind, artifact_id, slot)
+                if slot is not None:
+                    validate_artifact_reference(kind, artifact_id, slot)
                 self.assertEqual(artifact_directory(kind, artifact_id).as_posix(), directory)
-                self.assertEqual(canonical_slot(kind, artifact_id), slot)
+                if slot is None:
+                    with self.assertRaises(ContractError):
+                        canonical_slot(kind, artifact_id)
+                else:
+                    self.assertEqual(canonical_slot(kind, artifact_id), slot)
+
+    def test_scene_and_scene_commit_use_distinct_ids_and_final_directories(self) -> None:
+        scene_id = "scene-artifact-v01-c01-s01-000001"
+        commit_id = "scene-commit-v01-c01-s01-000001"
+        self.assertNotEqual(scene_id, commit_id)
+        self.assertNotEqual(
+            artifact_directory("scene", scene_id),
+            artifact_directory("scene-commit", commit_id),
+        )
 
     def test_rejects_unknown_kind_mismatched_coordinates_and_invalid_slot(self) -> None:
         cases = (

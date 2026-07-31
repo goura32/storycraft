@@ -8,7 +8,7 @@
         "type": "object",
         "required": ["severity", "field", "description", "suggestion"],
         "properties": {
-          "severity": {"type": "string", "enum": ["critical", "major", "minor"]},
+          "severity": {"type": "string", "enum": ["critical", "notice"]},
           "field": {"type": "string", "description": "問題のJSONパス"},
           "description": {"type": "string", "description": "確認できる具体的な問題"},
           "suggestion": {

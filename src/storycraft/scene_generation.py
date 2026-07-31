@@ -7,6 +7,34 @@ from typing import Any
 from .series_contracts import ContractError
 
 
+_STATE_TARGET_SOURCES = {
+    "character_state": "characters",
+    "relationship_state": "relationships",
+    "thread_state": "threads",
+    "inventory_state": "inventory",
+    "commitment_state": "commitments",
+}
+
+
+def state_target_record(
+    state: dict[str, Any], target_type: str, target_id: str
+) -> dict[str, Any]:
+    """Scene Cardで許可された現在状態の対象を決定的に解決する。"""
+    if target_type == "timeline_state":
+        if target_id != "timeline":
+            raise ContractError("timeline_stateのtarget_idはtimelineが必要です")
+        record = state.get("timeline")
+    else:
+        source_name = _STATE_TARGET_SOURCES.get(target_type)
+        if source_name is None:
+            raise ContractError("unknown state target_type")
+        source = state.get(source_name)
+        record = source.get(target_id) if isinstance(source, dict) else None
+    if not isinstance(record, dict):
+        raise ContractError("current Stateの対象が存在しません")
+    return record
+
+
 def build_scene_commit_candidate(
     scene_prose: dict[str, Any],
     scene_card: dict[str, Any],

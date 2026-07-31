@@ -4,9 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .commit_recovery import recover_pending_commit
 from .run_state import RunStateStore
 from .series_contracts import ContractError
-from .volume_publication_stage import VolumePublicationStageService
 
 
 def execute_publication_recovery(
@@ -18,6 +18,4 @@ def execute_publication_recovery(
     current = RunStateStore(root).load()
     if state is not None and current != state:
         raise ContractError("公開recovery開始前にrun-stateが変更されています")
-    return VolumePublicationStageService(root).recover_pending(
-        updated_at=current["updated_at"],
-    )
+    return recover_pending_commit(root)

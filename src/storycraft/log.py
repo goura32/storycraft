@@ -1,17 +1,17 @@
-"""進捗ログ。標準出力とファイルの両方へ出す。"""
+"""進捗ログ。公開CLIの標準ストリームには出さず、必要時だけファイルへ出す。"""
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 
 
 def get_logger() -> logging.Logger:
     log = logging.getLogger("storycraft")
     if not log.handlers:
-        h = logging.StreamHandler(sys.stdout)
-        h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        log.addHandler(h)
+        # stdout/stderr are a machine-readable public CLI protocol.  Keep the
+        # default logger silent; callers that need diagnostics opt into an
+        # explicit workspace file handler below.
+        log.addHandler(logging.NullHandler())
         log.setLevel(logging.INFO)
         log.propagate = False
     return log

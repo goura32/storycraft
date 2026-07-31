@@ -1,165 +1,69 @@
-"""Storycraft Version 1 series_plan Stage実行。"""
+"""V2 selection-based planning-stage adapter."""
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from .reviewed_candidate_stage import (
-    ReviewedCandidateSpec,
-    ReviewedCandidateStageRunner,
-    fsync_directory,
-    read_json,
-    utc_now,
-    write_json_new,
-)
-from .run_state import RunStateStore, validate_run_state
-from .error_sanitizer import safe_exception_message
-from .series_contracts import (
-    ContractError,
-    ContractValidator,
-    StoryModel,
-)
-from .stage_transition import advance_run_state
+from .artifact_ids import reserve_counter
+from .candidate_stage import CandidateStageRunner, CandidateStageSpec
+from .selection_authority import resolve_selection
+from .selection_snapshot import SelectionSnapshotStore
+from .series_contracts import ContractError
 from .workspace import validate_workspace
 
 
-_SPEC = {
-    "stage": "series_plan",
-    "artifact_type": "series_plan",
-    "review_category": "series_plan_quality",
-    "next_stage": "volume_plan",
-    "model_stage": "series_plan",
-}
-
-
 class SeriesPlanStageService:
-    """シリーズ計画工程：全巻の役割、巻数、結末必須事項の進行・解決予定を作る。"""
-
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.expanduser()
-        self.state_store = RunStateStore(self.workspace_root)
 
-    def run(
-        self,
-        model: StoryModel | None,
-        *,
-        workspace_already_validated: bool = False,
-        updated_at: str | None = None,
-    ) -> dict[str, Any]:
+    def run(self, model: Any | None, *, workspace_already_validated: bool = False, updated_at: str | None = None) -> dict[str, Any]:
         if not workspace_already_validated:
-            from .workspace import validate_workspace
             validate_workspace(self.workspace_root)
-
-        state = self.state_store.load()
-
-        if state["current_stage"] != "series_plan":
-            raise ContractError(
-                "現在のrun-stateはseries_planではありません: "
-                f"expected='series_plan', actual={state['current_stage']!r}"
-            )
-        if state["status"] != "running":
-            raise ContractError(
-                "series_planを実行できるrun statusではありません: "
-                f"{state['status']!r}"
-            )
-        if state["active_candidate"] is not None:
-            raise ContractError(
-                "未処理のactive_candidateがあります"
-            )
-        if state["pending_commit"] is not None:
-            raise ContractError(
-                "pending_commitがあるためseries_planを開始できません"
-            )
-
-        if model is None:
-            raise ContractError(
-                "series_plan生成にはStoryModelが必要です"
-            )
-
-        timestamp = updated_at or utc_now()
-        brief = read_json(self.workspace_root / "input/brief.json")
-        initial_design = read_json(
-            self.workspace_root / "design/initial/v0001/initial-design.json"
+        if updated_at is None:
+            raise ContractError("series_planの確定時刻が必要です")
+        from .run_state import RunStateStore
+        state = RunStateStore(self.workspace_root).load()
+        if state["current_stage"] != "series_plan" or state["status"] != "running":
+            raise ContractError("現在のrun-stateは実行可能なseries_planではありません")
+        selection_id = state["current_selection_id"]
+        if not isinstance(selection_id, str):
+            raise ContractError("series_planには入力selectionが必要です")
+        snapshot = SelectionSnapshotStore(self.workspace_root).load(selection_id)
+        required_slots = {"request", "settings", "initial_design", "current_state"}
+        if not required_slots.issubset(snapshot["slots"]) or "initial_design_adoption" not in snapshot["slots"]:
+            raise ContractError("series_plan入力selectionに必須slotがありません")
+        bundle = dict(snapshot)
+        bundle["slots"] = {slot: snapshot["slots"][slot] for slot in required_slots}
+        inputs = resolve_selection(self.workspace_root, bundle)
+        self._require_inputs(inputs, state["current_target"])
+        context = self._context(inputs, state["current_target"])
+        target = dict(state["current_target"])
+        spec = CandidateStageSpec(
+            stage="series_plan", artifact_kind="series-plan", next_stage="volume_plan",
+            next_target={"volume_number": 1}, content_id_factory=self._content_id,
         )
-        context = {
-            "brief": deepcopy(brief),
-            "initial_design": deepcopy(initial_design),
-        }
+        return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 
-        runner = ReviewedCandidateStageRunner(
-            self.workspace_root,
-            _SPEC,
-        )
+    @staticmethod
+    def _payload(record: dict[str, Any], slot: str) -> dict[str, Any]:
+        value = record.get("payload") if slot == "settings" else record.get("content")
+        if not isinstance(value, dict):
+            raise ContractError(f"series_plan入力{slot}の内容が不正です")
+        return value
 
-        return runner.run(
-            model=model,
-            context=context,
-            validator=lambda c: ContractValidator._validate_series_plan(c, brief, initial_design, "gen-000001"),
-            adopter=lambda c: self._adopt_series_plan(
-                self.workspace_root, c, brief, timestamp
-            ),
-            next_target={
-                "series": state["workspace_id"],
-                "basis_generation_id": "gen-000001",
-                "volume_number": 1,
-            },
-            next_stage="volume_plan",
-            after_adoption=self._after_series_plan_adoption,
-            updated_at=timestamp,
-        )
+    def _require_inputs(self, inputs: dict[str, dict[str, Any]], target: dict[str, Any]) -> None:
+        required = {"request", "settings", "initial_design", "current_state"}
+        if not required.issubset(inputs):
+            raise ContractError("series_plan入力selectionに必須slotがありません")
 
-    def _adopt_series_plan(
-        self,
-        workspace_root: Path,
-        candidate: dict[str, Any],
-        brief: dict[str, Any],
-        timestamp: str,
-    ) -> None:
-        """Series Plan候補を採用する。"""
-        from .reviewed_candidate_stage import (
-            fsync_directory,
-            read_json,
-            write_json_new,
-        )
 
-        adopted = {
-            "schema_version": 1,
-            "series_plan_id": "series-plan-000001",
-            "version": 1,
-            "brief_id": "brief-000001",
-            "created_at": timestamp,
-            **candidate,
-        }
+    def _context(self, inputs: dict[str, dict[str, Any]], target: dict[str, Any]) -> dict[str, Any]:
+        return {"request": self._payload(inputs["request"], "request"), "settings": self._payload(inputs["settings"], "settings"), "initial_design": self._payload(inputs["initial_design"], "initial_design"), "current_state": self._payload(inputs["current_state"], "current_state")}
 
-        # Schema validation
-        from .series_contracts import ContractValidator
-        brief_obj = read_json(self.workspace_root / "input/brief.json")
-        initial_design = read_json(
-            self.workspace_root / "design/initial/v0001/initial-design.json"
-        )
-        ContractValidator._validate_series_plan(
-            adopted,
-            brief_obj,
-            read_json(self.workspace_root / "design/initial/v0001/initial-design.json"),
-            "gen-000001",
-            adopted=True,
-        )
 
-        # series-plan.json として保存
-        plan_path = self.workspace_root / "design/series-plans" / "series-plan-000001" / "series-plan.json"
-        plan_path.parent.mkdir(parents=True, exist_ok=True)
-        write_json_new(plan_path, adopted)
-        fsync_directory(plan_path.parent)
+    def _content_id(self, _root: Path, target: dict[str, Any]) -> str:
+        return f"series-plan-{reserve_counter(self.workspace_root, 'next_series_plan'):06d}"
 
-    def _after_series_plan_adoption(
-        self,
-        candidate: dict[str, Any],
-        adopted_state: dict[str, Any],
-        timestamp: str,
-    ) -> dict[str, Any]:
-        """シリーズ計画採用後の状態更新。"""
-        return adopted_state
 
 
 def create_series_plan_stage_service(workspace_root: Path) -> "SeriesPlanStageService":

@@ -16,7 +16,17 @@ class Stage(StrEnum):
     VOLUME_PUBLICATION = "volume_publication"
 
 STAGES = tuple(stage.value for stage in Stage)
-ACTIVE_TEMPLATE_STAGES: tuple[str, ...] = ("initial_design",)
+ACTIVE_TEMPLATE_STAGES: tuple[str, ...] = (
+    "request_intake",
+    "initial_design",
+    "series_plan",
+    "volume_plan",
+    "chapter_plan",
+    "scene_plan",
+    "scene_card",
+    "scene_prose",
+    "scene_continuity",
+)
 INPUT_STAGES: tuple[Stage, ...] = ()
 INITIAL_DESIGN_STAGES = (Stage.INITIAL_DESIGN,)
 PLANNING_STAGES = (Stage.SERIES_PLAN, Stage.VOLUME_PLAN, Stage.CHAPTER_PLAN, Stage.SCENE_PLAN)

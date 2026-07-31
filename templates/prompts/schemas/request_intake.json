@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storycraft request-intake candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "genre", "premise", "required_elements", "forbidden_elements", "ending_preference", "volume_count", "language"],
+  "properties": {
+    "title": {"type": "string", "minLength": 1},
+    "genre": {"type": "string", "minLength": 1},
+    "premise": {"type": "string", "minLength": 1},
+    "required_elements": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "forbidden_elements": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "ending_preference": {"type": "string", "minLength": 1},
+    "volume_count": {"type": "integer", "minimum": 1},
+    "language": {"type": "string", "minLength": 1}
+  }
+}

@@ -1,36 +1,24 @@
-"""run-state v3 の形と工程横断の不変条件を検証する。"""
+"""run-state v3 の閉じた形と工程横断の不変条件を検証する。"""
 from __future__ import annotations
 
 from datetime import datetime
 import json
 import os
 from pathlib import Path, PurePosixPath
-import re
 from typing import Any
 
+from .artifact_registry import artifact_directory, artifact_spec
 from .series_contracts import ContractError
 
 
 RUNNING_STAGES = frozenset({
-    "request_intake",
-    "initial_design",
-    "series_plan",
-    "volume_plan",
-    "chapter_plan",
-    "scene_plan",
-    "scene_card",
-    "scene_prose",
-    "scene_continuity",
-    "scene_commit",
+    "request_intake", "initial_design", "series_plan", "volume_plan", "chapter_plan",
+    "scene_plan", "scene_card", "scene_prose", "scene_continuity", "scene_commit",
     "volume_publication",
 })
-
-
 _STAGE_TARGET_FIELDS: dict[str, frozenset[str]] = {
-    "request_intake": frozenset(),
-    "initial_design": frozenset(),
-    "series_plan": frozenset(),
-    "volume_plan": frozenset({"volume_number"}),
+    "request_intake": frozenset(), "initial_design": frozenset(),
+    "series_plan": frozenset(), "volume_plan": frozenset({"volume_number"}),
     "chapter_plan": frozenset({"volume_number", "chapter_number"}),
     "scene_plan": frozenset({"volume_number", "chapter_number", "scene_number"}),
     "scene_card": frozenset({"volume_number", "chapter_number", "scene_number"}),
@@ -39,53 +27,40 @@ _STAGE_TARGET_FIELDS: dict[str, frozenset[str]] = {
     "scene_commit": frozenset({"volume_number", "chapter_number", "scene_number"}),
     "volume_publication": frozenset({"volume_number"}),
 }
-
-# V1 (schema_version 3) required fields: note that run_id and stop_reason are removed.
 _REQUIRED_FIELDS = frozenset({
-    "schema_version",
-    "workspace_id",
-    "status",
-    "last_error",
-    "current_stage",
-    "current_target",
-    "current_selection_id",
-    "active_candidate",
-    "active_scene_id",
-    "pending_commit",
-    "published_volumes",
-    "created_at",
-    "updated_at",
+    "schema_version", "workspace_id", "status", "last_error", "current_stage",
+    "current_target", "current_selection_id", "pending_commit", "published_volumes",
+    "created_at", "updated_at",
 })
 _ERROR_CODES = frozenset({
-    "invalid_response_limit",
-    "technical_retry_exhausted",
-    "internal_error",
-    "authority_inconsistency",
-    "publication_invalid",
-    "workspace_invalid",
+    "invalid_response_limit", "technical_retry_exhausted", "internal_error",
+    "authority_inconsistency", "publication_invalid",
 })
+_CONTENT_KINDS = frozenset({
+    "request", "initial-design", "series-plan", "volume-plan", "chapter-plan",
+    "scene-plan", "scene-card", "scene-prose", "continuity-update",
+})
+_TARGET_FIELDS = frozenset({"artifact_id", "artifact_kind", "staging_path", "final_path", "status"})
 
 
 def validate_run_state(state: object) -> dict[str, Any]:
-    """run-state v3 の形と工程横断の不変条件を検証する。"""
+    """Validate the exact persisted v3 run-state contract."""
     if not isinstance(state, dict):
         raise ContractError("run-stateはオブジェクトでなければなりません")
-    # Required fields must be present; extra fields are allowed.
-    missing = _REQUIRED_FIELDS - set(state.keys())
-    if missing:
-        raise ContractError(f"run-stateに必須フィールドがありません: {missing}")
+    _require_exact_fields(state, _REQUIRED_FIELDS, "run-state")
     if state["schema_version"] != 3:
         raise ContractError("run-state.schema_versionは3でなければなりません")
     _require_id(state["workspace_id"], "ws-", "workspace_id")
-    # run_id is not required in v3
     _validate_timestamps(state)
     _validate_published_volumes(state["published_volumes"])
-
     status = state["status"]
     if status == "running":
-        _validate_running(state)
+        if state["last_error"] is not None:
+            raise ContractError("runningではlast_errorはnullでなければなりません")
+        _validate_current_work(state, allow_null_selection=state["current_stage"] == "request_intake")
     elif status == "blocked":
-        _validate_blocked(state)
+        _validate_error(state["last_error"])
+        _validate_current_work(state, allow_null_selection=True)
     elif status == "completed":
         _validate_completed(state)
     else:
@@ -93,22 +68,8 @@ def validate_run_state(state: object) -> dict[str, Any]:
     return state
 
 
-def _validate_running(state: dict[str, Any]) -> None:
-    # runningではlast_errorはnullでなければならない（stop_reasonは存在しない）
-    if state["last_error"] is not None:
-        raise ContractError("runningではlast_errorはnullでなければなりません")
-    _validate_current_work(state, allow_null_selection=state["current_stage"] == "request_intake")
-
-
-def _validate_blocked(state: dict[str, Any]) -> None:
-    # blockedではlast_errorが必要で、そのcodeがエラーコードのいずれかであること
-    _validate_error(state["last_error"])
-    _validate_current_work(state, allow_null_selection=True)
-
-
 def _validate_completed(state: dict[str, Any]) -> None:
-    # completedでは以下のフィールドはnullでなければならない
-    for field in ("last_error", "current_stage", "current_target", "active_candidate", "active_scene_id", "pending_commit"):
+    for field in ("last_error", "current_stage", "current_target", "pending_commit"):
         if state[field] is not None:
             raise ContractError(f"completedでは{field}はnullでなければなりません")
     _require_id(state["current_selection_id"], "selection-", "current_selection_id")
@@ -120,17 +81,14 @@ def _validate_current_work(state: dict[str, Any], *, allow_null_selection: bool)
     stage = state["current_stage"]
     if stage not in RUNNING_STAGES:
         raise ContractError(f"run-state.current_stageがV3工程ではありません: {stage!r}")
-    target = state["current_target"]
-    _validate_target(stage, target)
+    _validate_target(stage, state["current_target"])
     selection_id = state["current_selection_id"]
     if selection_id is None:
         if not (allow_null_selection and stage == "request_intake"):
             raise ContractError("current_selection_idはrequest_intake以外で必要です")
     else:
         _require_id(selection_id, "selection-", "current_selection_id")
-    _validate_active_candidate(state["active_candidate"])
-    _validate_optional_id(state["active_scene_id"], "scene-", "active_scene_id")
-    _validate_pending_commit(state["pending_commit"])
+    _validate_pending_commit(state["pending_commit"], state["published_volumes"])
 
 
 def _validate_target(stage: str, target: object) -> None:
@@ -145,61 +103,148 @@ def _validate_target(stage: str, target: object) -> None:
             raise ContractError(f"run-state.current_target.{field}は1以上の整数でなければなりません")
 
 
-def _validate_active_candidate(value: object) -> None:
-    if value is None:
-        return
-    if not isinstance(value, dict):
-        raise ContractError("active_candidateはnullまたはオブジェクトでなければなりません")
-    _require_exact_fields(value, {"candidate_id", "stage", "version", "input_selection_id", "review_record_id"}, "active_candidate")
-    _require_id(value["candidate_id"], "candidate-", "active_candidate.candidate_id")
-    if value["stage"] not in RUNNING_STAGES - {"volume_publication"}:
-        raise ContractError("active_candidate.stageが不正です")
-    if not isinstance(value["version"], int) or isinstance(value["version"], bool) or value["version"] < 1:
-        raise ContractError("active_candidate.versionは1以上の整数でなければなりません")
-    _require_id(value["input_selection_id"], "selection-", "active_candidate.input_selection_id")
-    if value["review_record_id"] is not None:
-        _require_id(value["review_record_id"], "review-", "active_candidate.review_record_id")
-
-
-def _validate_pending_commit(value: object) -> None:
+def _validate_pending_commit(value: object, published_volumes: object) -> None:
     if value is None:
         return
     if not isinstance(value, dict):
         raise ContractError("pending_commitはnullまたはオブジェクトでなければなりません")
     _require_exact_fields(value, {"kind", "staging_path", "input_selection_id", "output_selection_id", "state_update", "targets"}, "pending_commit")
-    if value["kind"] not in {"candidate_adoption", "scene_commit", "volume_publication"}:
+    kind = value["kind"]
+    if kind not in {"candidate_adoption", "scene_commit", "volume_publication"}:
         raise ContractError("pending_commit.kindが不正です")
-    if not isinstance(value["staging_path"], str) or not value["staging_path"].startswith("runtime/staging/"):
+    _validate_staging_root(value["staging_path"])
+    targets = _validate_manifest_targets(value["targets"], value["staging_path"])
+    input_selection_id = value["input_selection_id"]
+    output_selection_id = value["output_selection_id"]
+    if kind == "volume_publication":
+        _require_id(input_selection_id, "selection-", "pending_commit.input_selection_id")
+        if output_selection_id is not None:
+            raise ContractError("volume_publicationのoutput_selection_idはnullでなければなりません")
+    else:
+        _require_id(output_selection_id, "selection-", "pending_commit.output_selection_id")
+        if input_selection_id is not None:
+            _require_id(input_selection_id, "selection-", "pending_commit.input_selection_id")
+        elif not (kind == "candidate_adoption" and _is_bootstrap_request_adoption(targets)):
+            raise ContractError("input_selection_id=nullはbootstrap request adoptionだけに許可されます")
+    _validate_target_set(kind, targets)
+    _validate_state_update(kind, value["state_update"], input_selection_id, output_selection_id, targets, published_volumes)
+
+
+def _validate_staging_root(value: object) -> None:
+    _validate_manifest_path(value, "pending_commit.staging_path")
+    if not isinstance(value, str) or not value.startswith("runtime/staging/"):
         raise ContractError("pending_commit.staging_pathが不正です")
-    _require_id(value["input_selection_id"], "selection-", "pending_commit.input_selection_id")
-    if value["output_selection_id"] is not None:
-        _require_id(value["output_selection_id"], "selection-", "pending_commit.output_selection_id")
-    if not isinstance(value["state_update"], dict):
-        raise ContractError("pending_commit.state_updateはオブジェクトでなければなりません")
-    targets = value["targets"]
-    if not isinstance(targets, list) or not targets:
+
+
+def _validate_manifest_targets(value: object, staging_root: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
         raise ContractError("pending_commit.targetsは空でない配列でなければなりません")
-    for target in targets:
+    assert isinstance(staging_root, str)
+    targets: list[dict[str, Any]] = []
+    ids: set[str] = set()
+    paths: set[str] = set()
+    for target in value:
         if not isinstance(target, dict):
             raise ContractError("pending_commit.targetsの要素が不正です")
-        _require_exact_fields(target, {"artifact_id", "artifact_kind", "staging_path", "final_path", "sha256", "status"}, "pending_commit.targets要素")
-        if not isinstance(target["artifact_id"], str) or not target["artifact_id"]:
-            raise ContractError("pending_commit.targets.artifact_idが不正です")
-        if not isinstance(target["artifact_kind"], str) or not target["artifact_kind"]:
-            raise ContractError("pending_commit.targets.artifact_kindが不正です")
+        _require_exact_fields(target, _TARGET_FIELDS, "pending_commit.targets要素")
         _validate_manifest_path(target["staging_path"], "pending_commit.targets.staging_path")
         _validate_manifest_path(target["final_path"], "pending_commit.targets.final_path")
-        if not isinstance(target["sha256"], str) or re.fullmatch(r"[0-9a-f]{64}", target["sha256"]) is None:
-            raise ContractError("pending_commit.targets.sha256が不正です")
+        if not target["staging_path"].startswith(staging_root + "/"):
+            raise ContractError("pending_commit.targets.staging_pathはmanifest staging配下でなければなりません")
         if target["status"] not in {"pending", "finalized"}:
             raise ContractError("pending_commit.targets.statusが不正です")
+        artifact_id = target["artifact_id"]
+        if not isinstance(artifact_id, str) or not artifact_id or artifact_id in ids:
+            raise ContractError("pending_commit.targets.artifact_idが不正です")
+        if target["final_path"] in paths:
+            raise ContractError("pending_commit.targets.final_pathが重複しています")
+        _validate_canonical_target(target)
+        ids.add(artifact_id)
+        paths.add(target["final_path"])
+        targets.append(target)
+    return targets
+
+
+def _validate_target_set(kind: str, targets: list[dict[str, Any]]) -> None:
+    kinds = [target["artifact_kind"] for target in targets]
+    if kind == "candidate_adoption":
+        expected = {"adoption", "selection"}
+        content = [item for item in kinds if item in _CONTENT_KINDS]
+        generations = [item for item in kinds if item == "generation"]
+        valid_content = (
+            len(content) == 1 and not generations
+            or content == ["initial-design"] and len(generations) == 1
+        )
+        if set(kinds) - _CONTENT_KINDS - expected - {"generation"} or not valid_content or kinds.count("adoption") != 1 or kinds.count("selection") != 1:
+            raise ContractError("candidate_adoptionのtargetsが不正です")
+    elif kind == "scene_commit":
+        if set(kinds) != {"scene", "generation", "scene-commit", "selection"} or len(targets) != 4:
+            raise ContractError("scene_commitのtargetsが不正です")
+    elif kinds != ["volume-publication"]:
+        raise ContractError("volume_publicationのtargetsが不正です")
+
+
+def _is_bootstrap_request_adoption(targets: list[dict[str, Any]]) -> bool:
+    return any(target["artifact_kind"] == "request" for target in targets)
+
+
+def _validate_state_update(
+    kind: str, value: object, input_selection_id: object, output_selection_id: object,
+    targets: list[dict[str, Any]], published_volumes: object,
+) -> None:
+    if not isinstance(value, dict):
+        raise ContractError("pending_commit.state_updateはオブジェクトでなければなりません")
+    fields = {"current_selection_id", "current_stage", "current_target"}
+    completes = kind == "volume_publication" and value.get("status") == "completed"
+    if kind == "volume_publication":
+        fields.add("published_volumes")
+    if completes:
+        fields.update({"status", "last_error"})
+    _require_exact_fields(value, fields, "pending_commit.state_update")
+    expected_selection = input_selection_id if kind == "volume_publication" else output_selection_id
+    if value["current_selection_id"] != expected_selection:
+        raise ContractError("pending_commit.state_update.current_selection_idが不正です")
+    if kind != "volume_publication" and not any(
+        target["artifact_kind"] == "selection" and target["artifact_id"] == output_selection_id
+        for target in targets
+    ):
+        raise ContractError("pending_commit.output_selection_idは後続selection targetと一致しなければなりません")
+    stage = value["current_stage"]
+    if completes:
+        if value["last_error"] is not None or stage is not None or value["current_target"] is not None:
+            raise ContractError("最終volume_publicationのstate_updateが不正です")
+    else:
+        if stage not in RUNNING_STAGES:
+            raise ContractError("pending_commit.state_update.current_stageが不正です")
+        _validate_target(stage, value["current_target"])
+    if kind == "volume_publication":
+        _validate_published_volumes(value["published_volumes"])
+        publication = next(target for target in targets if target["artifact_kind"] == "volume-publication")
+        entries = value["published_volumes"]
+        if not entries:
+            raise ContractError("volume_publication.state_update.published_volumesが不正です")
+        if not isinstance(published_volumes, list) or entries != [*published_volumes, entries[-1]]:
+            raise ContractError("volume_publication.state_update.published_volumesは既存値末尾への一件追加でなければなりません")
+        if not entries or entries[-1]["publication_id"] != publication["artifact_id"]:
+            raise ContractError("volume_publication.state_update.published_volumesが不正です")
+
+
+def _validate_canonical_target(target: dict[str, Any]) -> None:
+    artifact_id, kind, final_path = target["artifact_id"], target["artifact_kind"], target["final_path"]
+    try:
+        artifact_spec(kind).match_id(artifact_id)
+        expected_path = artifact_directory(kind, artifact_id).as_posix()
+    except ContractError as exc:
+        raise ContractError("pending_commit.targetsのartifact ID、kind、final_pathが正本配置と一致しません") from exc
+    if final_path != expected_path:
+        raise ContractError("pending_commit.targetsのartifact ID、kind、final_pathが正本配置と一致しません")
 
 
 def _validate_manifest_path(value: object, label: str) -> None:
     if not isinstance(value, str) or not value:
         raise ContractError(f"{label}が不正です")
     path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or str(path) != value:
+    if path.is_absolute() or ".." in path.parts or str(path) != value or value.startswith("./"):
         raise ContractError(f"{label}はworkspace内の正規相対pathでなければなりません")
 
 
@@ -253,12 +298,6 @@ def _require_id(value: object, prefix: str, label: str) -> None:
         raise ContractError(f"{label}が不正です")
 
 
-def _validate_optional_id(value: object, prefix: str, label: str) -> None:
-    if value is not None:
-        _require_id(value, prefix, label)
-
-
-# v3 は manifest 自体で正常な中断を表現する。旧特殊状態は受け付けない。
 def validate_recovery_run_state(state: object) -> dict[str, Any]:
     return validate_run_state(state)
 

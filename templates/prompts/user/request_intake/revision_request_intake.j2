@@ -1,0 +1,19 @@
+# request_intake の修正
+
+候補依頼を確認結果に従って修正する。入力キーワードと設定を唯一の根拠とし、不要な事実を追加しない。
+
+## 入力
+
+{{ context | tojson }}
+
+## 候補
+
+{{ candidate | tojson }}
+
+## 確認
+
+{{ critique | tojson }}
+
+## 出力スキーマ
+
+{{ output_schema }}

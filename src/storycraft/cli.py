@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 from .run_state import RunStateStore
 from .series_contracts import ContractError
@@ -16,6 +16,15 @@ from .workspace_lock import WorkspaceLockBusy
 
 class ValidationFailed(ContractError):
     pass
+
+
+class CliArgumentError(ContractError):
+    pass
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise CliArgumentError(message)
 
 
 def _load_object(path: str) -> dict[str, Any]:
@@ -44,13 +53,15 @@ def _pending_summary(pending: object) -> dict[str, object] | None:
 
 
 def _common(state: dict[str, Any]) -> dict[str, object]:
+    completed = state["status"] == "completed"
     return {
         "workspace_id": state["workspace_id"],
         "status": state["status"],
         "current_stage": state["current_stage"],
-        "current_target": state["current_target"],
+        "current_target": None if completed else state["current_target"],
         "current_selection_id": state["current_selection_id"],
-        "pending_commit": _pending_summary(state["pending_commit"]),
+        "last_error": state["last_error"],
+        "pending_commit": None if completed else _pending_summary(state["pending_commit"]),
     }
 
 
@@ -79,12 +90,12 @@ def cmd_init(args: argparse.Namespace) -> dict[str, object]:
 def cmd_status(args: argparse.Namespace) -> dict[str, object]:
     root = Path(args.workspace).expanduser()
     state = RunStateStore(root).load()
-    result = {**_common(state), "runtime_lock": None, "run_state_path": "runtime/run-state.json", "manifest_path": None}
-    return result
+    return _common(state)
 
 
 def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
     root = Path(args.workspace).expanduser()
+    state = RunStateStore(root).load()
     try:
         validate_workspace(root)
         passed = True
@@ -104,7 +115,7 @@ def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
         checks[0]["detail"] = detail  # 最初の項目に詳細を入れる
     if not passed:
         raise ValidationFailed("validation_failed")
-    return {"checks": checks}
+    return {**_common(state), "checks": checks}
 
 
 def cmd_run(args: argparse.Namespace) -> dict[str, object]:
@@ -114,7 +125,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="storycraft")
+    parser = _ArgumentParser(prog="storycraft")
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
     init.add_argument("--workspace", required=True)
@@ -132,8 +143,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
     try:
+        args = _parser().parse_args(argv)
         if args.command == "init":
             result = cmd_init(args)
         elif args.command == "status":
@@ -143,27 +154,40 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = cmd_run(args)
     except WorkspaceLockBusy as exc:
-        # V1 ロック未利用エラー: exit code 70, JSON {"code": "lock_unavailable", "message": "..."}
-        print(json.dumps({"code": "lock_unavailable", "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
-        return 70
+        _emit_error("lock_unavailable", str(exc))
+        return 75
     except RunUnavailable as exc:
-        # V1 ブロックエラー: exit code 4, JSON {"code": "blocked", "message": "..."}
-        print(json.dumps({"code": "blocked", "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        code = str(exc) if str(exc) in _ERROR_CODES else "blocked"
+        _emit_error(code, str(exc))
         return 4
     except ValidationFailed as exc:
-        # V1 バリデーション失敗: exit code 5, JSON {"code": "validation_failed", "message": "..."}
-        print(json.dumps({"code": "validation_failed", "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        _emit_error("validation_failed", str(exc))
         return 5
     except ContractError as exc:
-        # V1 引数エラー: exit code 2, JSON {"code": "invalid_argument", "message": "..."}
-        print(json.dumps({"code": "invalid_argument", "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        _emit_error("invalid_argument", str(exc))
         return 2
+    except Exception as exc:
+        _emit_error("internal_error", str(exc))
+        return 70
     if args.json:
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
     else:
-        # 人間向け出力（簡易）
-        print(f"workspace: {args.workspace} / status: {result['status']} / stage: {result.get('current_stage')} / target: {result.get('current_target')} / selection: {result.get('current_selection_id')}")
+        if args.command == "init":
+            print(f"workspace created: {args.workspace}")
+        else:
+            print(f"workspace: {args.workspace} / status: {result['status']} / stage: {result.get('current_stage')} / target: {result.get('current_target')} / selection: {result.get('current_selection_id')}")
     return 0
+
+
+_ERROR_CODES = {
+    "invalid_argument", "blocked", "validation_failed", "internal_error",
+    "lock_unavailable", "invalid_response_limit", "technical_retry_exhausted",
+    "authority_inconsistency", "publication_invalid",
+}
+
+
+def _emit_error(code: str, message: str) -> None:
+    print(json.dumps({"ok": False, "code": code, "message": message}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
 
 
 def console_main() -> None:

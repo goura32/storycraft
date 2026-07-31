@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from storycraft.series_model import OpenAIStoryModel
+from storycraft.stages import ACTIVE_TEMPLATE_STAGES
 
 
 class FakeTemplateLoader:
@@ -75,6 +76,18 @@ class CaptureClient:
 
 
 class StructuredOutputTests(unittest.TestCase):
+    def test_every_public_llm_stage_has_all_v2_templates_and_a_candidate_schema(self) -> None:
+        self.assertIn("request_intake", ACTIVE_TEMPLATE_STAGES)
+        for stage in ACTIVE_TEMPLATE_STAGES:
+            with self.subTest(stage=stage, operation="generate"):
+                rendered = OpenAIStoryModel._render("generate", stage, context={})
+                self.assertIn("candidate-response-v1", rendered)
+            with self.subTest(stage=stage, operation="review"):
+                rendered = OpenAIStoryModel._render("review", stage, context={}, candidate={})
+                self.assertIn("review-response-v1", rendered)
+            with self.subTest(stage=stage, operation="revise"):
+                rendered = OpenAIStoryModel._render("revise", stage, context={}, candidate={}, critique={})
+                self.assertIn("candidate-response-v1", rendered)
     def test_response_format_uses_strict_stage_schema(
         self,
     ) -> None:
@@ -102,33 +115,14 @@ class StructuredOutputTests(unittest.TestCase):
                 ),
             ],
         )
-        self.assertEqual(
-            actual,
-            {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": (
-                        "storycraft_generate_"
-                        "initial_concept"
-                    ),
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "additionalProperties": (
-                            False
-                        ),
-                        "required": ["value"],
-                        "properties": {
-                            "value": {
-                                "type": "string",
-                            },
-                        },
-                    },
-                },
-            },
-        )
+        schema = actual["json_schema"]["schema"]
+        self.assertEqual(actual["type"], "json_schema")
+        self.assertTrue(actual["json_schema"]["strict"])
+        self.assertEqual(schema["properties"]["schema_version"], {"const": "candidate-response-v1"})
+        self.assertEqual(schema["properties"]["artifact_kind"], {"const": "initial-concept"})
+        self.assertEqual(schema["properties"]["payload"]["required"], ["value"])
 
-    def test_scene_prose_critique_keeps_json_mode(
+    def test_scene_prose_critique_uses_closed_review_wrapper(
         self,
     ) -> None:
         with patch(
@@ -147,12 +141,8 @@ class StructuredOutputTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(
-            actual,
-            {
-                "type": "json_object",
-            },
-        )
+        self.assertEqual(actual["type"], "json_schema")
+        self.assertEqual(actual["json_schema"]["schema"]["properties"]["schema_version"], {"const": "review-response-v1"})
 
     def test_call_forwards_stage_schema_to_client(
         self,
@@ -187,33 +177,9 @@ class StructuredOutputTests(unittest.TestCase):
             len(client.calls),
             1,
         )
-        self.assertEqual(
-            client.calls[0][
-                "response_format"
-            ],
-            {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": (
-                        "storycraft_generate_"
-                        "initial_concept"
-                    ),
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "additionalProperties": (
-                            False
-                        ),
-                        "required": ["value"],
-                        "properties": {
-                            "value": {
-                                "type": "string",
-                            },
-                        },
-                    },
-                },
-            },
-        )
+        schema = client.calls[0]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(schema["properties"]["schema_version"], {"const": "candidate-response-v1"})
+        self.assertEqual(schema["properties"]["payload"]["required"], ["value"])
         self.assertEqual(
             client.calls[0]["seed"],
             1,

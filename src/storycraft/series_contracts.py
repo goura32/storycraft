@@ -1637,6 +1637,57 @@ class ContractValidator:
             )
 
     @staticmethod
+    def _validate_initial_design_candidate(
+        value: dict[str, Any],
+        brief: dict[str, Any],
+    ) -> None:
+        """V1 Initial Design Candidateを検証する。"""
+        if not isinstance(value, dict):
+            raise ContractError(
+                "Initial DesignはJSON objectでなければなりません"
+            )
+
+        schema = get_template_loader().load_schema_object(
+            "generate",
+            "initial_design",
+        )
+        validator = Draft202012Validator(schema)
+        errors = sorted(
+            validator.iter_errors(value),
+            key=lambda error: (
+                list(error.absolute_path),
+                error.message,
+            ),
+        )
+        if errors:
+            error = errors[0]
+            location = ".".join(
+                str(part) for part in error.absolute_path
+            ) or "<root>"
+            raise ContractError(
+                "Initial Design契約違反: "
+                f"{location}: {error.message}"
+            )
+
+        ContractValidator._validate_brief(brief)
+
+        serialized = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        violated = [
+            item
+            for item in brief["avoid"]
+            if item and item in serialized
+        ]
+        if violated:
+            raise ContractError(
+                "Initial DesignがBriefのavoidを含みます: "
+                + ", ".join(violated)
+            )
+
+    @staticmethod
     def _validate_series_plan(
         value: dict[str, Any],
         brief: dict[str, Any],
@@ -4014,11 +4065,53 @@ class ContractValidator:
 
 
     @staticmethod
+    def _validate_scene_commit_candidate(
+        candidate: dict[str, Any],
+        brief: dict[str, Any],
+        initial_design: dict[str, Any],
+        series_plan: dict[str, Any],
+        volume_plan: dict[str, Any],
+        chapter_plan: dict[str, Any],
+        scene_plan: dict[str, Any],
+        scene_card: dict[str, Any],
+        scene_prose: dict[str, Any],
+        continuity_update: dict[str, Any],
+        current_generation: dict[str, Any],
+        volume_number: int,
+        chapter_number: int,
+        scene_number: int,
+    ) -> None:
+        """Scene Commit候補を検証する。"""
+        if not isinstance(candidate, dict):
+            raise ContractError("Scene Commit CandidateはJSON objectでなければなりません")
+
+        required = [
+            "schema_version", "scene_commit_id", "version", "brief_id",
+            "scene_id", "scene_card_id", "scene_prose_id", "continuity_update_id",
+            "basis_generation_id", "volume_number", "chapter_number", "scene_number",
+            "created_at", "scene_prose", "scene_card", "continuity_update"
+        ]
+        for field in required:
+            if field not in candidate:
+                raise ContractError(f"Scene Commit Candidateに必須フィールドがありません: {field}")
+
+        if candidate["schema_version"] != 1:
+            raise ContractError("Scene Commit Candidateのschema_versionは1でなければなりません")
+
+        if candidate["volume_number"] != volume_number:
+            raise ContractError("Scene Commitの巻番号が一致しません")
+        if candidate["chapter_number"] != chapter_number:
+            raise ContractError("Scene Commitの章番号が一致しません")
+        if candidate["scene_number"] != scene_number:
+            raise ContractError("Scene Commitの場面番号が一致しません")
+
+
+    @staticmethod
     def _validate_critique(value: Any) -> None:
         if not isinstance(value, dict) or not isinstance(value.get("issues"), list):
             raise ContractError("批評の issues が配列ではありません")
         for issue in value["issues"]:
-            if not isinstance(issue, dict) or issue.get("severity") not in {"critical", "major", "minor"}:
+            if not isinstance(issue, dict) or issue.get("severity") not in {"critical", "notice"}:
                 raise ContractError("批評 issue が不正です")
             ContractValidator._require(issue, "field", "description", "suggestion")
 
