@@ -46,12 +46,12 @@
 - `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
 - `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）
 - `internal_error`: 内部検証器の例外、実装不能な状態
-- `authority_inconsistency`: 保存済み settings、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・内容ダイジェスト・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
+- `authority_inconsistency`: 保存済み settings、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
 - `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする
 
 `current_target` は `running` で未完工程の座標だけを持つ工程内の値です。座標を持たない `request_intake`、`initial_design`、`series_plan` では空オブジェクト `{}`、`completed` では `null` とします。`blocked` は停止時点の対象を保持します。各工程の検証器が許可項目を閉じ、正本の内容と入力参照を埋め込みません。CLI `--json` は [通常 CLI](admin-cli-and-acceptance-contract.md) が定める公開用射影を出力し、内部 run-state や manifest をそのまま出力しません。
 
-`pending_commit` は `kind`、`staging_path`、更新前後の selection ID、状態更新内容、`targets` を持つ manifest です。`targets` の各要素は成果物 ID、成果物種類、staging からの相対パス、最終パス、内容ダイジェスト、`pending | finalized` を持ちます。復旧は manifest と実在する target だけを読み、種別・ID・ダイジェストを再検証して `pending` の対象を順に確定します。すべての対象が `finalized` で状態更新前なら状態を更新し、状態更新後なら manifest を消します。manifest と target が一致しない場合だけ `blocked` にします。
+`pending_commit` はこの節だけで定める閉じた manifest です。未知項目を拒否し、`kind`、`staging_path`、`input_selection_id`、`output_selection_id`、`state_update`、`targets` を持つ。`kind` は `candidate_adoption | scene_commit | volume_publication`、`staging_path` は `runtime/staging/` で始まる空でない POSIX 正規相対パス、各 path は絶対パス・`..`・正規化前後で異なる表記を拒否する。`input_selection_id` は既存 selection ID、`output_selection_id` は candidate adoption と scene commit では既存または同一 manifest target の selection ID、volume publication では `null` とする。直接依頼または `request_intake` が最初の selection を作る bootstrap candidate adoption だけは `input_selection_id=null` を許可する。この場合も `request`、採用記録、最初の selection を同じ manifest の target として staging から確定し、`output_selection_id` は必須とする。`state_update` は kind ごとの次 run-state 射影だけを持つ。`candidate_adoption` と `scene_commit` は `{current_selection_id, current_stage, current_target}`、`volume_publication` はそれらに `{published_volumes}` を加えた閉じた object とする。`current_selection_id` は `output_selection_id` と完全一致、`current_stage` と `current_target` はこの文書の run-state schema の組として有効、`published_volumes` は既存値の末尾へ当該巻を一件だけ追加した有効値でなければならない。その他の run-state 項目を変更してはならない。`targets` は空でない配列で、各要素は `artifact_id`、`artifact_kind`、`staging_path`、`final_path`、`status` だけを持つ。両 path は前記の正規相対パス、`status` は `pending | finalized` とする。target の種類と ID は[成果物と保存](artifacts-and-storage.md#2-配置と-id)の表に一致し、kind ごとの target 集合は下表に完全一致する。復旧は manifest と実在する target だけを読み、種別・ID・スキーマ・参照を再検証して `pending` の対象を順に確定します。すべての対象が `finalized` で状態更新前なら状態を更新し、状態更新後なら manifest を消します。manifest と target が一致しない場合だけ `blocked` にします。
 
 | `kind` | targets | 収束処理 |
 |---|---|---|
@@ -59,7 +59,7 @@
 | `scene_commit` | 場面、作品状態、場面確定、後続選択 | `targets` を順に確定してから状態更新を完了する |
 | `volume_publication` | 公開ディレクトリ | 公開ディレクトリを一 target として確定してから公開記録追記と次巻または完了へ収束する |
 
-manifest に載っていない最終配置、target ごとに staging と最終配置がともにある、または種別・ID・内容ダイジェストが一致しない場合は、自動選択・自動削除をせず `blocked` にします。`pending` target の staging と、別の `finalized` target の最終配置が同時にあること、または `pending` target の有効な最終配置だけがあることは正常な中断状態です。
+manifest に載っていない **当該 manifest の `staging_path` 配下または各 target の `final_path` と同じ最終配置ディレクトリ内** の配置、target ごとに staging と最終配置がともにある、または種別・ID・スキーマ・参照が一致しない場合は、自動選択・自動削除をせず `blocked` にします。既存の別成果物ディレクトリは manifest 外でも対象にしない。`pending` target の staging と、別の `finalized` target の最終配置が同時にあること、または `pending` target の有効な最終配置だけがあることは正常な中断状態です。
 
 ## 3. 工程遷移
 

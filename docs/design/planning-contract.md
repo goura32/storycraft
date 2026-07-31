@@ -59,11 +59,11 @@
 | 工程 | 追加・置換するスロット | 次工程 |
 |---|---|---|
 | `series_plan` | `series_plan`、`series_plan_adoption` | `volume_plan.v01` |
-| `volume_plan` | `volume_plan.vNN`、`volume_plan_adoption.vNN` | `chapter_plan.vNN.c001` |
-| `chapter_plan` | `chapter_plan.vNN.cMM`、`chapter_plan_adoption.vNN.cMM` | `scene_plan.vNN.cMM.s001` |
+| `volume_plan` | `volume_plan.vNN`、`volume_plan_adoption.vNN` | `chapter_plan.vNN.c01` |
+| `chapter_plan` | `chapter_plan.vNN.cMM`、`chapter_plan_adoption.vNN.cMM` | `scene_plan.vNN.cMM.s01` |
 | `scene_plan` | `scene_plan.vNN.cMM.sKK`、`scene_plan_adoption.vNN.cMM.sKK` | `scene_card.vNN.cMM.sKK` |
 
-採用記録は候補 ID と品質判定 ID を参照します。次工程は計画候補の固定パスや有効候補を読まず、このスロットを読むだけです。第1巻では `prior_volume_plan` を入力にしません。場面確定の selection 更新は、当該巻の `volume_plan` を `prior_volume_plan` に固定します。第2巻以降の `volume_plan` は、この slot を必須入力とします。
+採用記録は候補 ID と品質判定 ID を参照します。次工程は計画候補の固定パスや有効候補を読まず、このスロットを読むだけです。章・場面座標は常に二桁ゼロ埋めです。第1巻では `prior_volume_plan` を入力にしません。場面確定の selection 更新は、当該巻の `volume_plan` を `prior_volume_plan` に固定します。第2巻以降の `volume_plan` は、この slot を必須入力とします。
 
 ## 7. 修正・失敗
 

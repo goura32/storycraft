@@ -12,7 +12,7 @@
 }
 ```
 
-`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 5）。
+`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 3）。
 
 | 値 | 形式 |
 |---|---|
@@ -58,7 +58,23 @@
 | 巻公開記録 | `volume-publication`（公開記録の個別形式） | `published_volumes` |
 | 品質判定 | `quality-disposition`（監査記録の個別形式） | `scene_prose_disposition.vNN.cMM.sKK` |
 
-各成果物の `content` スキーマは個別契約書（`initial-design-contract.md`、`planning-contract.md`、`scene-production-contract.md`、`volume-publication.md`）で定義します。
+各成果物の `content` は任意 object ではない。`artifact_kind`、`input_selection_id` が指す不変 selection、工程契約が定める必須入力スロットから一意に組み立てる閉じた入力束に対し、採用時と同じ種別別内容検証器を通る object だけを許可する。直接依頼と `request_intake` の request は bootstrap 例外で `input_selection_id=null` とし、不変 settings と入口入力だけから同じ入力束を組み立てる。種別別内容検証器は、工程契約の必須項目、型、列挙、座標、参照、相関制約、未知項目を決定的に検証する。採用済み内容を検証するときも、当該 artifact の input selection と工程スロットから同じ入力束を復元して再適用する。任意の入れ子を巨大な共通 JSON Schema に複写せず、種別別内容検証器を `content` の唯一の正本とする。
+
+| `artifact_kind` | 検証責務 | 閉じた入力束 |
+|---|---|---|
+| `request` | 入口の型・未知項目・相関制約 | 正規化済み入口入力、settings |
+| `initial-design` | 人物・世界・知識・未解決事項・結末条件の ID、参照、相関 | request、settings |
+| `series-plan` | 巻順、未解決事項割当、解決巻の一意性 | request、settings、initial_design、current_state |
+| `volume-plan` | 対象巻、章構成、シリーズ計画との一致 | settings、current_state、series_plan、第2巻以降は prior_volume_plan |
+| `chapter-plan` | 章・場面順、親巻計画との一致 | settings、initial_design、current_state、series_plan、volume_plan |
+| `scene-plan` | 座標、人物・未解決事項割当、親計画との一致 | settings、initial_design、current_state、series_plan、volume_plan、chapter_plan |
+| `scene-card` | 座標、視点、開示、許可更新、場面計画・状態との一致 | settings、initial_design、current_state、scene_plan |
+| `scene-prose` | 座標、本文型・長さ、基準状態・カードへの束縛 | settings、current_state、scene_plan、scene_card、カードの文脈参照 |
+| `continuity-update` | 座標、更新範囲、本文根拠位置、未解決事項操作 | settings、current_state、scene_plan、scene_card、scene_prose |
+| `generation` | 初期設計または場面確定からの決定的状態構築 | initial_design または基準 generation と確定 scene |
+| `scene` | 本文・更新・基準状態・カードの同一座標、後続 generation との整合 | current_state、scene_plan、scene_card、scene_prose、continuity_update |
+
+`validate` は現在 selection から到達する内容成果物だけを ID 順に同じ検証器へ渡す。固定パス・最新探索・未選択履歴・candidate・review・call record による補完、LLM 呼出し、意味品質評価はしない。不合格時は artifact ID、`schema | id | reference | range | evidence` の検査観点、および JSON path または論理項目を返す。実行前検証で同じ不合格を検出した場合は `authority_inconsistency` として `blocked` にする。
 
 `generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する状態を **`content`** に持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
 
@@ -75,9 +91,9 @@
 
 `--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
 
-- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。各文字列は1〜2000 Unicodeコードポイント、配列要素は各1〜500、配列は各20個以下、全文字列の合計は8000以下とする。内容制約は依頼入口の契約に従う。
-- `keywords`: `{ "keywords": ["1〜80文字の文字列を1〜12個"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の loopback HTTP URL だけを許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
+- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。
+- `keywords`: `{ "keywords": ["空でない文字列を1個以上"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。文字数・件数の固定上限は設けない。
+- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の loopback HTTP URL だけを許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
 
 ## 4. LLM 応答
 
@@ -112,7 +128,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない
+- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない。`issues` の全件が根拠位置不正で除外された応答は `issues` の条件を満たさない形式不正として扱い、`invalid_response_limit` を消費する。`pass` へ正規化して採用してはならない
 - `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
 - `evidence_locations`: JSON path / 段落番号 / 本文オフセットのいずれか。対象本文・JSON に解決できる値
 - `code`、`affected_artifact_ids`、`disposition`、`revision_instruction` はシステム側が確認記録作成時に付与し、LLM 応答には含めない
@@ -232,9 +248,9 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 
 **重要度の二段階化に合わせて**：`ReviewResponse.issues[].severity` は `critical` と `notice` のみを許可します（`reference` は廃止）。
 
-## 6. 各内容の最低項目
+## 6. 内容成果物の閉じた検証境界
 
-| 種類 | 必須内容項目 |
+| 種類 | 種別別内容検証器が検証する必須内容項目 |
 |---|---|
 | 依頼 | 題名、ジャンル、前提、required_elements、forbidden_elements、ending_preference、volume_count、言語 |
 | initial-design | core、cast、world、knowledge_model、unresolved_threads、ending_conditions |
@@ -246,11 +262,9 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 | scene-card | 座標、pov_character、allowed_facts、allowed_knowledge、allowed_disclosures、forbidden_disclosures、allowed_updates、prose_conditions |
 | scene-prose | 座標、text |
 | continuity-update | 座標、changes |
-| 場面 | 座標、scene_prose、continuity_update、base_generation |
-| 選択 | selection_id、input_selection_id、slots、created_at |
-| 品質判定 | quality_id、candidate_id、review_record_ids、revision_count、result、remaining_major_issues、accepted_with_notice 時だけ notice_type、created_at |
+| 場面 | scene_prose_id、continuity_update_id、current_state_id、scene_card_id、quality_disposition_id、座標 |
 
-各種類の型、列挙値、相関制約は対応する工程契約で定めます。ここにない項目を保存スキーマに追加するには、この表と工程契約を同時に更新します。
+この表は共通外枠の `content` だけに適用する。selection、quality、candidate、review、adoption、call、run-state、公開 record は `content` を持たない別記録であり、それぞれの専用スキーマに従う。表の列挙以外の `content` top-level 項目は拒否する。各項目の型、列挙値、null 可否、配列要素、入れ子、参照、相関制約は対応する工程契約の種別別内容検証器が定める。これらの検証規則は候補の採用前、staging、最終配置、`validate` のすべてで同一に適用する。ここにない項目を保存スキーマに追加するには、この表と工程契約の種別別内容検証器を同時に更新する。
 
 `scene-prose` と `continuity-update` の `base_generation`、`scene_card`、`scene_prose` は LLM 応答 payload に含めません。候補記録と採用済み成果物の外枠に、工程の固定入力束からシステムが一意に束縛します。
 

@@ -97,18 +97,18 @@ ID は採番後に変更しません。
 1. ID を予約し、現在の選択スナップショットと必要な入力スロットを固定する。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。
 3. 形式、必須項目、参照実在、採用状態、内容の内部整合を決定的に検証する。同じ manifest の target を参照する場合は、その staging target 全体を閉じた参照集合として解決する。manifest 外の参照は最終配置だけを許可する。
-4. `pending_commit` manifest を保存する。manifest は kind、staging、各 target の ID・種類・staging 相対パス・最終パス・内容ダイジェスト・`pending | finalized` 状態、selection 更新、状態更新内容を持つ。
+4. [状態と遷移](state-and-transitions.md#21-現在対象と保留中確定)で定める `pending_commit` manifest を保存する。
 5. manifest の `pending` target を一つずつ原子的に名前変更する。再起動時に `pending` target の最終配置だけが有効なら、rename 後・manifest 更新前の正常な中断として target を `finalized` に進める。成功した target は `finalized` に更新する。異なる target の staging と最終配置が同時にあっても停止しない。
-6. 全 target の種類、ID、内容ダイジェスト、参照を最終配置で再検証する。
+6. 全 target の種類、ID、スキーマ、参照を最終配置で再検証する。
 7. 実行状態の採用参照・公開記録・次工程を更新し、`pending_commit` を消す。
 
-最終配置が既にある場合は上書きしません。復旧時は target ごとに manifest と照合し、`pending` target の staging、`finalized` target の最終配置、または rename 後・manifest 更新前の `pending` target の有効な最終配置を許可します。同じ target の staging と最終配置が両方ある、どちらかが不正、または manifest にない配置がある場合は、自動選択せず停止します。
+最終配置が既にある場合は上書きしません。`pending_commit` の完全なスキーマと復旧可否は[状態と遷移](state-and-transitions.md#21-現在対象と保留中確定)だけに従います。
 
 ## 4. 呼出し・検証・品質記録
 
 呼出し、決定的検証、LLM 確認、品質上限の結果は不変の監査記録です。作品正本を更新するのは、採用処理と場面確定だけです。
 
-- `runtime/calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価
+- `runtime/calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価。送受信本文は監査用の生記録であり、候補 payload と ReviewResponse の正本はそれぞれ候補・確認記録だけとする
 - `candidates/<candidate-id>/record.json`: `schema_version`、`candidate_id`、`artifact_kind`、`input_selection_id`、`keywords_id`、`settings_id`、工程 payload、生成または修正元 candidate ID、対応する call ID、作成時刻を持つ不変候補記録。selection 前の `request_intake` だけは `keywords_id` を持ち、他工程では `null` とする。
 - `reviews/<review-id>/record.json`: `schema_version`、`review_id`、対象 candidate ID、ReviewResponse、対応する call ID、作成時刻を持つ不変確認記録
 - `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。品質判定は採用記録を参照しない。
@@ -118,6 +118,6 @@ ID は採番後に変更しません。
 
 ## 5. 入力束
 
-LLM に渡す入力は、実行時に正本から組み立てる読み取り専用の束です。入力束自体を正本として固定保存しません。ただし呼出し記録は、どの成果物 ID、設定スナップショット、シード、要求・応答本文を用いたかを持ちます。
+LLM に渡す入力は、実行時に正本から組み立てる読み取り専用の束です。入力束自体を正本として固定保存しません。ただし呼出し記録は、どの成果物 ID、設定スナップショット、シード、要求・応答本文を用いたかを持ちます。生記録を後続工程の入力や正本の内容判定に使ってはなりません。
 
-次巻の計画入力は、現在の選択スナップショットに固定された作品状態、シリーズ計画、直前公開巻の `volume_plan` だけを直接参照します。これらは `prior_volume_plan` slot に固定する。確定済み本文と公開記録は次巻計画の入力にしません。本文や継続性更新から巻引継ぎ要約を抽出・確定しません。
+次巻の計画入力は、現在の選択スナップショットに固定された `settings`、作品状態、シリーズ計画、直前公開巻の `volume_plan` を直接参照します。直前巻の計画は `prior_volume_plan` slot に固定する。確定済み本文と公開記録は次巻計画の入力にしません。本文や継続性更新から巻引継ぎ要約を抽出・確定しません。

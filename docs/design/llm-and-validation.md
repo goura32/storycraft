@@ -11,7 +11,7 @@
 
 ### 7. LLMClient.invoke インターフェース契約（仕様レベル）
 
-`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは `technical_retry_limit` の技術的再試行対象とし、上限到達は `technical_retry_exhausted` とする。応答の `id` 不一致、`context_length` 欠落・非正数、クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
+`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは技術的失敗として `technical_retry_limit` を消費する。成功 HTTP の capability payload で `id` が不一致、`context_length` が欠落または正整数でない場合は形式不正として `invalid_response_limit` を消費する。いずれも各物理試行を `model_capability` call record として保存し、該当上限到達時はそれぞれ `technical_retry_exhausted` または `invalid_response_limit` で `blocked` にする。クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
 
 ### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
 
@@ -34,7 +34,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
 | 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked`、`last_error.code=technical_retry_exhausted` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合 | 各論理処理で初回を含め**上限回数** | 原則 `blocked`、`last_error.code=invalid_response_limit`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、成功 HTTP の capability payload 不正 | 各論理処理で初回を含め**上限回数** | 原則 `blocked`、`last_error.code=invalid_response_limit`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
@@ -91,7 +91,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 ## 5. 生成・修正の共通候補スキーマ
 
-生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
+生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成・修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
 
 生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 
@@ -99,7 +99,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 ## 7. 最小記録形式
 
-call record は `runtime/calls/<call-id>/record.json` に保存します。完全な保存スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.7](schemas-and-normalization.md#47-call-record-呼出し記録) です。待機時間の実測値は保存しません。
+call record は `runtime/calls/<call-id>/record.json` に保存します。完全な保存スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.7](schemas-and-normalization.md#47-call-record呼出し記録) です。待機時間の実測値は保存しません。
 
 `quality-disposition.json` は採用済み品質判定 `quality/<quality-id>/record.json` の内容を指す名称であり、別ファイルを作らない。`quality-id` は `quality-{通番6桁}`、採用記録と本文採用 slot が同じ ID を参照する。
 
