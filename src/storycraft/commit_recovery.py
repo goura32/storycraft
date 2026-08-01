@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifact_record import validate_record
-from .artifact_registry import ARTIFACT_SPECS, artifact_spec
+from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
 from .immutable_directory import finalize_immutable_directory
 from .publication_builder import validate_volume_publication_files
 from .run_state import RunStateStore
@@ -60,6 +60,8 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
         store.save(working)
     for target in targets:
         _target_validator(root, target)(root / target["final_path"])
+        if target["artifact_kind"] == "scene-commit":
+            _validate_scene_commit_lineage(root, _single_record(root / target["final_path"]))
     if manifest["kind"] == "candidate_adoption":
         adoption_target = next(target for target in targets if target["artifact_kind"] == "adoption")
         if _single_record(root / adoption_target["final_path"]).get("source_kind") == "candidate":
@@ -169,6 +171,23 @@ def _single_record(directory: Path) -> dict[str, Any]:
     if not isinstance(record, dict):
         raise ContractError("immutable targetのrecord.jsonはobjectでなければなりません")
     return record
+
+
+def _validate_scene_commit_lineage(root: Path, record: dict[str, Any]) -> None:
+    """Require every scene-commit reference to resolve to its immutable record."""
+    references = (
+        ("scene", "scene_id"),
+        ("scene-card", "scene_card_id"),
+        ("scene-prose", "scene_prose_id"),
+        ("continuity-update", "continuity_update_id"),
+        ("generation", "current_state_id"),
+        ("quality-disposition", "quality_disposition_id"),
+    )
+    for kind, field in references:
+        identifier = record[field]
+        directory = root / artifact_directory(kind, identifier)
+        referenced = _single_record(directory)
+        validate_record(kind, identifier, referenced)
 
 
 def _validate_publication_source_evidence(root: Path, files: dict[str, Any]) -> None:

@@ -178,7 +178,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             # Valid volume-plan content per closed schema
             volume_plan_content = {
                 "volume_number": 1,
-                "chapters": [1],
+                "chapters": [{"chapter_number": 1}],
                 "thread_allocations": []
             }
 
@@ -186,7 +186,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             chapter_plan_content = {
                 "volume_number": 1,
                 "chapter_number": 1,
-                "scenes": [1],
+                "scenes": [{"scene_number": 1}],
                 "thread_allocations": []
             }
 
@@ -251,17 +251,9 @@ class WorkspaceV2Tests(unittest.TestCase):
 
             # Valid scene artifact content per closed schema
             scene_content = {
-                "scene_commit_id": "scene-commit-v01-c01-s01-000001",
-                "scene_id": "scene-prose-v01-c01-s01-000001",  # points to the scene-prose artifact
-                "scene_card_id": "scene-card-v01-c01-s01-000001",
+                "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
                 "scene_prose_id": "scene-prose-v01-c01-s01-000001",
-                "continuity_update_id": "continuity-v01-c01-s01-000001",
-                "current_state_id": "gen-000001",
                 "quality_disposition_id": "quality-000001",
-                "volume_number": 1,
-                "chapter_number": 1,
-                "scene_number": 1,
-                "created_at": "2026-07-28T00:00:00Z",
             }
             self._write_json(root / "scenes/scene-v01-c01-s01-000001/record.json", {
                 "schema_version": 1, "artifact_id": "scene-v01-c01-s01-000001", "artifact_kind": "scene",
@@ -369,7 +361,10 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "input_selection_id": initial["current_selection_id"],
                 "slots": {**slots, "series_plan": series_id, "volume_plan.v01": "volume-plan-v01-000001",
                           "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001",
+                          "scene.v01.c01.s01": "scene-v01-c01-s01-000001",
                           "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
+                          "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001",
+                          "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001",
                           "scene_prose_disposition.v01.c01.s01": "quality-000001", "current_state": "gen-000001"},
                 "created_at": "2026-07-28T00:00:00Z"
             }
@@ -386,9 +381,9 @@ class WorkspaceV2Tests(unittest.TestCase):
                 volume_plan_id="volume-plan-v01-000001",
                 current_state_id="gen-000001",
                 chapter_plan_ids=["chapter-plan-v01-c01-000001"],
-                scene_ids=["scene-commit-v01-c01-s01-000001"],
+                scene_ids=["scene-v01-c01-s01-000001"],
                 quality_disposition_refs=["quality-000001"],
-                scenes=[{"scene_id": "scene-commit-v01-c01-s01-000001", "prose": "本文"}],
+                scenes=[{"scene_id": "scene-v01-c01-s01-000001", "prose": "本文"}],
                 created_at="2026-07-28T00:00:00Z"
             )
             publication = root / "publications" / publication_id

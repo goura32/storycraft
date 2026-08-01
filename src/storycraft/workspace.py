@@ -245,6 +245,7 @@ def _validate_persisted_records(root: Path) -> None:
                 raise ContractError("quality reviewがquality candidateを参照しません")
     for identifier, record in adoptions.items():
         _require_reference(record["output_selection_id"], selections, f"adoption {identifier} output_selection_id")
+        output_selection = _reference(record["output_selection_id"], selections, f"adoption {identifier} output_selection_id")
         if record["input_selection_id"] is not None: _require_reference(record["input_selection_id"], selections, f"adoption {identifier} input_selection_id")
         _require_references(record["output_content_artifact_ids"], records, f"adoption {identifier} output content")
         if record["source_kind"] == "candidate":
@@ -252,6 +253,25 @@ def _validate_persisted_records(root: Path) -> None:
             quality = _reference(record["quality_id"], qualities, f"adoption {identifier} quality_id")
             if quality["candidate_id"] != candidate["candidate_id"]:
                 raise ContractError("adoptionのcandidate/quality参照が一致しません")
+            candidate_kind = candidate["artifact_kind"]
+            matching = [records[artifact_id] for artifact_id in record["output_content_artifact_ids"] if records[artifact_id].get("artifact_kind") == candidate_kind and artifact_id in output_selection["slots"].values()]
+            if not matching or any(item.get("content") != candidate["payload"] for item in matching):
+                raise ContractError(f"adoption {identifier}の出力内容がcandidate payloadと一致しません")
+
+    scene_commits = {
+        identifier: record
+        for identifier, record in _records(root / ARTIFACT_SPECS["scene-commit"].directory_root, "scene-commit record")
+        if _matches_identifier("scene-commit", identifier)
+    }
+    for identifier, record in scene_commits.items():
+        validate_record("scene-commit", identifier, record)
+        for field, kind in (("scene_id", "scene"), ("scene_card_id", "scene-card"), ("scene_prose_id", "scene-prose"), ("continuity_update_id", "continuity-update"), ("current_state_id", "generation"), ("quality_disposition_id", "quality-disposition")):
+            ref = record[field]
+            if kind == "quality-disposition":
+                _require_reference(ref, qualities, f"scene-commit {identifier} {field}")
+            else:
+                _require_reference(ref, records, f"scene-commit {identifier} {field}")
+
 
 
 def _records(directory: Path, label: str) -> list[tuple[str, dict[str, Any]]]:
@@ -315,6 +335,8 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
         try: files = {"record.json": json.loads((directory / "record.json").read_text(encoding="utf-8")), "manuscript.md": (directory / "manuscript.md").read_text(encoding="utf-8")}
         except (OSError, json.JSONDecodeError) as exc: raise ContractError("published publicationを読めません") from exc
         validate_volume_publication_files(files)
+        from .commit_recovery import _validate_publication_source_evidence
+        _validate_publication_source_evidence(root, files)
         record = files["record.json"]
         if record["volume_publication_id"] != entry["publication_id"] or record["volume_number"] != entry["volume_number"]:
             raise ContractError("published_volumesがpublication recordと一致しません")

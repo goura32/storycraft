@@ -5,10 +5,13 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+
+
 from .artifact_record import validate_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, validate_artifact_reference
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError
+
 
 ContentValidator = Callable[[dict[str, Any], dict[str, dict[str, Any]]], None]
 
@@ -74,18 +77,24 @@ def _validate_initial_design_content(content: dict[str, Any], inputs: dict[str, 
                 if not isinstance(item, str) or not item.strip():
                     raise ContractError("initial-design content")
 
+def _validate_nonempty_object(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
+    del inputs
+    if not isinstance(content, dict) or not content:
+        raise ContractError("contentは空でないobjectでなければなりません")
+
+
 DEFAULT_CONTENT_VALIDATORS: dict[str, ContentValidator] = {
     "request": _validate_request_content,
     "initial-design": _validate_initial_design_content,
-    "series-plan": lambda content, inputs: None,
-    "volume-plan": lambda content, inputs: None,
-    "chapter-plan": lambda content, inputs: None,
-    "scene-plan": lambda content, inputs: None,
-    "scene-card": lambda content, inputs: None,
-    "scene-prose": lambda content, inputs: None,
-    "continuity-update": lambda content, inputs: None,
-    "generation": lambda content, inputs: None,
-    "scene": lambda content, inputs: None,
+    "series-plan": _validate_nonempty_object,
+    "volume-plan": _validate_nonempty_object,
+    "chapter-plan": _validate_nonempty_object,
+    "scene-plan": _validate_nonempty_object,
+    "scene-card": _validate_nonempty_object,
+    "scene-prose": _validate_nonempty_object,
+    "continuity-update": _validate_nonempty_object,
+    "generation": _validate_nonempty_object,
+    "scene": _validate_nonempty_object,
 }
 
 

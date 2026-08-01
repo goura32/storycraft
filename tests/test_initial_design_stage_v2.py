@@ -18,6 +18,7 @@ TIMESTAMP = "2026-07-31T00:00:00Z"
 
 
 class FakeInitialDesignModel:
+    __storycraft_test_double__ = True
     allow_test_synthetic_calls = True
 
     def __init__(self) -> None:

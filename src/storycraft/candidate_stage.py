@@ -319,7 +319,11 @@ class CandidateStageRunner:
     ) -> dict[str, Any]:
         method = getattr(model, operation)
         last_error: ContractError | None = None
-        for _ in range(invalid_limit):
+        for attempt in range(invalid_limit):
+            if attempt:
+                begin = getattr(model, "begin_format_attempt", None)
+                if callable(begin):
+                    begin()
             try:
                 return validator(method(*arguments))
             except LLMCallError:

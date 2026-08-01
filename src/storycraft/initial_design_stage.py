@@ -76,7 +76,11 @@ class InitialDesignStageService:
 
         def call_valid(operation: str, *arguments: Any, validator: Any) -> dict[str, Any]:
             last_error: ContractError | None = None
-            for _ in range(invalid_limit):
+            for attempt in range(invalid_limit):
+                if attempt:
+                    begin = getattr(model, "begin_format_attempt", None)
+                    if callable(begin):
+                        begin()
                 try:
                     return validator(getattr(model, operation)(*arguments))
                 except ContractError as exc:
@@ -267,7 +271,11 @@ class InitialDesignStageService:
         physical_id = getattr(model, "last_call_id", None)
         physical_path = self.workspace_root / "runtime/calls" / str(physical_id) / "record.json"
         if not isinstance(physical_id, str) or not physical_id.startswith("call-") or not physical_path.is_file():
-            if not getattr(model, "allow_test_synthetic_calls", False):
+            if not (
+                getattr(model, "allow_test_synthetic_calls", False)
+                and getattr(model.__class__, "__storycraft_test_double__", False)
+                and getattr(model.__class__, "__module__", "").startswith("test")
+            ):
                 raise ContractError(f"{operation}の物理call recordがmodelから得られません")
             return f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
         return physical_id

@@ -82,6 +82,16 @@ def populate_scene_commit_staging(root: Path) -> None:
     staging = "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001"
     write_record(root, f"{staging}/scene-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
     write_record(root, f"{staging}/gen-000002", {"schema_version": 1, "artifact_id": "gen-000002", "artifact_kind": "generation", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
+    for directory, artifact_kind, identifier in (
+        ("design/scene-cards", "scene-card", "scene-card-v01-c01-s01-000001"),
+        ("scenes", "scene-prose", "scene-prose-v01-c01-s01-000001"),
+        ("scenes", "continuity-update", "continuity-v01-c01-s01-000001"),
+        ("quality", "quality-disposition", "quality-000001"),
+    ):
+        record = {"schema_version": 1, "artifact_id": identifier, "artifact_kind": artifact_kind, "input_selection_id": "selection-000001", "created_at": NOW, "content": {}}
+        if artifact_kind == "quality-disposition":
+            record = {"schema_version": 1, "quality_id": identifier, "candidate_id": "candidate-000001", "review_record_ids": ["review-000001"], "revision_count": 0, "result": "accepted", "remaining_major_issues": [], "created_at": NOW}
+        write_record(root, f"{directory}/{identifier}", record)
     write_record(root, f"{staging}/scene-commit-v01-c01-s01-000001", {"schema_version": 1,
         "scene_commit_id": "scene-commit-v01-c01-s01-000001",
         "scene_id": "scene-v01-c01-s01-000002",

@@ -23,6 +23,7 @@ REQUEST = {
 
 
 class FakeRequestModel:
+    __storycraft_test_double__ = True
     allow_test_synthetic_calls = True
 
     def __init__(self) -> None:

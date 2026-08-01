@@ -58,6 +58,20 @@ class ReviewedProseStageRunner:
         self.spec = spec
         self.state_store = RunStateStore(self.workspace_root)
 
+    @staticmethod
+    def _bind_call(model: Any, context: dict[str, Any], candidate_id: str | None) -> None:
+        setter = getattr(model, "set_call_context", None)
+        if not callable(setter):
+            return
+        settings_id = context.get("settings_id")
+        settings = context.get("settings")
+        if settings_id is None and isinstance(settings, dict):
+            settings_id = settings.get("settings_id")
+        input_refs = context.get("input_refs")
+        if not isinstance(input_refs, list):
+            input_refs = [value for value in context.get("input_artifact_ids", []) if isinstance(value, str)]
+        setter(settings_id, input_refs, candidate_id)
+
     def run(
         self,
         model: ProseStoryModel | None,
@@ -131,6 +145,7 @@ class ReviewedProseStageRunner:
         )
 
         try:
+            self._bind_call(model, context, candidate_id)
             generated = model.generate_prose(
                 self.spec.model_stage,
                 deepcopy(context),
@@ -175,6 +190,7 @@ class ReviewedProseStageRunner:
             )
 
             try:
+                self._bind_call(model, review_context, candidate_id)
                 critique = model.critique_prose(
                     self.spec.model_stage,
                     candidate,
@@ -308,6 +324,7 @@ class ReviewedProseStageRunner:
             )
 
             try:
+                self._bind_call(model, context, candidate_id)
                 generated_revision = model.revision_prose(
                     self.spec.model_stage,
                     candidate,

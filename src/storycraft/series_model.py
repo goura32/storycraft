@@ -17,7 +17,7 @@ class OpenAIStoryModel:
     def __init__(self, settings, raw_dir) -> None:
         self.client = LLMClient(settings, raw_dir)
         self._seed_sequence = 0
-        self._format_attempts: dict[tuple[str, str], int] = {}
+        self._format_attempt = 1
 
     def set_log_ref(self, ref: str) -> None:
         """Workflowから受け取る対象座標。prompt本文には含めない。"""
@@ -40,6 +40,11 @@ class OpenAIStoryModel:
             "input_refs": list(input_refs),
             "target_candidate_id": target_candidate_id,
         }
+        self._format_attempt = 1
+
+    def begin_format_attempt(self) -> None:
+        """Advance the structural retry axis; transport retries stay unchanged."""
+        self._format_attempt = getattr(self, "_format_attempt", 1) + 1
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         return self._call("generate", stage, self._render("generate", stage, context=context))
@@ -181,11 +186,7 @@ class OpenAIStoryModel:
         failure_reason = "unknown"
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
         ref = getattr(self, "_log_ref", stage)
-        format_key = (kind, stage)
-        format_attempts = getattr(self, "_format_attempts", {})
-        format_attempt = format_attempts.get(format_key, 0) + 1
-        self._format_attempts = format_attempts
-        self._format_attempts[format_key] = format_attempt
+        format_attempt = getattr(self, "_format_attempt", 1)
         response_format = self._response_format(
             kind,
             stage,
@@ -252,11 +253,7 @@ class OpenAIStoryModel:
             1,
         )
         ref = getattr(self, "_log_ref", stage)
-        format_key = (kind, stage)
-        format_attempts = getattr(self, "_format_attempts", {})
-        format_attempt = format_attempts.get(format_key, 0) + 1
-        self._format_attempts = format_attempts
-        self._format_attempts[format_key] = format_attempt
+        format_attempt = getattr(self, "_format_attempt", 1)
         for retry_attempt in range(1, attempts + 1):
             self._seed_sequence = (
                 getattr(self, "_seed_sequence", 0) + 1
@@ -282,6 +279,7 @@ class OpenAIStoryModel:
                         "_log_quality_pass",
                         "",
                     ),
+                    **getattr(self, "_call_context", {}),
                 },
             ]
             record = self.client.call_once(
