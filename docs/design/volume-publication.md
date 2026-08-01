@@ -33,11 +33,18 @@ publications/
   "volume_publication_id": "volume-pub-v04-000004",
   "volume_number": 4,
   "input_selection_id": "selection-000077",
+  "settings_id": "settings-000001",
+  "series_plan_id": "series-plan-000004",
+  "volume_plan_id": "volume-plan-v04-000001",
+  "current_state_id": "gen-000123",
+  "chapter_plan_ids": ["chapter-plan-v04-c01-000001"],
+  "scene_ids": ["scene-v04-c01-s01-000001"],
+  "quality_disposition_refs": ["quality-000123"],
   "created_at": "..."
 }
 ```
 
-`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`（既存selection ID）、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。`volume_number` は input selection から導出する採用済み volume plan の巻番号と一致し、同selectionから導出する全対象 scene、scene prose、scene prose品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
+`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`、`settings_id`、`series_plan_id`、`volume_plan_id`、`current_state_id`、`chapter_plan_ids`、`scene_ids`、`quality_disposition_refs`、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。`volume_number` は input selection から導出する採用済み volume plan の巻番号と一致し、同selectionから導出する全対象 scene、scene prose、scene prose品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
 
 **公開注意集約規則（決定的）:**
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する

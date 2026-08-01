@@ -34,7 +34,8 @@ def write_content(root: Path, artifact_id: str, kind: str, selection_id: str, co
     locations = {
         "initial-design": "design/initial-designs",
         "series-plan": "design/series-plans", "volume-plan": "design/volume-plans",
-        "chapter-plan": "design/chapter-plans", "scene-prose": "scenes", "scene": "scenes",
+        "chapter-plan": "design/chapter-plans", "scene-card": "design/scene-cards",
+        "scene-prose": "scenes", "scene": "scenes", "continuity-update": "scenes",
         "generation": "generations",
     }
     write_json(root / locations[kind] / artifact_id / "record.json", content_record(artifact_id, kind, selection_id, content))
@@ -153,6 +154,8 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
         for scene in scenes:
             prose_id = f"scene-prose-v01-c{chapter:02d}-s{scene:02d}-000001"
             committed_id = f"scene-v01-c{chapter:02d}-s{scene:02d}-000001"
+            card_id = f"scene-card-v01-c{chapter:02d}-s{scene:02d}-000001"
+            continuity_id = f"continuity-v01-c{chapter:02d}-s{scene:02d}-000001"
             quality_id = f"quality-{chapter * 10 + scene:06d}"
             if not (omit_scene_source and chapter == 2 and scene == 1):
                 # Valid scene-prose content per closed schema
@@ -162,15 +165,20 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
                 }
                 write_content(root, prose_id, "scene-prose", base_id, prose_content)
             # Valid scene content per closed schema
+            write_content(root, card_id, "scene-card", base_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}})
+            write_content(root, continuity_id, "continuity-update", base_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "changes": []})
             scene_content = {
                 "coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene},
-                "scene_prose_id": prose_id, "quality_disposition_id": quality_id,
+                "scene_prose_id": prose_id, "scene_card_id": card_id, "continuity_update_id": continuity_id,
+                "current_state_id": "gen-000001", "quality_disposition_id": quality_id,
             }
             write_content(root, committed_id, "scene", base_id, scene_content)
             prose = {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "text": f"本文 {chapter}-{scene}"}
             write_quality_audit(root, quality_id, prose, notice=(chapter == 1 and scene == 2))
             coordinate = f"v01.c{chapter:02d}.s{scene:02d}"
             slots[f"scene.{coordinate}"] = committed_id
+            slots[f"scene_card.{coordinate}"] = card_id
+            slots[f"continuity_update.{coordinate}"] = continuity_id
             slots[f"scene_prose.{coordinate}"] = prose_id
             slots[f"scene_prose_disposition.{coordinate}"] = quality_id
     # Valid generation content per closed schema

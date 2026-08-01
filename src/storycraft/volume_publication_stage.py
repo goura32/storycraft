@@ -161,7 +161,10 @@ class VolumePublicationStageService:
                 committed = self._slot(slots, f"scene.{coordinate}")
                 prose = self._slot(slots, f"scene_prose.{coordinate}")
                 quality = self._slot(slots, f"scene_prose_disposition.{coordinate}")
-                self._validate_committed_source(committed, prose, quality, volume, chapter, scene)
+                scene_card = self._slot(slots, f"scene_card.{coordinate}")
+                continuity = self._slot(slots, f"continuity_update.{coordinate}")
+                current_state = self._slot(slots, "current_state")
+                self._validate_committed_source(committed, prose, quality, scene_card, continuity, current_state, volume, chapter, scene)
                 scene_ids.append(self._record_id(committed, "artifact_id"))
                 quality_ids.append(self._record_id(quality, "quality_id"))
                 prose_content = prose["content"]
@@ -218,6 +221,7 @@ class VolumePublicationStageService:
     @staticmethod
     def _validate_committed_source(
         committed: dict[str, Any], prose: dict[str, Any], quality: dict[str, Any],
+        scene_card: dict[str, Any], continuity: dict[str, Any], current_state: dict[str, Any],
         volume: int, chapter: int, scene: int,
     ) -> None:
         coordinate = {"volume_number": volume, "chapter_number": chapter, "scene_number": scene}
@@ -228,6 +232,9 @@ class VolumePublicationStageService:
             or not isinstance(committed_content, dict) or not isinstance(prose_content, dict)
             or committed_content.get("coordinate") != coordinate or prose_content.get("coordinate") != coordinate
             or committed_content.get("scene_prose_id") != prose.get("artifact_id")
+            or committed_content.get("scene_card_id") != scene_card.get("artifact_id")
+            or committed_content.get("continuity_update_id") != continuity.get("artifact_id")
+            or committed_content.get("current_state_id") != current_state.get("artifact_id")
             or committed_content.get("quality_disposition_id") != quality.get("quality_id")
             or not isinstance(prose_content.get("text"), str) or not prose_content["text"].strip()
         ):

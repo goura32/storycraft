@@ -261,6 +261,13 @@ def _validate_persisted_records(root: Path) -> None:
             matching = [records[artifact_id] for artifact_id in output_ids if records[artifact_id].get("artifact_kind") == candidate_kind]
             if not matching or any(item.get("content") != candidate["payload"] for item in matching):
                 raise ContractError(f"adoption {identifier}の出力内容がcandidate payloadと一致しません")
+            from .commit_recovery import _validate_candidate_selection_delta
+            _validate_candidate_selection_delta(
+                root,
+                {"input_selection_id": record["input_selection_id"], "output_selection_id": record["output_selection_id"]},
+                [{"artifact_kind": records[item]["artifact_kind"], "artifact_id": item} for item in output_ids],
+                {"artifact_id": identifier}, quality["quality_id"], output_selection,
+            )
         elif record["source_kind"] == "direct_request":
             if record["candidate_id"] is not None or record["quality_id"] is not None:
                 raise ContractError("direct_request adoptionにcandidate/quality参照があります")

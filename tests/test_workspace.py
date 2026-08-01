@@ -253,6 +253,9 @@ class WorkspaceV2Tests(unittest.TestCase):
             scene_content = {
                 "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
                 "scene_prose_id": "scene-prose-v01-c01-s01-000001",
+                "scene_card_id": "scene-card-v01-c01-s01-000001",
+                "continuity_update_id": "continuity-v01-c01-s01-000001",
+                "current_state_id": "gen-000001",
                 "quality_disposition_id": "quality-000001",
             }
             self._write_json(root / "scenes/scene-v01-c01-s01-000001/record.json", {
