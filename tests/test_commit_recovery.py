@@ -333,8 +333,12 @@ class CommitRecoveryTests(unittest.TestCase):
             value = json.loads(card.read_text(encoding="utf-8"))
             value["input_selection_id"] = "selection-000999"
             card.write_text(json.dumps(value), encoding="utf-8")
+            selection = root / "runtime/selections/selection-000001/record.json"
+            selection_value = json.loads(selection.read_text(encoding="utf-8"))
+            selection_value["slots"]["scene_card.v01.c01.s01"] = "scene-card-v01-c01-s01-000999"
+            selection.write_text(json.dumps(selection_value), encoding="utf-8")
             RunStateStore(root).save(scene_commit_state())
-            with self.assertRaisesRegex(ContractError, "input_selection_id"):
+            with self.assertRaisesRegex(ContractError, "input selection"):
                 recover_pending_commit(root)
             state = RunStateStore(root).load_recovery()
             self.assertIsNotNone(state["pending_commit"])

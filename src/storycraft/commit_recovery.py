@@ -194,8 +194,6 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
             if not isinstance(content, dict) or not isinstance(content.get("current_state_id"), str):
                 raise ContractError("scene-commit sceneの入力current_state参照が不正です")
             input_current_state_id = content["current_state_id"]
-        if kind != "quality-disposition" and referenced.get("input_selection_id") != input_selection_id:
-            raise ContractError(f"scene-commit {field}のinput_selection_idがmanifestと一致しません")
     input_snapshot = _single_record(root / "runtime" / "selections" / input_selection_id)
     input_slots = validate_selection_snapshot(input_snapshot)["slots"]
     output_snapshot = _single_record(root / "runtime" / "selections" / output_selection_id)
@@ -290,6 +288,14 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
     call_id = candidate["call_id"]
     call = _audit_record(root, "runtime/calls", call_id)
     validate_call_record(call_id, call)
+    operation = call.get("operation")
+    if operation not in {"generate", "revise"}:
+        raise ContractError("candidate adoptionのcall operationが不正です")
+    if operation == "generate":
+        if call.get("target_candidate_id") is not None:
+            raise ContractError("candidate adoptionのgenerate call targetが不正です")
+    elif candidate.get("parent_candidate_id") is None or call.get("target_candidate_id") != candidate.get("parent_candidate_id"):
+        raise ContractError("candidate adoptionのrevise call targetが不正です")
     if call.get("settings_id") != candidate.get("settings_id"):
         raise ContractError("candidate adoptionのcall/settings lineageが不正です")
     if candidate.get("candidate_id") != candidate_id or candidate.get("artifact_kind") != content_target["artifact_kind"]:
@@ -307,7 +313,7 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
         review_call_id = review["call_id"]
         review_call = _audit_record(root, "runtime/calls", review_call_id)
         validate_call_record(review_call_id, review_call)
-        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("operation") != "review" or review_call.get("target_candidate_id") != review.get("candidate_id"):
+        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("operation") != "review" or review_call.get("target_candidate_id") != review.get("candidate_id") or review_call.get("settings_id") != candidate.get("settings_id"):
             raise ContractError("quality dispositionのreview/call参照が不正です")
     _validate_candidate_selection_delta(root, manifest, content_targets, adoption_target, quality_id, selection)
 

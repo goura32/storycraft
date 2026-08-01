@@ -253,6 +253,8 @@ def _validate_persisted_records(root: Path) -> None:
             quality = _reference(record["quality_id"], qualities, f"adoption {identifier} quality_id")
             if quality["candidate_id"] != candidate["candidate_id"]:
                 raise ContractError("adoptionのcandidate/quality参照が一致しません")
+            if record["input_selection_id"] != candidate["input_selection_id"]:
+                raise ContractError(f"adoption {identifier}のselection lineageがcandidateと一致しません")
             candidate_kind = candidate["artifact_kind"]
             output_ids = record["output_content_artifact_ids"]
             allowed_kinds = {candidate_kind, "generation"} if candidate_kind == "initial-design" else {candidate_kind}
@@ -277,7 +279,7 @@ def _validate_persisted_records(root: Path) -> None:
             output_slots = output_selection["slots"]
             output_record = records[output_ids[0]]
             output_kind = output_record.get("artifact_kind")
-            if output_kind not in {"request", "initial-design"} or output_ids[0] not in output_slots.values():
+            if output_kind == "initial-design" or output_ids[0] not in output_slots.values():
                 raise ContractError(f"direct_request adoption {identifier}の出力content参照がoutput selectionと一致しません")
 
     scene_commits = {
