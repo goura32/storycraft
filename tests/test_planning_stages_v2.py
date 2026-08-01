@@ -88,7 +88,12 @@ class Model:
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         self.contexts.append(context)
-        response = {"schema_version": "candidate-response-v1", "artifact_kind": self.kind, "payload": {"stage": stage}}
+        payloads = {
+            "chapter-plan": {"scenes": [{"scene_number": 1}], "thread_allocations": []},
+            "scene-plan": {"purpose": "展開", "characters": ["主人公"]},
+            "scene-card": {"coordinate": {"volume_number": 3, "chapter_number": 3, "scene_number": 4}},
+        }
+        response = {"schema_version": "candidate-response-v1", "artifact_kind": self.kind, "payload": payloads.get(self.kind, {"stage": stage})}
         self._record_physical_call("generate", response)
         return response
 

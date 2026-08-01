@@ -254,8 +254,11 @@ def _validate_persisted_records(root: Path) -> None:
             if quality["candidate_id"] != candidate["candidate_id"]:
                 raise ContractError("adoptionのcandidate/quality参照が一致しません")
             candidate_kind = candidate["artifact_kind"]
-            matching = [records[artifact_id] for artifact_id in record["output_content_artifact_ids"] if records[artifact_id].get("artifact_kind") == candidate_kind and artifact_id in output_selection["slots"].values()]
-            if not matching or any(item.get("content") != candidate["payload"] for item in matching):
+            output_ids = record["output_content_artifact_ids"]
+            if candidate_kind != "initial-design" and any(records[artifact_id].get("artifact_kind") != candidate_kind or artifact_id not in output_selection["slots"].values() for artifact_id in output_ids):
+                raise ContractError(f"adoption {identifier}の出力content参照がoutput selectionと一致しません")
+            matching = [records[artifact_id] for artifact_id in output_ids if records[artifact_id].get("artifact_kind") == candidate_kind]
+            if (candidate_kind != "initial-design" and len(matching) != len(output_ids)) or not matching or any(item.get("content") != candidate["payload"] for item in matching):
                 raise ContractError(f"adoption {identifier}の出力内容がcandidate payloadと一致しません")
 
     scene_commits = {

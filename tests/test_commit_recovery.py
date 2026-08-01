@@ -304,6 +304,39 @@ class CommitRecoveryTests(unittest.TestCase):
             self.assertEqual(recovered["current_stage"], "scene_plan")
             self.assertTrue((root / "scenes/scene-commit-v01-c01-s01-000001/record.json").is_file())
 
+    def test_scene_commit_recovery_rejects_missing_referenced_artifact_before_state_update(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for parent in ("scenes", "generations", "runtime/selections"):
+                (root / parent).mkdir(parents=True)
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            populate_scene_commit_staging(root)
+            RunStateStore(root).save(scene_commit_state())
+            (root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json").unlink()
+            with self.assertRaisesRegex(ContractError, "immutable target"):
+                recover_pending_commit(root)
+            state = RunStateStore(root).load_recovery()
+            self.assertIsNotNone(state["pending_commit"])
+            self.assertEqual(state["current_stage"], "scene_commit")
+
+    def test_scene_commit_recovery_rejects_wrong_input_selection_before_state_update(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for parent in ("scenes", "generations", "runtime/selections"):
+                (root / parent).mkdir(parents=True)
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            populate_scene_commit_staging(root)
+            card = root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json"
+            value = json.loads(card.read_text(encoding="utf-8"))
+            value["input_selection_id"] = "selection-000999"
+            card.write_text(json.dumps(value), encoding="utf-8")
+            RunStateStore(root).save(scene_commit_state())
+            with self.assertRaisesRegex(ContractError, "input_selection_id"):
+                recover_pending_commit(root)
+            state = RunStateStore(root).load_recovery()
+            self.assertIsNotNone(state["pending_commit"])
+            self.assertEqual(state["current_stage"], "scene_commit")
+
     def test_rejects_scene_commit_record_with_unknown_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

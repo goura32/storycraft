@@ -61,7 +61,7 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
     for target in targets:
         _target_validator(root, target)(root / target["final_path"])
         if target["artifact_kind"] == "scene-commit":
-            _validate_scene_commit_lineage(root, _single_record(root / target["final_path"]))
+            _validate_scene_commit_lineage(root, _single_record(root / target["final_path"]), manifest["input_selection_id"], manifest["output_selection_id"])
     if manifest["kind"] == "candidate_adoption":
         adoption_target = next(target for target in targets if target["artifact_kind"] == "adoption")
         if _single_record(root / adoption_target["final_path"]).get("source_kind") == "candidate":
@@ -173,8 +173,8 @@ def _single_record(directory: Path) -> dict[str, Any]:
     return record
 
 
-def _validate_scene_commit_lineage(root: Path, record: dict[str, Any]) -> None:
-    """Require every scene-commit reference to resolve to its immutable record."""
+def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_selection_id: str, output_selection_id: str) -> None:
+    """Require scene-commit references to resolve and remain selection-bound."""
     references = (
         ("scene", "scene_id"),
         ("scene-card", "scene_card_id"),
@@ -188,6 +188,27 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any]) -> None:
         directory = root / artifact_directory(kind, identifier)
         referenced = _single_record(directory)
         validate_record(kind, identifier, referenced)
+        if kind != "quality-disposition" and referenced.get("input_selection_id") != input_selection_id:
+            raise ContractError(f"scene-commit {field}のinput_selection_idがmanifestと一致しません")
+    input_snapshot = _single_record(root / "runtime" / "selections" / input_selection_id)
+    input_slots = validate_selection_snapshot(input_snapshot)["slots"]
+    output_snapshot = _single_record(root / "runtime" / "selections" / output_selection_id)
+    output_slots = validate_selection_snapshot(output_snapshot)["slots"]
+    volume, chapter, scene = (record[key] for key in ("volume_number", "chapter_number", "scene_number"))
+    prefix = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
+    expected_slots = {
+        f"scene.{prefix}": record["scene_id"],
+        f"scene_card.{prefix}": record["scene_card_id"],
+        f"scene_prose.{prefix}": record["scene_prose_id"],
+        f"continuity_update.{prefix}": record["continuity_update_id"],
+        f"scene_prose_disposition.{prefix}": record["quality_disposition_id"],
+        "current_state": record["current_state_id"],
+    }
+    for slot, identifier in expected_slots.items():
+        if slot in input_slots and input_slots[slot] != identifier:
+            raise ContractError(f"scene-commit input selectionの{slot}が参照と一致しません")
+    if not any(value == record["scene_commit_id"] for key, value in output_slots.items() if key.startswith("scene_commit.")):
+        raise ContractError("scene-commit output selectionがscene-commitを参照しません")
 
 
 def _validate_publication_source_evidence(root: Path, files: dict[str, Any]) -> None:
