@@ -183,11 +183,17 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
         ("generation", "current_state_id"),
         ("quality-disposition", "quality_disposition_id"),
     )
+    input_current_state_id: str | None = None
     for kind, field in references:
         identifier = record[field]
         directory = root / artifact_directory(kind, identifier)
         referenced = _single_record(directory)
         validate_record(kind, identifier, referenced)
+        if kind == "scene":
+            content = referenced.get("content")
+            if not isinstance(content, dict) or not isinstance(content.get("current_state_id"), str):
+                raise ContractError("scene-commit sceneの入力current_state参照が不正です")
+            input_current_state_id = content["current_state_id"]
         if kind != "quality-disposition" and referenced.get("input_selection_id") != input_selection_id:
             raise ContractError(f"scene-commit {field}のinput_selection_idがmanifestと一致しません")
     input_snapshot = _single_record(root / "runtime" / "selections" / input_selection_id)
@@ -196,13 +202,15 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
     output_slots = validate_selection_snapshot(output_snapshot)["slots"]
     volume, chapter, scene = (record[key] for key in ("volume_number", "chapter_number", "scene_number"))
     prefix = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
+    if input_current_state_id is None:
+        raise ContractError("scene-commit sceneの入力current_state参照がありません")
     expected_slots = {
         f"scene.{prefix}": record["scene_id"],
         f"scene_card.{prefix}": record["scene_card_id"],
         f"scene_prose.{prefix}": record["scene_prose_id"],
         f"continuity_update.{prefix}": record["continuity_update_id"],
         f"scene_prose_disposition.{prefix}": record["quality_disposition_id"],
-        "current_state": record["current_state_id"],
+        "current_state": input_current_state_id,
     }
     for slot, identifier in expected_slots.items():
         if slot not in input_slots:
