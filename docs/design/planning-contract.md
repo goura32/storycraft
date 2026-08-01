@@ -12,12 +12,12 @@
 |---|---|
 | 責務 | 全巻の役割、巻数、結末必須事項の進行・解決予定を作る |
 | 必須入力スロット | `request`、`settings`、`initial_design`、`current_state`、`initial_design_adoption` |
-| 出力成果物 | `series-plan`。巻番号順の `volumes`、各巻の役割、各必須未解決事項の `thread_allocations` |
+| 出力成果物 | `series-plan`。`volume_count`（4〜10）、昇順の`volume_summaries`、シリーズ目的・人物/関係/未解決事項の進行・結末経路 |
 | 次工程 | `volume_plan`、対象は第1巻 |
 
-`thread_allocations` は未解決事項 ID、操作（`introduce|progress|resolve`）、対象巻、当該巻で満たすべき条件を持ちます。結末必須未解決事項は少なくとも一つの `resolve` を持ち、その対象巻は一意です。章・場面座標は後続計画がその巻の割当を具体化して初めて固定します。
+`volume_summaries`は各巻の`volume_number`を持つ昇順の配列です。巻・章・場面の座標は計画payloadへ重複保存せず、artifact IDとselection slotで束縛します。未知のplanning payload項目は拒否します。
 
-コードは、巻数が依頼と一致すること、巻番号の連続性、全必須未解決事項の割当、ID・操作・巻番号の妥当性、`resolve` 対象巻の一意性を検証します。LLM は、巻全体の役割、伏線・解決の配分、初期設計との意味的整合を確認します。
+コードは、巻数が依頼と一致すること、4〜10の範囲、巻番号の連続性、各必須未解決事項の進行、IDと配列項目の妥当性を検証します。LLMは、巻全体の役割、伏線・解決の配分、初期設計との意味的整合を確認します。
 
 ## 3. 巻計画
 
@@ -28,6 +28,8 @@
 | 決定的前提 | 第1巻以外は直前巻の `volume_publication` が公開済みであること |
 | 次工程 | `chapter_plan`、対象は当該巻第1章 |
 
+`volume-plan`のpayloadは巻番号を重複保持せず、`chapter_summaries`で章番号と章の目的を表します。巻番号は`volume_plan.vNN`のselection slotとartifact IDで束縛します。
+
 コードは、対象巻がシリーズ計画の未公開の次巻であること、直前巻が公開済みであること、割当がシリーズ計画の対象巻の範囲内であること、章番号が連続すること、章数が settings の `chapter_per_volume_range` 内であることを検証します。LLM は、正規形現在状態と採用計画だけに対する巻の役割、人物・未解決事項の進行が適切かを確認します。
 
 ## 4. 章計画
@@ -36,7 +38,7 @@
 |---|---|
 | 責務 | 一章の目的、場面数範囲、各場面の役割と未解決事項の予定を作る |
 | 必須入力スロット | `settings`、`initial_design`、`current_state`、`series_plan`、対象 `volume_plan` |
-| 出力成果物 | `chapter-plan`。章番号、場面数範囲、場面役割、当該章の未解決事項割当 |
+| 出力成果物 | `chapter-plan`。章の目的・状態変化・`scene_summaries`による場面構成 |
 | 次工程 | `scene_plan`、対象は当該章第1場面 |
 
 コードは、対象章が巻計画の未確定の次章であること、場面番号の連続性、場面数が settings の `chapter_scene_range` 内であること、割当が巻計画の対象範囲内であることを検証します。LLM は、章の目的と巻の役割、場面の配分、未解決事項の進行が整合することを確認します。

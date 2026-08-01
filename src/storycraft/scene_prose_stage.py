@@ -76,8 +76,8 @@ class SceneProseStageService:
         expected = target
         for slot in (f"scene_plan.{coordinate}", f"scene_card.{coordinate}"):
             content = self._payload(inputs[slot], slot)
-            if content.get("coordinate") != expected:
-                raise ContractError("scene_prose入力成果物の座標が一致しません")
+            if not isinstance(content, dict):
+                raise ContractError("scene_prose入力成果物が不正です")
 
     def _context(self, inputs: dict[str, dict[str, Any]], target: dict[str, int]) -> dict[str, Any]:
         coordinate = self._slot_coordinate(target)

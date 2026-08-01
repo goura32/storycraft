@@ -178,7 +178,7 @@ class SceneCommitStageService:
     def _validate_coordinate_bundle(volume: int, chapter: int, scene: int, *contents: object) -> None:
         expected = {"volume_number": volume, "chapter_number": chapter, "scene_number": scene}
         for content in contents:
-            if not isinstance(content, dict) or content.get("coordinate") != expected:
+            if not isinstance(content, dict) or ("coordinate" in content and content.get("coordinate") != expected):
                 raise ContractError("scene_commit入力成果物の座標が一致しません")
 
     @staticmethod
@@ -225,16 +225,18 @@ class SceneCommitStageService:
 
     @staticmethod
     def _numbers(content: object, field: str) -> list[int]:
-        if not isinstance(content, dict) or not isinstance(content.get(field), list):
+        modern_field = {"scenes": "scene_summaries", "chapters": "chapter_summaries"}.get(field, field)
+        number_field = {"scenes": "scene_number", "chapters": "chapter_number"}.get(field, field[:-1] + "_number")
+        if not isinstance(content, dict) or not isinstance(content.get(modern_field), list):
             raise ContractError(f"{field}を持つ計画contentが必要です")
         values: list[int] = []
-        for item in content[field]:
-            raw = item.get(field[:-1] + "_number") if isinstance(item, dict) else item
+        for item in content[modern_field]:
+            raw = item.get(number_field) if isinstance(item, dict) else item
             if not isinstance(raw, int) or isinstance(raw, bool) or raw < 1:
                 raise ContractError(f"{field}の番号が不正です")
             values.append(raw)
-        if values != sorted(set(values)):
-            raise ContractError(f"{field}の番号は連続昇順でなければなりません")
+        if values != list(range(1, len(values) + 1)):
+            raise ContractError(f"{field}の番号は1からの連続昇順でなければなりません")
         return values
 
     def _next_work(self, values: dict[str, dict[str, Any]], volume: int, chapter: int, scene: int) -> tuple[str, dict[str, int]]:

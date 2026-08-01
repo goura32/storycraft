@@ -135,8 +135,8 @@ class VolumePublicationStageService:
         if volume_plan.get("artifact_kind") != "volume-plan" or current_state.get("artifact_kind") != "generation":
             raise ContractError("巻公開selectionのvolume planまたはcurrent stateが不正です")
         volume_content = volume_plan.get("content")
-        if not isinstance(volume_content, dict) or volume_content.get("volume_number") != volume:
-            raise ContractError("巻公開selectionのvolume plan座標が不正です")
+        if not isinstance(volume_content, dict):
+            raise ContractError("巻公開selectionのvolume planが不正です")
         volume_count = self._volume_count(series, volume)
         chapter_numbers = self._ordered_numbers(volume_content, "chapters", "chapter_number")
         chapter_slots = {f"chapter_plan.v{volume:02d}.c{number:02d}" for number in chapter_numbers}
@@ -153,8 +153,8 @@ class VolumePublicationStageService:
             if chapter_record.get("artifact_kind") != "chapter-plan":
                 raise ContractError("巻公開selectionのchapter planが不正です")
             chapter_content = chapter_record.get("content")
-            if not isinstance(chapter_content, dict) or chapter_content.get("volume_number") != volume or chapter_content.get("chapter_number") != chapter:
-                raise ContractError("巻公開selectionのchapter plan座標が不正です")
+            if not isinstance(chapter_content, dict):
+                raise ContractError("巻公開selectionのchapter planが不正です")
             chapter_ids.append(self._record_id(chapter_record, "artifact_id"))
             for scene in self._ordered_numbers(chapter_content, "scenes", "scene_number"):
                 coordinate = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
@@ -198,16 +198,17 @@ class VolumePublicationStageService:
 
     @staticmethod
     def _ordered_numbers(content: object, field: str, number_field: str) -> list[int]:
-        if not isinstance(content, dict) or not isinstance(content.get(field), list):
+        modern_field = {"volumes": "volume_summaries", "chapters": "chapter_summaries", "scenes": "scene_summaries"}.get(field, field)
+        if not isinstance(content, dict) or not isinstance(content.get(modern_field), list):
             raise ContractError(f"巻公開の{field}計画が不正です")
         result: list[int] = []
-        for item in content[field]:
+        for item in content[modern_field]:
             number = item.get(number_field) if isinstance(item, dict) else None
             if not isinstance(number, int) or isinstance(number, bool) or number < 1:
                 raise ContractError(f"巻公開の{field}計画番号が不正です")
             result.append(number)
-        if not result or result != sorted(set(result)):
-            raise ContractError(f"巻公開の{field}計画は重複なし昇順でなければなりません")
+        if not result or result != list(range(1, len(result) + 1)):
+            raise ContractError(f"巻公開の{field}計画は1からの連続昇順でなければなりません")
         return result
 
     def _volume_count(self, series: dict[str, Any], volume: int) -> int:

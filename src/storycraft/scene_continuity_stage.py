@@ -74,8 +74,8 @@ class SceneContinuityStageService:
         if not required.issubset(inputs):
             raise ContractError("scene_continuity入力selectionが不正です")
         for slot in (f"scene_plan.{coordinate}", f"scene_card.{coordinate}", f"scene_prose.{coordinate}"):
-            if self._payload(inputs[slot], slot).get("coordinate") != target:
-                raise ContractError("scene_continuity入力成果物の座標が一致しません")
+            if not isinstance(self._payload(inputs[slot], slot), dict):
+                raise ContractError("scene_continuity入力成果物が不正です")
 
     def _context(self, inputs: dict[str, dict[str, Any]], target: dict[str, int]) -> dict[str, Any]:
         coordinate = self._slot_coordinate(target)

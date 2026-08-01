@@ -118,33 +118,29 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
 
     # Valid series-plan content per closed schema
     series_plan_content = {
-        "volumes": [{"volume_number": n} for n in range(1, volume_count + 1)],
-        "thread_allocations": []
+        "volume_count": 4, "series_objectives": ["完結"],
+        "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
+        "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]},
+        "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []
     }
     write_content(root, "series-plan-000001", "series-plan", base_id, series_plan_content)
 
-    # Valid volume-plan content per closed schema
     volume_plan_content = {
-        "volume_number": 1,
-        "chapters": [{"chapter_number": n} for n in range(1, 3)],
-        "thread_allocations": []
+        "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+        "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [],
+        "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 3)], "required_end_state": "次へ", "handoff_expectations": []
     }
     write_content(root, "volume-plan-v01-000001", "volume-plan", base_id, volume_plan_content)
 
-    # Valid chapter-plan content per closed schema
     chapter_plan_c01 = {
-        "volume_number": 1,
-        "chapter_number": 1,
-        "scenes": [{"scene_number": n} for n in range(1, 3)],
-        "thread_allocations": []
+        "title": "第一章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"],
+        "scene_summaries": [{"scene_number": n, "purpose": f"場面{n}"} for n in range(1, 3)], "required_revelations": [], "constraints": []
     }
     write_content(root, "chapter-plan-v01-c01-000001", "chapter-plan", base_id, chapter_plan_c01)
 
     chapter_plan_c02 = {
-        "volume_number": 1,
-        "chapter_number": 2,
-        "scenes": [{"scene_number": n} for n in range(1, 2)],
-        "thread_allocations": []
+        "title": "第二章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"],
+        "scene_summaries": [{"scene_number": 1, "purpose": "場面1"}], "required_revelations": [], "constraints": []
     }
     write_content(root, "chapter-plan-v01-c02-000001", "chapter-plan", base_id, chapter_plan_c02)
 
@@ -165,7 +161,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
                 }
                 write_content(root, prose_id, "scene-prose", base_id, prose_content)
             # Valid scene content per closed schema
-            write_content(root, card_id, "scene-card", base_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}})
+            write_content(root, card_id, "scene-card", base_id, {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]})
             write_content(root, continuity_id, "continuity-update", base_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "changes": []})
             scene_content = {
                 "coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene},
@@ -274,13 +270,13 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
             VolumePublicationStageService(root).run(updated_at=NOW)
         self.assertIsNone(RunStateStore(root).load()["pending_commit"])
 
-    def test_final_volume_reaches_exact_completed_state_after_generic_recovery(self) -> None:
-        temporary, root = workspace(volume_count=1)
+    def test_first_volume_of_four_volume_series_remains_running_after_generic_recovery(self) -> None:
+        temporary, root = workspace(volume_count=4)
         self.addCleanup(temporary.cleanup)
         state = VolumePublicationStageService(root).run(updated_at=NOW)
-        self.assertEqual(state["status"], "completed")
-        self.assertIsNone(state["current_stage"])
-        self.assertIsNone(state["current_target"])
+        self.assertEqual(state["status"], "running")
+        self.assertEqual(state["current_stage"], "volume_plan")
+        self.assertEqual(state["current_target"], {"volume_number": 2})
         self.assertIsNone(state["pending_commit"])
         self.assertEqual(state["published_volumes"], [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}])
 

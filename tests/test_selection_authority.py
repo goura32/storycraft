@@ -74,6 +74,17 @@ class SelectionAuthorityTests(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, "initial-design content"):
                 resolve_selection(root, child)
 
+    def test_rejects_planning_count_and_coordinate_gaps(self) -> None:
+        series = {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": "p", "ending_change": "c"} for n in (1, 2, 3, 5)], "character_arc_map": {"c": [1]}, "relationship_arc_map": {"r": [1]}, "thread_progression": {"t": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "k"}], "ending_path": "完結", "global_constraints": []}
+        volume = {"title": "巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"c": "変化"}, "relationship_changes": {"r": "変化"}, "thread_goals": {"t": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}, {"chapter_number": 3, "purpose": "章"}], "required_end_state": "終了", "handoff_expectations": []}
+        chapter = {"title": "章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"], "scene_summaries": [{"scene_number": 1, "purpose": "場面"}, {"scene_number": 3, "purpose": "場面"}], "required_revelations": [], "constraints": []}
+        with self.assertRaises(ContractError):
+            DEFAULT_CONTENT_VALIDATORS["series-plan"](series, {})
+        with self.assertRaises(ContractError):
+            DEFAULT_CONTENT_VALIDATORS["volume-plan"](volume, {})
+        with self.assertRaises(ContractError):
+            DEFAULT_CONTENT_VALIDATORS["chapter-plan"](chapter, {})
+
     def test_default_resolver_registers_every_selected_content_kind(self) -> None:
         self.assertEqual(
             set(DEFAULT_CONTENT_VALIDATORS),

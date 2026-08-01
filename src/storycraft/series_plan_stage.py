@@ -6,7 +6,7 @@ from typing import Any
 
 from .artifact_ids import reserve_counter
 from .candidate_stage import CandidateStageRunner, CandidateStageSpec
-from .selection_authority import resolve_selection
+from .selection_authority import DEFAULT_CONTENT_VALIDATORS, resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
 from .workspace import validate_workspace
@@ -41,8 +41,13 @@ class SeriesPlanStageService:
         spec = CandidateStageSpec(
             stage="series_plan", artifact_kind="series-plan", next_stage="volume_plan",
             next_target={"volume_number": 1}, content_id_factory=self._content_id,
+            content_validator=lambda content: self._validate_candidate(content, context["request"]),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
+
+    @staticmethod
+    def _validate_candidate(content: dict[str, Any], request: dict[str, Any]) -> None:
+        DEFAULT_CONTENT_VALIDATORS["series-plan"](content, {"request": {"content": request}})
 
     @staticmethod
     def _payload(record: dict[str, Any], slot: str) -> dict[str, Any]:

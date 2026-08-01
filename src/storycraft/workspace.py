@@ -349,7 +349,8 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
         raise ContractError("published_volumesと公開record集合が一致しません")
     if state["status"] == "completed":
         series = resolved.get("series_plan")
-        volumes = series.get("content", {}).get("volumes") if isinstance(series, dict) and isinstance(series.get("content"), dict) else None
+        series_content = series.get("content") if isinstance(series, dict) else None
+        volumes = series_content.get("volume_summaries") if isinstance(series_content, dict) else None
         if not isinstance(volumes, list) or [item.get("volume_number") if isinstance(item, dict) else None for item in volumes] != list(range(1, len(volumes) + 1)) or len(entries) != len(volumes):
             raise ContractError("completedのpublished_volumesとseries plan巻数が一致しません")
     for entry in entries:

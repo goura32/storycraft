@@ -6,7 +6,7 @@ from typing import Any
 
 from .artifact_ids import reserve_counter
 from .candidate_stage import CandidateStageRunner, CandidateStageSpec
-from .selection_authority import resolve_selection
+from .selection_authority import DEFAULT_CONTENT_VALIDATORS, resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
 from .workspace import validate_workspace
@@ -46,6 +46,7 @@ class SceneCardStageService:
         spec = CandidateStageSpec(
             stage="scene_card", artifact_kind="scene-card", next_stage="scene_prose",
             next_target=dict(target), content_id_factory=self._content_id,
+            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["scene-card"](content, {}),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 

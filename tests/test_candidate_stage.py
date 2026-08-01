@@ -81,7 +81,7 @@ class FakeModel:
     def generate(self, stage: str, context: dict[str, object]) -> dict[str, object]:
         self.calls.append("generate")
         self._record_physical_call("generate")
-        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volumes": [1, 2, 3, 4], "thread_allocations": []}}
+        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
 
     def review(self, stage: str, context: dict[str, object], candidate: dict[str, object]) -> dict[str, object]:
         self.calls.append("review")
@@ -91,7 +91,7 @@ class FakeModel:
     def revise(self, stage: str, context: dict[str, object], candidate: dict[str, object], review: dict[str, object]) -> dict[str, object]:
         self.calls.append("revise")
         self._record_physical_call("revise")
-        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volumes": [1, 2, 3, 4], "thread_allocations": []}}
+        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
 
 
 def spec() -> CandidateStageSpec:
@@ -163,7 +163,7 @@ class CandidateStageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workspace(root)
-            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volumes"], "explanation": "直す"}]}
+            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volume_summaries"], "explanation": "直す"}]}
             model = FakeModel(root, [critical, critical])
             with patch("storycraft.candidate_stage.recover_pending_commit") as mock_recover:
                 mock_recover.return_value = {
@@ -229,7 +229,7 @@ class CandidateStageTests(unittest.TestCase):
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             settings["payload"]["quality_revision_limit"] = 0
             write_json(settings_path, settings)
-            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volumes"], "explanation": "直す"}]}
+            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volume_summaries"], "explanation": "直す"}]}
             clean = {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
             model = FakeModel(root, [critical, critical, clean])
             with patch("storycraft.candidate_stage.recover_pending_commit") as mock_recover:

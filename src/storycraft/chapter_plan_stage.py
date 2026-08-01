@@ -6,7 +6,7 @@ from typing import Any
 
 from .artifact_ids import reserve_counter
 from .candidate_stage import CandidateStageRunner, CandidateStageSpec
-from .selection_authority import resolve_selection
+from .selection_authority import DEFAULT_CONTENT_VALIDATORS, resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
 from .workspace import validate_workspace
@@ -42,6 +42,7 @@ class ChapterPlanStageService:
         spec = CandidateStageSpec(
             stage="chapter_plan", artifact_kind="chapter-plan", next_stage="scene_plan",
             next_target={"volume_number": target["volume_number"], "chapter_number": target["chapter_number"], "scene_number": 1}, content_id_factory=self._content_id,
+            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["chapter-plan"](content, {}),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 

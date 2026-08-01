@@ -171,34 +171,27 @@ class WorkspaceV2Tests(unittest.TestCase):
 
             # Valid series-plan content per closed schema
             series_plan_content = {
-                "volumes": [{"volume_number": 1}],
-                "thread_allocations": []
+                "volume_count": 4, "series_objectives": ["完結"],
+                "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
+                "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]},
+                "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []
             }
 
-            # Valid volume-plan content per closed schema
             volume_plan_content = {
-                "volume_number": 1,
-                "chapters": [{"chapter_number": 1}],
-                "thread_allocations": []
+                "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+                "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [],
+                "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ", "handoff_expectations": []
             }
 
-            # Valid chapter-plan content per closed schema
             chapter_plan_content = {
-                "volume_number": 1,
-                "chapter_number": 1,
-                "scenes": [{"scene_number": 1}],
-                "thread_allocations": []
+                "title": "第一章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"],
+                "scene_summaries": [{"scene_number": 1, "purpose": "場面1"}], "required_revelations": [], "constraints": []
             }
 
             # Valid scene-card content per closed schema
             scene_card_content = {
-                "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
-                "pov_character": "主人公",
-                "allowed_facts": [],
-                "allowed_knowledge": {},
-                "allowed_disclosures": [],
-                "allowed_updates": [],
-                "prose_conditions": ["本文上の達成条件"]
+        "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始",
+                "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]
             }
             self._write_json(root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json", {
                 "schema_version": 1, "artifact_id": "scene-card-v01-c01-s01-000001", "artifact_kind": "scene-card",
@@ -405,14 +398,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 published_volumes=[{"volume_number": 1, "publication_id": publication_id}]
             )
             RunStateStore(root).save(initial)
-            validate_workspace(root)
-            extraneous = root / "publications" / "volume-pub-v02-000001"
-            extraneous.mkdir()
-            with self.assertRaisesRegex(Exception, "published_volumes"):
-                validate_workspace(root)
-            extraneous.rmdir()
-            (publication / "manuscript.md").unlink()
-            with self.assertRaisesRegex(Exception, "publication"):
+            with self.assertRaisesRegex(Exception, "completedのpublished_volumes"):
                 validate_workspace(root)
     def test_running_workspace_validates_each_declared_published_volume(self) -> None:
         """Published volumes remain immutable evidence while later volumes are active."""
@@ -423,6 +409,11 @@ class WorkspaceV2Tests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         state = VolumePublicationStageService(root).run(updated_at="2026-07-31T00:00:00Z")
         self.assertEqual(state["status"], "running")
+        extraneous = root / "publications/volume-pub-v99-000001"
+        extraneous.mkdir()
+        with self.assertRaisesRegex(Exception, "published_volumes"):
+            validate_workspace(root)
+        extraneous.rmdir()
         publication = root / "publications/volume-pub-v01-000001/manuscript.md"
         publication.write_text("改竄された原稿\n", encoding="utf-8")
 

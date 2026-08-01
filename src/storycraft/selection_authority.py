@@ -104,9 +104,7 @@ def _reject_unknown(content: dict[str, Any], kind: str, allowed: set[str]) -> No
         raise ContractError(f"{kind} contentに未知の項目があります: {sorted(unknown)}")
 
 
-def _validate_schema_when_modern(content: dict[str, Any], kind: str, marker: str) -> None:
-    if marker not in content:
-        return
+def _validate_schema(content: dict[str, Any], kind: str) -> None:
     stage = {"series-plan": "series_plan", "volume-plan": "volume_plan", "chapter-plan": "chapter_plan", "scene-plan": "scene_plan", "scene-card": "scene_card"}[kind]
     try:
         jsonschema.Draft202012Validator(get_template_loader().load_schema_object("generate", stage)).validate(content)
@@ -115,57 +113,53 @@ def _validate_schema_when_modern(content: dict[str, Any], kind: str, marker: str
 
 
 def _validate_series_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    del inputs
     value = _require_object(content, "series-plan")
-    _validate_schema_when_modern(value, "series-plan", "volume_summaries")
-    _reject_unknown(value, "series-plan", {"volume_count", "series_objectives", "volume_summaries", "character_arc_map", "relationship_arc_map", "thread_progression", "revelation_schedule", "ending_path", "global_constraints", "title", "volumes", "thread_allocations"})
-    if "volume_summaries" not in value and (not isinstance(value.get("thread_allocations"), list)):
-        raise ContractError("series-plan content")
-    _require_numbered_list(value, "series-plan", "volume_summaries", "volumes")
+    _validate_schema(value, "series-plan")
+    _reject_unknown(value, "series-plan", {"volume_count", "series_objectives", "volume_summaries", "character_arc_map", "relationship_arc_map", "thread_progression", "revelation_schedule", "ending_path", "global_constraints"})
+    summaries = value.get("volume_summaries")
+    if not isinstance(summaries, list) or not summaries:
+        raise ContractError("series-plan volume_summaries")
+    count = value.get("volume_count")
+    numbers = [item.get("volume_number") if isinstance(item, dict) else None for item in summaries]
+    if not isinstance(count, int) or isinstance(count, bool) or not 4 <= count <= 10 or len(summaries) != count or numbers != list(range(1, count + 1)):
+        raise ContractError("series-plan volume_countとvolume_summariesの対応が不正です")
+    request = inputs.get("request", {}).get("content") if isinstance(inputs.get("request"), dict) else None
+    if request is not None and (not isinstance(request, dict) or request.get("volume_count") != count):
+        raise ContractError("series-plan volume_countがrequestと一致しません")
 
 
 def _validate_volume_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "volume-plan")
-    _validate_schema_when_modern(value, "volume-plan", "chapter_summaries")
-    _reject_unknown(value, "volume-plan", {"volume_number", "title", "starting_state_summary", "volume_purpose", "central_conflict", "character_changes", "relationship_changes", "required_revelations", "unresolved_threads", "ending_state_summary", "chapter_summaries", "chapters", "thread_allocations"})
-    if "chapter_summaries" not in value and (not isinstance(value.get("thread_allocations"), list)):
-        raise ContractError("volume-plan content")
-    _require_numbered_list(value, "volume-plan", "chapter_summaries", "chapters")
+    _validate_schema(value, "volume-plan")
+    _reject_unknown(value, "volume-plan", {"title", "starting_state_summary", "volume_purpose", "central_conflict", "character_changes", "relationship_changes", "thread_goals", "revelations", "chapter_summaries", "required_end_state", "handoff_expectations"})
+    summaries = value.get("chapter_summaries")
+    numbers = [item.get("chapter_number") if isinstance(item, dict) else None for item in summaries] if isinstance(summaries, list) else []
+    if not summaries or numbers != list(range(1, len(summaries) + 1)):
+        raise ContractError("volume-plan chapter_summariesの番号が不正です")
 
 
 def _validate_chapter_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "chapter-plan")
-    _validate_schema_when_modern(value, "chapter-plan", "scene_summaries")
-    _reject_unknown(value, "chapter-plan", {"volume_number", "chapter_number", "title", "chapter_purpose", "starting_conditions", "ending_changes", "scene_summaries", "scenes", "thread_allocations"})
-    if "scene_summaries" not in value and (not isinstance(value.get("thread_allocations"), list)):
-        raise ContractError("chapter-plan content")
-    _require_numbered_list(value, "chapter-plan", "scene_summaries", "scenes")
+    _validate_schema(value, "chapter-plan")
+    _reject_unknown(value, "chapter-plan", {"title", "chapter_purpose", "starting_conditions", "ending_changes", "scene_summaries", "required_revelations", "constraints"})
+    summaries = value.get("scene_summaries")
+    numbers = [item.get("scene_number") if isinstance(item, dict) else None for item in summaries] if isinstance(summaries, list) else []
+    if not summaries or numbers != list(range(1, len(summaries) + 1)):
+        raise ContractError("chapter-plan scene_summariesの番号が不正です")
 
 
 def _validate_scene_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "scene-plan")
-    if "participant_ids" in value:
-        _validate_schema_when_modern(value, "scene-plan", "participant_ids")
-        return
-    _reject_unknown(value, "scene-plan", {"purpose", "pov_character_id", "coordinate", "characters", "setting", "conflict", "turning_point", "ending_state", "required_revelations", "allowed_knowledge", "forbidden_knowledge", "allowed_disclosures", "allowed_facts", "allowed_updates", "forbidden_disclosures", "prose_conditions", "planned_fact_changes", "thread_allocations", "scene_goal", "dramatic_question", "emotional_arc", "beats", "disclosures", "revelations", "foreshadowing", "threads", "continuity_requirements", "description", "scene_number"})
-    if not isinstance(value.get("purpose"), str) or not value["purpose"].strip():
-        raise ContractError("scene-plan content")
-    if not any(key in value for key in ("pov_character_id", "coordinate", "characters")):
-        raise ContractError("scene-plan content")
+    _validate_schema(value, "scene-plan")
 
 
 def _validate_scene_card(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "scene-card")
-    if "participant_ids" in value:
-        _validate_schema_when_modern(value, "scene-card", "participant_ids")
-        return
-    _reject_unknown(value, "scene-card", {"coordinate", "pov_character_id", "pov_character", "location", "time", "characters_present", "goals", "constraints", "allowed_knowledge", "forbidden_knowledge", "allowed_disclosures", "allowed_facts", "allowed_updates", "forbidden_disclosures", "prose_conditions", "planned_fact_changes", "thread_allocations", "beats", "continuity_constraints", "scene_goal", "dramatic_question", "emotional_arc", "disclosures", "revelations", "foreshadowing", "threads", "description", "scene_number", "setting"})
-    if not any(key in value for key in ("pov_character_id", "coordinate", "pov_character")):
-        raise ContractError("scene-card content")
+    _validate_schema(value, "scene-card")
 
 
 def _validate_scene_prose(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:

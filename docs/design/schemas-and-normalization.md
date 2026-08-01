@@ -189,21 +189,24 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 ```json
 {
-  "schema_version": 1,
-  "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
-  "pov_character": "character-000001",
-  "allowed_facts": ["string"],
-  "allowed_knowledge": ["string"],
-  "allowed_disclosures": ["string"],
-  "forbidden_disclosures": ["string"],
-  "allowed_updates": ["string"],
-  "prose_conditions": ["string"]
+  "pov_character_id": "char-main",
+  "participant_ids": ["char-main"],
+  "location_id": "loc-main",
+  "story_time": "夜",
+  "purpose": "展開",
+  "opening_state": "開始",
+  "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": true, "order_hint": 1}],
+  "conflict": "対立",
+  "allowed_revelations": [],
+  "required_revelations": [],
+  "forbidden_revelations": [],
+  "allowed_updates": [{"target_type": "timeline_state", "target_id": "timeline", "allowed_fields": ["position"]}],
+  "ending_state_targets": ["変化"],
+  "style_constraints": ["簡潔"]
 }
 ```
 
-- `coordinate`: `current_target` と親場面計画の座標に一致する。
-- `pov_character`: 場面計画の対象人物 ID。システム側で補完せず、LLM は必ず返す。
-- `prose_conditions`: 本文上で満たすべき達成条件を自然言語で列挙（例：「A が B に秘密を打ち明ける」「C が現場に到着する」）。コードは本文中にこれらの条件を充足する記述があるかを決定的に検証しない（LLM 確認で意味的充足を判定）。決定的検証は「配列要素が文字列であること」「空文字でないこと」のみ。
+`scene-card`の対象座標はpayloadに重複保持しない。対象scene slot、artifact ID、input selection、親scene-planのselection lineageで一意に束縛する。`pov_character_id`、`participant_ids`、`location_id`、`story_time`、状態、beats、開示制約、許可更新、終了状態、文体制約はすべてLLMが返し、正本JSON Schemaで検証する。
 
 ### 4.7 call record（呼出し記録）
 
@@ -256,11 +259,11 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 | 依頼 | 題名、ジャンル、前提、required_elements、forbidden_elements、ending_preference、volume_count、言語 |
 | initial-design | core、cast、world、knowledge_model、unresolved_threads、ending_conditions |
 | 作品状態 | story_facts、character_knowledge、reader_disclosures、unresolved_thread_states、timeline_position |
-| series-plan | 巻一覧、thread_allocations |
-| volume-plan | volume_number、chapters、thread_allocations |
-| chapter-plan | volume_number、chapter_number、scenes、thread_allocations |
-| scene-plan | 座標、purpose、characters、thread_allocations、planned_fact_changes |
-| scene-card | 座標、pov_character、allowed_facts、allowed_knowledge、allowed_disclosures、forbidden_disclosures、allowed_updates、prose_conditions |
+| series-plan | `volume_count`、`series_objectives`、`volume_summaries`、character/relationship arc、thread progression、revelation schedule、ending path、global constraints |
+| volume-plan | title、starting_state_summary、volume_purpose、central_conflict、character/relationship changes、thread goals、revelations、`chapter_summaries`、required_end_state、handoff expectations |
+| chapter-plan | title、chapter_purpose、starting_conditions、ending_changes、`scene_summaries`、required_revelations、constraints |
+| scene-plan | purpose、pov_character_id、participant_ids、location_id、starting_conditions、intended_beats、intended_revelations、intended_changes、prohibited_disclosures（座標はpayloadに含めずselection slotで束縛） |
+| scene-card | pov_character_id、participant_ids、location_id、story_time、purpose、opening_state、required_beats、conflict、allowed/required/forbidden_revelations、allowed_updates、ending_state_targets、style_constraints（座標はpayloadに含めずselection slotで束縛） |
 | scene-prose | 座標、text |
 | continuity-update | 座標、changes |
 | 場面 | scene_prose_id、continuity_update_id、current_state_id、scene_card_id、quality_disposition_id、座標 |

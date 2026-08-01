@@ -59,7 +59,7 @@ class Model:
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         self.contexts[stage] = context
         payloads = {
-            "scene_card": {"coordinate": COORDINATE},
+            "scene_card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
             "scene_prose": {"coordinate": COORDINATE, "text": "場面本文"},
             "scene_continuity": {"coordinate": COORDINATE, "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]},
         }
@@ -100,32 +100,32 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         
         # Valid series-plan content per closed schema
         series_plan_content = {
-            "volumes": [1, 2, 3, 4],
-            "thread_allocations": []
+            "volume_count": 4, "series_objectives": ["完結"],
+            "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
+            "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]},
+            "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []
         }
-        
-        # Valid volume-plan content per closed schema
         volume_plan_content = {
-            "volume_number": 3,
-            "chapters": [1, 2, 3],
-            "thread_allocations": []
+            "title": "第三巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+            "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [],
+            "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 4)], "required_end_state": "次へ", "handoff_expectations": []
         }
-        
-        # Valid chapter-plan content per closed schema
         chapter_plan_content = {
-            "volume_number": 3,
-            "chapter_number": 2,
-            "scenes": [1, 2, 3, 4],
-            "thread_allocations": []
+            "title": "第二章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"],
+            "scene_summaries": [{"scene_number": n, "purpose": f"場面{n}"} for n in range(1, 5)], "required_revelations": [], "constraints": []
         }
         
         # Valid scene-plan content per closed schema
         scene_plan_content = {
-            "coordinate": COORDINATE,
             "purpose": "テスト",
-            "characters": ["主人公"],
-            "thread_allocations": [],
-            "planned_fact_changes": []
+            "pov_character_id": "char-main",
+            "participant_ids": ["char-main"],
+            "location_id": "loc-main",
+            "starting_conditions": ["開始"],
+            "intended_beats": ["展開"],
+            "intended_revelations": [],
+            "intended_changes": ["変化"],
+            "prohibited_disclosures": []
         }
         
         # Valid generation content per closed schema
