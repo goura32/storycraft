@@ -209,8 +209,9 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
             raise ContractError(f"scene-commit input selectionに必須slotがありません: {slot}")
         if input_slots[slot] != identifier:
             raise ContractError(f"scene-commit input selectionの{slot}が参照と一致しません")
-    if not any(value == record["scene_commit_id"] for key, value in output_slots.items() if key.startswith("scene_commit.")):
-        raise ContractError("scene-commit output selectionがscene-commitを参照しません")
+    output_slot = f"scene_commit.{prefix}"
+    if output_slots.get(output_slot) != record["scene_commit_id"]:
+        raise ContractError("scene-commit output selectionの座標slotが参照と一致しません")
 
 
 def _validate_publication_source_evidence(root: Path, files: dict[str, Any]) -> None:
