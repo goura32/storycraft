@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .artifact_record import validate_record
+from .artifact_record import validate_call_record, validate_candidate_record, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
 from .immutable_directory import finalize_immutable_directory
 from .publication_builder import validate_volume_publication_files
@@ -283,7 +283,15 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
         raise ContractError("candidate adoptionのcandidate/quality参照が不正です")
     candidate = _audit_record(root, "candidates", candidate_id)
     quality = _audit_record(root, "quality", quality_id)
+    validate_candidate_record(candidate_id, candidate)
     validate_record("quality-disposition", quality_id, quality)
+    if candidate.get("input_selection_id") != manifest["input_selection_id"]:
+        raise ContractError("candidate adoptionのinput_selection_idがmanifestと一致しません")
+    call_id = candidate["call_id"]
+    call = _audit_record(root, "runtime/calls", call_id)
+    validate_call_record(call_id, call)
+    if call.get("settings_id") != candidate.get("settings_id"):
+        raise ContractError("candidate adoptionのcall/settings lineageが不正です")
     if candidate.get("candidate_id") != candidate_id or candidate.get("artifact_kind") != content_target["artifact_kind"]:
         raise ContractError("candidate adoptionのcandidate参照が不正です")
     if candidate.get("payload") != content.get("content"):
@@ -295,8 +303,12 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
         raise ContractError("candidate adoptionのcandidate lineageが不正です")
     for review_id in quality["review_record_ids"]:
         review = _audit_record(root, "reviews", review_id)
-        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage}:
-            raise ContractError("quality dispositionのreview参照が不正です")
+        validate_review_record(review_id, review)
+        review_call_id = review["call_id"]
+        review_call = _audit_record(root, "runtime/calls", review_call_id)
+        validate_call_record(review_call_id, review_call)
+        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("target_candidate_id") != review.get("candidate_id"):
+            raise ContractError("quality dispositionのreview/call参照が不正です")
     _validate_candidate_selection_delta(root, manifest, content_targets, adoption_target, quality_id, selection)
 
 
