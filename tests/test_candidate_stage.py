@@ -163,7 +163,7 @@ class CandidateStageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workspace(root)
-            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.title"], "explanation": "直す"}]}
+            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volumes"], "explanation": "直す"}]}
             model = FakeModel(root, [critical, critical])
             with patch("storycraft.candidate_stage.recover_pending_commit") as mock_recover:
                 mock_recover.return_value = {
@@ -229,7 +229,7 @@ class CandidateStageTests(unittest.TestCase):
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             settings["payload"]["quality_revision_limit"] = 0
             write_json(settings_path, settings)
-            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.title"], "explanation": "直す"}]}
+            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volumes"], "explanation": "直す"}]}
             clean = {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
             model = FakeModel(root, [critical, critical, clean])
             with patch("storycraft.candidate_stage.recover_pending_commit") as mock_recover:

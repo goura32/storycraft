@@ -83,6 +83,12 @@ class InitialDesignStageService:
                     last_error = exc
             raise ContractError(f"initial_design {operation}がinvalid_response_limitまで不正です") from last_error
 
+        def bind_call(input_refs: list[str], target_candidate_id: str | None = None) -> None:
+            setter = getattr(model, "set_call_context", None)
+            if callable(setter):
+                setter(settings_id=inputs["settings"]["settings_id"], input_refs=input_refs, target_candidate_id=target_candidate_id)
+
+        bind_call([input_selection_id])
         content = call_valid("generate", "initial_design", context, validator=valid_candidate)
         review_method = getattr(model, "review", None)
         if not callable(review_method):
@@ -93,7 +99,7 @@ class InitialDesignStageService:
         candidate_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
         adoption_id = f"adoption-{reserve_counter(self.workspace_root, 'next_adoption'):06d}"
         output_selection_id = f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"
-        generate_call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+        generate_call_id = self._call_id(model, "generate")
         self._write_audit_record("runtime/calls", generate_call_id, {
             "schema_version": 1, "call_id": generate_call_id, "operation": "generate",
             "role": "initial_design", "target_candidate_id": None,
@@ -114,9 +120,11 @@ class InitialDesignStageService:
         review_ids: list[str] = []
         revision_count = 0
         while True:
-            review = call_valid("review", "initial_design", context, content, validator=valid_review)
+            bind_call([input_selection_id, candidate_id], candidate_id)
+            from .candidate_stage import CandidateStageRunner
+            review = call_valid("review", "initial_design", context, content, validator=lambda value: CandidateStageRunner._review_with_evidence(value, content))
             review_id = f"review-{reserve_counter(self.workspace_root, 'next_review'):06d}"
-            review_call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+            review_call_id = self._call_id(model, "review")
             self._write_audit_record("runtime/calls", review_call_id, {
                 "schema_version": 1, "call_id": review_call_id, "operation": "review",
                 "role": "initial_design", "target_candidate_id": candidate_id,
@@ -135,9 +143,10 @@ class InitialDesignStageService:
             critical = [issue for issue in review["issues"] if issue.get("severity") == "critical"]
             if not critical or (quality_limit != 0 and revision_count >= quality_limit):
                 break
+            bind_call([input_selection_id, candidate_id, review_id], candidate_id)
             revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
-            revise_call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+            revise_call_id = self._call_id(model, "revise")
             self._write_audit_record("runtime/calls", revise_call_id, {
                 "schema_version": 1, "call_id": revise_call_id, "operation": "revise",
                 "role": "initial_design", "target_candidate_id": candidate_id,
@@ -254,9 +263,18 @@ class InitialDesignStageService:
         )
 
 
+    def _call_id(self, model: Any, operation: str) -> str:
+        physical_id = getattr(model, "last_call_id", None)
+        physical_path = self.workspace_root / "runtime/calls" / str(physical_id) / "record.json"
+        if isinstance(physical_id, str) and physical_id.startswith("call-") and physical_path.is_file():
+            return physical_id
+        return f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+
     def _write_audit_record(self, relative_directory: str, identifier: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory / identifier
         if directory.exists():
+            if relative_directory == "runtime/calls" and (directory / "record.json").is_file():
+                return
             raise ContractError("不変audit recordを上書きできません")
         directory.mkdir(parents=True)
         (directory / "record.json").write_text(

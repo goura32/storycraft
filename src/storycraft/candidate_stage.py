@@ -19,6 +19,7 @@ from .commit_recovery import recover_pending_commit
 from .run_state import RunStateStore
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
+from .review_contracts import field_tokens
 
 
 class InvalidResponseLimitError(ContractError):
@@ -94,7 +95,8 @@ class CandidateStageRunner:
                 target_candidate_id=candidate_id,
             )
             review = self._valid_response(
-                model, "review", (self.spec.stage, deepcopy(context), deepcopy(candidate)), self._review,
+                model, "review", (self.spec.stage, deepcopy(context), deepcopy(candidate)),
+                lambda value: self._review_with_evidence(value, candidate["payload"]),
                 invalid_limit=invalid_limit,
             )
             review_id = self._reserve("reviews", "review")
@@ -219,6 +221,40 @@ class CandidateStageRunner:
             if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
                 raise ContractError("review issueが不正です")
         return value
+
+    @classmethod
+    def _review_with_evidence(cls, value: object, candidate: dict[str, Any]) -> dict[str, Any]:
+        review = cls._review(value)
+        for issue in review["issues"]:
+            for location in issue["evidence_locations"]:
+                if not isinstance(location, str) or not location:
+                    raise ContractError("review evidence_locationsが不正です")
+                if location.startswith(("prose:", "offset:")):
+                    try:
+                        offset = int(location.split(":", 1)[1])
+                    except ValueError as exc:
+                        raise ContractError("review prose offsetが不正です") from exc
+                    text = candidate.get("text")
+                    if not isinstance(text, str) or not 0 <= offset < len(text):
+                        raise ContractError("review prose evidenceが候補を指しません")
+                elif location.startswith("paragraph:"):
+                    try:
+                        paragraph = int(location.split(":", 1)[1])
+                    except ValueError as exc:
+                        raise ContractError("review paragraph indexが不正です") from exc
+                    text = candidate.get("text")
+                    if not isinstance(text, str) or not 0 <= paragraph < len(text.split("\\n\\n")):
+                        raise ContractError("review paragraph evidenceが候補を指しません")
+                else:
+                    current: Any = candidate
+                    for token in field_tokens(location):
+                        if isinstance(current, dict) and isinstance(token, str) and token in current:
+                            current = current[token]
+                        elif isinstance(current, list) and isinstance(token, int) and 0 <= token < len(current):
+                            current = current[token]
+                        else:
+                            raise ContractError("review JSON evidenceが候補を指しません")
+        return review
 
     def _input_slots(self, selection_id: str) -> dict[str, str]:
         snapshot = SelectionSnapshotStore(self.workspace_root).load(selection_id)

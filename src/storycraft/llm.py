@@ -540,7 +540,7 @@ class LLMClient:
                 visible_messages[-1]["content"] if visible_messages else "", schema,
                 request_options=self.settings.llm.get("request_options"),
                 messages=visible_messages, call_record_dir=self.raw_dir.parent / "calls",
-                technical_attempt=rec.attempt, format_attempt=1, seed=seed,
+                technical_attempt=rec.attempt, format_attempt=meta.get("__format_attempt", 1), seed=seed,
                 operation=rec.kind, call_id_sink=lambda call_id: setattr(rec, "call_id", call_id),
                 settings_id=meta.get("settings_id"), input_refs=meta.get("input_refs", []),
                 target_candidate_id=meta.get("target_candidate_id"),

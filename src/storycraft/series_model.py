@@ -17,6 +17,7 @@ class OpenAIStoryModel:
     def __init__(self, settings, raw_dir) -> None:
         self.client = LLMClient(settings, raw_dir)
         self._seed_sequence = 0
+        self._format_attempts: dict[tuple[str, str], int] = {}
 
     def set_log_ref(self, ref: str) -> None:
         """Workflowから受け取る対象座標。prompt本文には含めない。"""
@@ -180,6 +181,11 @@ class OpenAIStoryModel:
         failure_reason = "unknown"
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
         ref = getattr(self, "_log_ref", stage)
+        format_key = (kind, stage)
+        format_attempts = getattr(self, "_format_attempts", {})
+        format_attempt = format_attempts.get(format_key, 0) + 1
+        self._format_attempts = format_attempts
+        self._format_attempts[format_key] = format_attempt
         response_format = self._response_format(
             kind,
             stage,
@@ -198,6 +204,7 @@ class OpenAIStoryModel:
                 {
                     "__kind": kind, "__phase": stage, "__ref": ref,
                     "__attempt": retry_attempt, "__retry_total": attempts,
+                    "__format_attempt": format_attempt,
                     "__quality_pass": getattr(self, "_log_quality_pass", ""),
                     **getattr(self, "_call_context", {}),
                 },
@@ -245,6 +252,11 @@ class OpenAIStoryModel:
             1,
         )
         ref = getattr(self, "_log_ref", stage)
+        format_key = (kind, stage)
+        format_attempts = getattr(self, "_format_attempts", {})
+        format_attempt = format_attempts.get(format_key, 0) + 1
+        self._format_attempts = format_attempts
+        self._format_attempts[format_key] = format_attempt
         for retry_attempt in range(1, attempts + 1):
             self._seed_sequence = (
                 getattr(self, "_seed_sequence", 0) + 1
@@ -264,6 +276,7 @@ class OpenAIStoryModel:
                     "__ref": ref,
                     "__attempt": retry_attempt,
                     "__retry_total": attempts,
+                    "__format_attempt": format_attempt,
                     "__quality_pass": getattr(
                         self,
                         "_log_quality_pass",
@@ -276,6 +289,7 @@ class OpenAIStoryModel:
                 None,
                 seed,
             )
+            self.last_call_id = record.call_id
             self.client.save_raw(record, messages)
             if record.error:
                 failure_reason = (

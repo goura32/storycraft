@@ -57,9 +57,16 @@ class RequestIntakeStageService:
         context = {"keywords": {"keywords": keywords["keywords"], "language": keywords["language"]}, "settings": settings}
 
         invalid_limit = self._invalid_limit(settings)
+
+        def bind_call(input_refs: list[str], target_candidate_id: str | None = None) -> None:
+            setter = getattr(model, "set_call_context", None)
+            if callable(setter):
+                setter(settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+
+        bind_call([keywords_id, settings_id])
         candidate = self._call_valid(model.generate, ("request_intake", deepcopy(context)), self._candidate, invalid_limit)
         candidate_id = self._reserve_directory_id("candidates", "candidate")
-        generate_call = self._write_call("generate", None, [keywords_id, settings_id], candidate, settings_id, updated_at)
+        generate_call = self._write_call(model, "generate", None, [keywords_id, settings_id], candidate, settings_id, updated_at)
         self._write_audit("candidates", candidate_id, {
             "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": "request",
             "input_selection_id": None, "keywords_id": keywords_id, "settings_id": settings_id,
@@ -70,11 +77,14 @@ class RequestIntakeStageService:
         revision_count = 0
         review_ids: list[str] = []
         while True:
+            bind_call([keywords_id, settings_id, candidate_id], candidate_id)
+            from .candidate_stage import CandidateStageRunner
             review = self._call_valid(
-                model.review, ("request_intake", deepcopy(context), deepcopy(candidate)), self._review, invalid_limit,
+                model.review, ("request_intake", deepcopy(context), deepcopy(candidate)),
+                lambda value: CandidateStageRunner._review_with_evidence(value, candidate["payload"]), invalid_limit,
             )
             review_id = self._reserve_directory_id("reviews", "review")
-            review_call = self._write_call("review", candidate_id, [keywords_id, settings_id, candidate_id], review, settings_id, updated_at)
+            review_call = self._write_call(model, "review", candidate_id, [keywords_id, settings_id, candidate_id], review, settings_id, updated_at)
             self._write_audit("reviews", review_id, {
                 "schema_version": 1, "review_id": review_id, "candidate_id": candidate_id,
                 "response": review, "call_id": review_call, "created_at": updated_at,
@@ -85,6 +95,7 @@ class RequestIntakeStageService:
                 break
             if self._quality_limit(settings) != 0 and revision_count >= self._quality_limit(settings):
                 break
+            bind_call([keywords_id, settings_id, candidate_id, review_id], candidate_id)
             revised = self._call_valid(
                 model.revise,
                 ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
@@ -92,7 +103,7 @@ class RequestIntakeStageService:
                 invalid_limit,
             )
             revised_id = self._reserve_directory_id("candidates", "candidate")
-            revise_call = self._write_call("revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
+            revise_call = self._write_call(model, "revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
             self._write_audit("candidates", revised_id, {
                 "schema_version": 1, "candidate_id": revised_id, "artifact_kind": "request",
                 "input_selection_id": None, "keywords_id": keywords_id, "settings_id": settings_id,
@@ -211,7 +222,11 @@ class RequestIntakeStageService:
                 last_error = exc
         raise ContractError("request_intake応答がinvalid_response_limitまで不正です") from last_error
 
-    def _write_call(self, operation: str, target_candidate_id: str | None, input_refs: list[str], response: dict[str, Any], settings_id: str, updated_at: str) -> str:
+    def _write_call(self, model: Any, operation: str, target_candidate_id: str | None, input_refs: list[str], response: dict[str, Any], settings_id: str, updated_at: str) -> str:
+        physical_id = getattr(model, "last_call_id", None)
+        physical_path = self.workspace_root / "runtime/calls" / str(physical_id) / "record.json"
+        if isinstance(physical_id, str) and physical_id.startswith("call-") and physical_path.is_file():
+            return physical_id
         call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
         record = {"schema_version": 1, "call_id": call_id, "operation": operation,
                   "role": "request_intake", "target_candidate_id": target_candidate_id,

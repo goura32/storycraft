@@ -48,7 +48,7 @@
 | 出力成果物 | 不変 `scene`、後続 `generation`、場面確定記録、後続選択スナップショット |
 | 次工程 | 次場面 `scene_plan`、次章 `chapter_plan`、または `volume_publication` |
 
-`scene` は本文、場面座標、基準作品状態 ID、場面カード ID、継続性更新 ID を参照します。場面確定記録は `scenes/<scene-commit-id>/record.json` にだけ保存する未知項目拒否の不変記録で、`schema_version: 1`、`scene_commit_id`、`scene_id`、`scene_card_id`、`scene_prose_id`、`continuity_update_id`、`current_state_id`、`quality_disposition_id`、座標、`created_at` を必須とする。`quality_disposition_id` は同じ座標の `scene_prose_disposition.vNN.cMM.sKK` slot の品質判定 ID に完全一致し、継続性更新の品質判定を指定してはならない。各 ID と座標は同じ scene の入力・出力成果物と一致し、本文・カード・更新の内容を複写しない。後続の作品状態は更新を一度だけ適用した新しい作品状態です。コードは、入力が同一場面座標・同一基準作品状態を指すこと、更新が検証済みであること、更新適用後の状態スキーマ・ID・知識・未解決事項状態が整合することを検証します。
+`scene` は本文、場面座標、基準作品状態 ID、場面カード ID、継続性更新 ID を参照します。場面確定記録は `scenes/<scene-commit-id>/record.json` にだけ保存する未知項目拒否の不変記録で、`schema_version: 1`、`scene_commit_id`、`scene_id`、`scene_card_id`、`scene_prose_id`、`continuity_update_id`、`current_state_id`、`quality_disposition_id`、座標、`created_at` を必須とする。`quality_disposition_id` は同じ座標の `scene_prose_disposition.vNN.cMM.sKK` slot の品質判定 ID に完全一致し、継続性更新の品質判定は、継続性候補の採用前検証には使うが場面確定記録のこのslotには指定しない。継続性品質判定は後続選択スナップショットに保持し、継続性採用が完了していることを検証する。各 ID と座標は同じ scene の入力・出力成果物と一致し、本文・カード・更新の内容を複写しない。後続の作品状態は更新を一度だけ適用した新しい作品状態です。コードは、入力が同一場面座標・同一基準作品状態を指すこと、更新が検証済みであること、更新適用後の状態スキーマ・ID・知識・未解決事項状態が整合することを検証します。
 
 `scene` は `scenes/<scene-id>/record.json` に、場面確定記録は `scenes/<scene-commit-id>/record.json` に別々に保存し、同じ `scene_commit` manifest の target として原子的に確定します。一時保存、場面、後続の作品状態、場面確定記録、後続選択スナップショット、次の `current_target` を一つの原子的確定で更新します。途中停止時は共通の `pending_commit=scene_commit` 収束規則を使い、二重適用・二重確定・新規 LLM 呼出しを行いません。
 
