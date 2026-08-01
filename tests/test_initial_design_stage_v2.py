@@ -18,6 +18,8 @@ TIMESTAMP = "2026-07-31T00:00:00Z"
 
 
 class FakeInitialDesignModel:
+    allow_test_synthetic_calls = True
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
 

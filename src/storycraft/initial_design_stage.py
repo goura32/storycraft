@@ -266,9 +266,11 @@ class InitialDesignStageService:
     def _call_id(self, model: Any, operation: str) -> str:
         physical_id = getattr(model, "last_call_id", None)
         physical_path = self.workspace_root / "runtime/calls" / str(physical_id) / "record.json"
-        if isinstance(physical_id, str) and physical_id.startswith("call-") and physical_path.is_file():
-            return physical_id
-        return f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+        if not isinstance(physical_id, str) or not physical_id.startswith("call-") or not physical_path.is_file():
+            if not getattr(model, "allow_test_synthetic_calls", False):
+                raise ContractError(f"{operation}の物理call recordがmodelから得られません")
+            return f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+        return physical_id
 
     def _write_audit_record(self, relative_directory: str, identifier: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory / identifier

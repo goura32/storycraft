@@ -225,19 +225,22 @@ class RequestIntakeStageService:
     def _write_call(self, model: Any, operation: str, target_candidate_id: str | None, input_refs: list[str], response: dict[str, Any], settings_id: str, updated_at: str) -> str:
         physical_id = getattr(model, "last_call_id", None)
         physical_path = self.workspace_root / "runtime/calls" / str(physical_id) / "record.json"
-        if isinstance(physical_id, str) and physical_id.startswith("call-") and physical_path.is_file():
-            return physical_id
-        call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
-        record = {"schema_version": 1, "call_id": call_id, "operation": operation,
-                  "role": "request_intake", "target_candidate_id": target_candidate_id,
-                  "input_refs": input_refs, "technical_attempt": 1, "format_attempt": 1,
-                  "seed": 1, "endpoint": "injected-model", "model": "injected-model",
-                  "settings_id": settings_id,
-                  "request": json.dumps({"stage": "request_intake", "operation": operation}, sort_keys=True),
-                  "response": json.dumps(response, ensure_ascii=False, sort_keys=True),
-                  "transport": "success", "validation": {"result": "valid", "checks": [], "failure_code": None}}
-        self._write_audit("runtime/calls", call_id, record)
-        return call_id
+        if not isinstance(physical_id, str) or not physical_id.startswith("call-") or not physical_path.is_file():
+            if not getattr(model, "allow_test_synthetic_calls", False):
+                raise ContractError(f"{operation}の物理call recordがmodelから得られません")
+            call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"
+            self._write_audit("runtime/calls", call_id, {
+                "schema_version": 1, "call_id": call_id, "operation": operation,
+                "role": "test-double", "target_candidate_id": target_candidate_id,
+                "input_refs": input_refs, "technical_attempt": 1, "format_attempt": 1,
+                "seed": 1, "endpoint": "test-double", "model": "test-double",
+                "settings_id": settings_id,
+                "request": json.dumps({"stage": "request_intake", "operation": operation}, sort_keys=True),
+                "response": json.dumps(response, ensure_ascii=False, sort_keys=True),
+                "transport": "success", "validation": {"result": "valid", "checks": [], "failure_code": None},
+            })
+            return call_id
+        return physical_id
 
     def _reserve_directory_id(self, relative_root: str, prefix: str) -> str:
         directory = self.workspace_root / relative_root

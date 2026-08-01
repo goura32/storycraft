@@ -23,6 +23,8 @@ REQUEST = {
 
 
 class FakeRequestModel:
+    allow_test_synthetic_calls = True
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, object]] = []
 
