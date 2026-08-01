@@ -147,7 +147,6 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         }
         for kind, (artifact_id, content) in records.items():
             write_content(root, kind, artifact_id, base["selection_id"], content)
-        write_json(root / "runtime/adoptions/adoption-000009/record.json", {"schema_version": 1, "adoption_id": "adoption-000009", "source_kind": "direct_request", "candidate_id": None, "quality_id": None, "output_content_artifact_ids": ["request-000001"], "output_selection_id": base["selection_id"], "input_selection_id": None, "created_at": NOW})
         current = selections.create(input_selection_id=base["selection_id"], created_at=NOW, slots={
             "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
             "series_plan": "series-plan-000001", "volume_plan.v03": "volume-plan-v03-000001",
@@ -155,6 +154,7 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
             "scene_plan_adoption.v03.c02.s04": "adoption-000009",
             "current_state": "gen-000001",
         })
+        write_json(root / "runtime/adoptions/adoption-000009/record.json", {"schema_version": 1, "adoption_id": "adoption-000009", "source_kind": "direct_request", "candidate_id": None, "quality_id": None, "output_content_artifact_ids": ["request-000001"], "output_selection_id": current["selection_id"], "input_selection_id": None, "created_at": NOW})
         RunStateStore(root).save({"schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None, "current_stage": "scene_card", "current_target": COORDINATE, "current_selection_id": current["selection_id"], "pending_commit": None, "published_volumes": [], "created_at": NOW, "updated_at": NOW})
 
     def test_real_candidate_adoptions_chain_scene_card_to_prose_to_continuity_to_scene_commit(self) -> None:

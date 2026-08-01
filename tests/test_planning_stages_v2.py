@@ -235,7 +235,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
                 if kind == "adoption":
                     # Direct-request adoption: needs a real content id reference for validation.
                     write_adoption(root, artifact_id, source_kind="direct_request",
-                                   output_content_artifact_ids=["gen-000001"], input_selection_id=base["selection_id"],
+                                   output_content_artifact_ids=["request-000001"], input_selection_id=base["selection_id"],
                                    output_selection_id=base["selection_id"])
                     written = True
 

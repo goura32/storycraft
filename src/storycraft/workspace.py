@@ -255,11 +255,23 @@ def _validate_persisted_records(root: Path) -> None:
                 raise ContractError("adoptionのcandidate/quality参照が一致しません")
             candidate_kind = candidate["artifact_kind"]
             output_ids = record["output_content_artifact_ids"]
-            if candidate_kind != "initial-design" and any(records[artifact_id].get("artifact_kind") != candidate_kind or artifact_id not in output_selection["slots"].values() for artifact_id in output_ids):
+            allowed_kinds = {candidate_kind, "generation"} if candidate_kind == "initial-design" else {candidate_kind}
+            if any(records[artifact_id].get("artifact_kind") not in allowed_kinds or artifact_id not in output_selection["slots"].values() for artifact_id in output_ids):
                 raise ContractError(f"adoption {identifier}の出力content参照がoutput selectionと一致しません")
             matching = [records[artifact_id] for artifact_id in output_ids if records[artifact_id].get("artifact_kind") == candidate_kind]
-            if (candidate_kind != "initial-design" and len(matching) != len(output_ids)) or not matching or any(item.get("content") != candidate["payload"] for item in matching):
+            if not matching or any(item.get("content") != candidate["payload"] for item in matching):
                 raise ContractError(f"adoption {identifier}の出力内容がcandidate payloadと一致しません")
+        elif record["source_kind"] == "direct_request":
+            if record["candidate_id"] is not None or record["quality_id"] is not None:
+                raise ContractError("direct_request adoptionにcandidate/quality参照があります")
+            output_ids = record["output_content_artifact_ids"]
+            if len(output_ids) != 1:
+                raise ContractError(f"direct_request adoption {identifier}の出力content数が不正です")
+            output_slots = output_selection["slots"]
+            output_record = records[output_ids[0]]
+            output_kind = output_record.get("artifact_kind")
+            if output_kind not in {"request", "initial-design"} or output_ids[0] not in output_slots.values():
+                raise ContractError(f"direct_request adoption {identifier}の出力content参照がoutput selectionと一致しません")
 
     scene_commits = {
         identifier: record
