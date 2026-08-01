@@ -147,6 +147,9 @@ def _validate_chapter_plan(content: dict[str, Any], inputs: dict[str, dict[str, 
 def _validate_scene_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "scene-plan")
+    if "participant_ids" in value:
+        _validate_schema_when_modern(value, "scene-plan", "participant_ids")
+        return
     _reject_unknown(value, "scene-plan", {"purpose", "pov_character_id", "coordinate", "characters", "setting", "conflict", "turning_point", "ending_state", "required_revelations", "allowed_knowledge", "forbidden_knowledge", "allowed_disclosures", "allowed_facts", "allowed_updates", "forbidden_disclosures", "prose_conditions", "planned_fact_changes", "thread_allocations", "scene_goal", "dramatic_question", "emotional_arc", "beats", "disclosures", "revelations", "foreshadowing", "threads", "continuity_requirements", "description", "scene_number"})
     if not isinstance(value.get("purpose"), str) or not value["purpose"].strip():
         raise ContractError("scene-plan content")
@@ -157,6 +160,9 @@ def _validate_scene_plan(content: dict[str, Any], inputs: dict[str, dict[str, An
 def _validate_scene_card(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "scene-card")
+    if "participant_ids" in value:
+        _validate_schema_when_modern(value, "scene-card", "participant_ids")
+        return
     _reject_unknown(value, "scene-card", {"coordinate", "pov_character_id", "pov_character", "location", "time", "characters_present", "goals", "constraints", "allowed_knowledge", "forbidden_knowledge", "allowed_disclosures", "allowed_facts", "allowed_updates", "forbidden_disclosures", "prose_conditions", "planned_fact_changes", "thread_allocations", "beats", "continuity_constraints", "scene_goal", "dramatic_question", "emotional_arc", "disclosures", "revelations", "foreshadowing", "threads", "description", "scene_number", "setting"})
     if not any(key in value for key in ("pov_character_id", "coordinate", "pov_character")):
         raise ContractError("scene-card content")
