@@ -285,6 +285,7 @@ class WorkspaceV2Tests(unittest.TestCase):
 
             # Valid scene-commit content per closed schema
             scene_commit_content = {
+                "schema_version": 1,
                 "scene_commit_id": "scene-commit-v01-c01-s01-000001",
                 "scene_id": "scene-v01-c01-s01-000001",  # points to the scene artifact
                 "scene_card_id": "scene-card-v01-c01-s01-000001",
@@ -297,11 +298,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "scene_number": 1,
                 "created_at": "2026-07-28T00:00:00Z",
             }
-            self._write_json(root / "scenes/scene-commit-v01-c01-s01-000001/record.json", {
-                "schema_version": 1, "artifact_id": "scene-commit-v01-c01-s01-000001", "artifact_kind": "scene-commit",
-                "input_selection_id": initial["current_selection_id"], "created_at": "2026-07-28T00:00:00Z",
-                "content": scene_commit_content,
-            })
+            self._write_json(root / "scenes/scene-commit-v01-c01-s01-000001/record.json", scene_commit_content)
 
             # Write quality disposition record
             self._write_json(root / "quality/quality-000001/record.json", {

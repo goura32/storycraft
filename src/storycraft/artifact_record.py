@@ -142,7 +142,7 @@ def _validate_review_response(value: object) -> None:
     if not isinstance(value, dict) or set(value) != {"schema_version", "decision", "issues"} or value.get("schema_version") != "review-response-v1" or value.get("decision") not in {"pass", "issues"} or not isinstance(value.get("issues"), list) or (value["decision"] == "pass") != (not value["issues"]):
         raise ContractError("review responseが不正です")
     for issue in value["issues"]:
-        if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
+        if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not issue["evidence_locations"] or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
             raise ContractError("review responseのissueが不正です")
 
 
@@ -193,30 +193,16 @@ def _canonical_audit_id(kind: str, value: object) -> bool:
 
 def _validate_scene_commit(record: dict[str, Any], artifact_id: str) -> None:
     """Validate scene-commit record against closed schema."""
-    # Validate wrapper fields
-    wrapper_required = {"schema_version", "artifact_id", "artifact_kind", "input_selection_id", "created_at", "content"}
-    if set(record) != wrapper_required:
-        raise ContractError("scene_commit recordが不正です")
-    _equal(record, "artifact_id", artifact_id)
-    _equal(record, "artifact_kind", "scene-commit")
-    # Validate content
-    content = record["content"]
-    content_required = {
-        "scene_commit_id",
-        "scene_id",
-        "scene_card_id",
-        "scene_prose_id",
-        "continuity_update_id",
-        "current_state_id",
-        "quality_disposition_id",
-        "volume_number",
-        "chapter_number",
-        "scene_number",
-        "created_at",
+    required = {
+        "schema_version", "scene_commit_id", "scene_id", "scene_card_id",
+        "scene_prose_id", "continuity_update_id", "current_state_id",
+        "quality_disposition_id", "volume_number", "chapter_number",
+        "scene_number", "created_at",
     }
-    if set(content) != content_required:
-        raise ContractError("scene_commit recordのcontentが不正です")
-    _equal(content, "scene_commit_id", artifact_id)
+    if set(record) != required:
+        raise ContractError("scene_commit recordが不正です")
+    _equal(record, "scene_commit_id", artifact_id)
+    content = record
     commit = artifact_spec("scene-commit").match_id(artifact_id)
     coordinate = {
         "volume": content["volume_number"],

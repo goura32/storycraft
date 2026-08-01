@@ -214,6 +214,12 @@ def _validate_persisted_records(root: Path) -> None:
                 raise ContractError(f"candidate {identifier} revise callのtargetが親candidateと一致しません")
             if record["review_record_id"] not in call["input_refs"]:
                 raise ContractError(f"candidate {identifier} revise callがreviewを入力参照していません")
+        if call["settings_id"] != record["settings_id"]:
+            raise ContractError(f"candidate {identifier} call settings_idがcandidateと一致しません")
+        if record["input_selection_id"] is not None:
+            selection = _reference(record["input_selection_id"], selections, f"candidate {identifier} input_selection_id")
+            if selection["slots"].get("settings") != record["settings_id"]:
+                raise ContractError(f"candidate {identifier} input selectionのsettingsが一致しません")
         if record["input_selection_id"] is not None: _require_reference(record["input_selection_id"], selections, f"candidate {identifier} input_selection_id")
         if record["keywords_id"] is not None: _require_reference(record["keywords_id"], records, f"candidate {identifier} keywords_id")
         for expected in (record["input_selection_id"], record["keywords_id"], record["parent_candidate_id"]):
@@ -225,8 +231,10 @@ def _validate_persisted_records(root: Path) -> None:
             if review["candidate_id"] != record["parent_candidate_id"]:
                 raise ContractError("candidate revision reviewが親candidateを参照しません")
     for identifier, record in reviews.items():
-        _require_reference(record["candidate_id"], candidates, f"review {identifier} candidate_id")
+        candidate = _reference(record["candidate_id"], candidates, f"review {identifier} candidate_id")
         call = _reference(record["call_id"], calls, f"review {identifier} call_id")
+        if call["settings_id"] != candidate["settings_id"]:
+            raise ContractError(f"review {identifier} call settings_idがcandidateと一致しません")
         if call["operation"] != "review" or call["target_candidate_id"] != record["candidate_id"] or record["candidate_id"] not in call["input_refs"]:
             raise ContractError(f"review {identifier} call provenanceが不正です")
     for identifier, record in qualities.items():

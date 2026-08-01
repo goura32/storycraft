@@ -82,7 +82,7 @@ def populate_scene_commit_staging(root: Path) -> None:
     staging = "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001"
     write_record(root, f"{staging}/scene-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
     write_record(root, f"{staging}/gen-000002", {"schema_version": 1, "artifact_id": "gen-000002", "artifact_kind": "generation", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
-    write_record(root, f"{staging}/scene-commit-v01-c01-s01-000001", {"schema_version": 1, "artifact_id": "scene-commit-v01-c01-s01-000001", "artifact_kind": "scene-commit", "input_selection_id": "selection-000001", "created_at": NOW, "content": {
+    write_record(root, f"{staging}/scene-commit-v01-c01-s01-000001", {"schema_version": 1,
         "scene_commit_id": "scene-commit-v01-c01-s01-000001",
         "scene_id": "scene-v01-c01-s01-000002",
         "scene_card_id": "scene-card-v01-c01-s01-000001",
@@ -94,7 +94,7 @@ def populate_scene_commit_staging(root: Path) -> None:
         "chapter_number": 1,
         "scene_number": 1,
         "created_at": NOW,
-    }})
+    })
     write_record(root, f"{staging}/selection-000002", {"schema_version": 1, "selection_id": "selection-000002", "input_selection_id": "selection-000001", "slots": {"settings": "settings-000001", "scene_commit.v01.c01.s01": "scene-commit-v01-c01-s01-000001"}, "created_at": NOW})
 
 

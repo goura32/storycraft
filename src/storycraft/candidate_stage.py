@@ -218,7 +218,7 @@ class CandidateStageRunner:
         if (value["decision"] == "pass") != (not issues):
             raise ContractError("review decisionとissuesが一致しません")
         for issue in issues:
-            if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
+            if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not issue["evidence_locations"] or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
                 raise ContractError("review issueが不正です")
         return value
 
