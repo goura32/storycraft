@@ -307,7 +307,7 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
         review_call_id = review["call_id"]
         review_call = _audit_record(root, "runtime/calls", review_call_id)
         validate_call_record(review_call_id, review_call)
-        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("target_candidate_id") != review.get("candidate_id"):
+        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("operation") != "review" or review_call.get("target_candidate_id") != review.get("candidate_id"):
             raise ContractError("quality dispositionのreview/call参照が不正です")
     _validate_candidate_selection_delta(root, manifest, content_targets, adoption_target, quality_id, selection)
 
