@@ -32,6 +32,14 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
     targets = manifest["targets"]
     assert isinstance(targets, list)
     _reject_unlisted_staging(root, manifest)
+    # Preflight every staged target before moving anything.  Recovery rejection
+    # must not mutate pending_commit status or partially finalize the manifest.
+    for target in targets:
+        if target["status"] != "pending":
+            continue
+        staging = root / target["staging_path"]
+        if staging.exists() and not (root / target["final_path"]).exists():
+            _target_validator(root, target)(staging)
     working = deepcopy(state)
     for index, target in enumerate(targets):
         staging = root / target["staging_path"]
@@ -57,7 +65,6 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
         else:  # run-state validation makes this unreachable, keep recovery closed.
             raise ContractError("pending_commit target statusが不正です")
         working["pending_commit"]["targets"][index]["status"] = "finalized"
-        store.save(working)
     for target in targets:
         _target_validator(root, target)(root / target["final_path"])
         if target["artifact_kind"] == "scene-commit":
