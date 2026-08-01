@@ -205,7 +205,9 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
         "current_state": record["current_state_id"],
     }
     for slot, identifier in expected_slots.items():
-        if slot in input_slots and input_slots[slot] != identifier:
+        if slot not in input_slots:
+            raise ContractError(f"scene-commit input selectionに必須slotがありません: {slot}")
+        if input_slots[slot] != identifier:
             raise ContractError(f"scene-commit input selectionの{slot}が参照と一致しません")
     if not any(value == record["scene_commit_id"] for key, value in output_slots.items() if key.startswith("scene_commit.")):
         raise ContractError("scene-commit output selectionがscene-commitを参照しません")
