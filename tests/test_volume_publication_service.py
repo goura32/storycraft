@@ -56,7 +56,7 @@ def write_quality_audit(root: Path, quality_id: str, prose: dict, *, notice: boo
     generate_call_id, review_call_id = f"call-{suffix}", f"call-{900000 + int(suffix):06d}"
     write_json(root / "runtime/calls" / generate_call_id / "record.json", {
         "schema_version": 1, "call_id": generate_call_id, "operation": "generate", "role": "scene_prose",
-        "target_candidate_id": None, "input_refs": [], "technical_attempt": 1, "format_attempt": 1,
+        "target_candidate_id": None, "input_refs": ["selection-000001"], "technical_attempt": 1, "format_attempt": 1,
         "seed": 1, "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
         "request": "{}", "response": "{}", "transport": "success",
         "validation": {"result": "valid", "checks": [], "failure_code": None},
@@ -151,8 +151,8 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
              "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "chapter_plan.v01.c02": "chapter-plan-v01-c02-000001"}
     for chapter, scenes in ((1, (1, 2)), (2, (1,))):
         for scene in scenes:
-            prose_id = f"scene-v01-c{chapter:02d}-s{scene:02d}-000001"
-            committed_id = f"scene-artifact-v01-c{chapter:02d}-s{scene:02d}-000001"
+            prose_id = f"scene-prose-v01-c{chapter:02d}-s{scene:02d}-000001"
+            committed_id = f"scene-v01-c{chapter:02d}-s{scene:02d}-000001"
             quality_id = f"quality-{chapter * 10 + scene:06d}"
             if not (omit_scene_source and chapter == 2 and scene == 1):
                 # Valid scene-prose content per closed schema
@@ -214,7 +214,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["targets"][0]["artifact_kind"], "volume-publication")
         record = json.loads((root / "runtime/staging/volume-publication-volume-pub-v01-000001/volume-pub-v01-000001/record.json").read_text(encoding="utf-8"))
         self.assertEqual(record["scene_ids"], [
-            "scene-artifact-v01-c01-s01-000001", "scene-artifact-v01-c01-s02-000001", "scene-artifact-v01-c02-s01-000001",
+            "scene-v01-c01-s01-000001", "scene-v01-c01-s02-000001", "scene-v01-c02-s01-000001",
         ])
 
     def test_generic_recovery_publishes_sources_in_chapter_scene_order_and_moves_nonfinal_to_next_plan(self) -> None:
@@ -239,7 +239,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         assert isinstance(pending, dict)
         record_path = root / pending["targets"][0]["staging_path"] / "record.json"
         record = json.loads(record_path.read_text(encoding="utf-8"))
-        record["scene_ids"][0] = "scene-artifact-v01-c01-s01-999999"
+        record["scene_ids"][0] = "scene-v01-c01-s01-999999"
         record_path.write_text(json.dumps(record), encoding="utf-8")
 
         with self.assertRaisesRegex(ContractError, "source/reference evidence"):
@@ -283,9 +283,9 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
             "settings_id": "settings-000001", "series_plan_id": "series-plan-000001",
             "volume_plan_id": "volume-plan-v01-000001", "current_state_id": "gen-000001",
             "chapter_plan_ids": ["chapter-plan-v01-c01-000001"],
-            "scene_ids": ["scene-artifact-v01-c01-s01-000001"],
+            "scene_ids": ["scene-v01-c01-s01-000001"],
             "quality_ids": ["quality-000001"],
-            "scenes": [{"scene_id": "scene-artifact-v01-c01-s01-000001", "prose": "本文です。"}],
+            "scenes": [{"scene_id": "scene-v01-c01-s01-000001", "prose": "本文です。"}],
             "has_remaining_major_issues": False, "volume_count": 1,
         }
         with (

@@ -63,7 +63,7 @@ class SceneCommitStageService:
         )
         next_state_content = self._apply_continuity(old_state, continuity)
 
-        scene_id = f"scene-artifact-v{volume:02d}-c{chapter:02d}-s{scene_number:02d}-{reserve_counter(self.workspace_root, 'next_scene'):06d}"
+        scene_id = f"scene-v{volume:02d}-c{chapter:02d}-s{scene_number:02d}-{reserve_counter(self.workspace_root, 'next_scene'):06d}"
         generation_id = f"gen-{reserve_counter(self.workspace_root, 'next_generation'):06d}"
         scene_commit_id = f"scene-commit-v{volume:02d}-c{chapter:02d}-s{scene_number:02d}-{reserve_counter(self.workspace_root, 'next_scene_commit'):06d}"
         output_selection_id = f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"

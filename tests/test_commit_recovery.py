@@ -65,7 +65,7 @@ def scene_commit_state() -> dict:
         "input_selection_id": "selection-000001", "output_selection_id": "selection-000002",
         "state_update": {"current_selection_id": "selection-000002", "current_stage": "scene_plan", "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2}},
         "targets": [
-            {"artifact_id": "scene-artifact-v01-c01-s01-000002", "artifact_kind": "scene", "staging_path": f"{staging}/scene-artifact-v01-c01-s01-000002", "final_path": "scenes/scene-artifact-v01-c01-s01-000002", "status": "pending"},
+            {"artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "staging_path": f"{staging}/scene-v01-c01-s01-000002", "final_path": "scenes/scene-v01-c01-s01-000002", "status": "pending"},
             {"artifact_id": "gen-000002", "artifact_kind": "generation", "staging_path": f"{staging}/gen-000002", "final_path": "generations/gen-000002", "status": "pending"},
             {"artifact_id": "scene-commit-v01-c01-s01-000001", "artifact_kind": "scene-commit", "staging_path": f"{staging}/scene-commit-v01-c01-s01-000001", "final_path": "scenes/scene-commit-v01-c01-s01-000001", "status": "pending"},
             {"artifact_id": "selection-000002", "artifact_kind": "selection", "staging_path": f"{staging}/selection-000002", "final_path": "runtime/selections/selection-000002", "status": "pending"},
@@ -80,13 +80,13 @@ def populate_scene_commit_staging(root: Path) -> None:
     # Write the selection-000001 record (which depends on the request and settings)
     write_record(root, "runtime/selections/selection-000001", {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"request": "request-000001", "settings": "settings-000001"}, "created_at": NOW})
     staging = "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001"
-    write_record(root, f"{staging}/scene-artifact-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-artifact-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
+    write_record(root, f"{staging}/scene-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
     write_record(root, f"{staging}/gen-000002", {"schema_version": 1, "artifact_id": "gen-000002", "artifact_kind": "generation", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
     write_record(root, f"{staging}/scene-commit-v01-c01-s01-000001", {"schema_version": 1, "artifact_id": "scene-commit-v01-c01-s01-000001", "artifact_kind": "scene-commit", "input_selection_id": "selection-000001", "created_at": NOW, "content": {
         "scene_commit_id": "scene-commit-v01-c01-s01-000001",
-        "scene_id": "scene-artifact-v01-c01-s01-000002",
+        "scene_id": "scene-v01-c01-s01-000002",
         "scene_card_id": "scene-card-v01-c01-s01-000001",
-        "scene_prose_id": "scene-v01-c01-s01-000001",
+        "scene_prose_id": "scene-prose-v01-c01-s01-000001",
         "continuity_update_id": "continuity-v01-c01-s01-000001",
         "current_state_id": "gen-000002",
         "quality_disposition_id": "quality-000001",

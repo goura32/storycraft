@@ -168,7 +168,7 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
             prose_state = SceneProseStageService(root).run(model, workspace_already_validated=True, updated_at=NOW)
             self.assertEqual(prose_state["current_stage"], "scene_continuity")
             prose_selection = SelectionSnapshotStore(root).load(prose_state["current_selection_id"])
-            self.assertEqual(prose_selection["slots"]["scene_prose.v03.c02.s04"], "scene-v03-c02-s04-000001")
+            self.assertEqual(prose_selection["slots"]["scene_prose.v03.c02.s04"], "scene-prose-v03-c02-s04-000001")
             self.assertEqual(prose_selection["slots"]["scene_prose_adoption.v03.c02.s04"], "adoption-000002")
             self.assertEqual(prose_selection["slots"]["scene_prose_disposition.v03.c02.s04"], "quality-000002")
 
@@ -183,7 +183,7 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
                 root, SelectionSnapshotStore(root).load(continuity_state["current_selection_id"]),
             )
             commit_inputs = SceneCommitStageService._inputs(resolved, 3, 2, 4)
-            self.assertEqual(commit_inputs["scene_prose"]["artifact_id"], "scene-v03-c02-s04-000001")
+            self.assertEqual(commit_inputs["scene_prose"]["artifact_id"], "scene-prose-v03-c02-s04-000001")
             self.assertEqual(commit_inputs["continuity_update"]["artifact_id"], "continuity-v03-c02-s04-000001")
             self.assertEqual(commit_inputs["scene_prose_disposition"]["quality_id"], "quality-000002")
             self.assertEqual(model.contexts["scene_prose"].keys(), {"settings", "current_state", "scene_plan", "scene_card", "volume_number", "chapter_number", "scene_number"})

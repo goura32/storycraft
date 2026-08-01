@@ -19,7 +19,7 @@
 | ID | [成果物と保存](artifacts-and-storage.md#2-配置と-id) の形式。ASCII 英数字と `-` だけを使い、通番は6桁、巻・章・場面番号は2桁ゼロ埋め |
 | 時刻 | UTC の RFC 3339 文字列 |
 | スキーマ版 | 正の整数。LLM 応答だけ `*-v1` 文字列 |
-| 成果物参照 | `artifact_type` と `artifact_id` のオブジェクト |
+| 成果物参照 | `artifact_kind` と `artifact_id` のオブジェクト |
 | 座標 | `volume_number`、`chapter_number`、`scene_number`。すべて 1 以上の整数 |
 | 根拠位置 | JSON パス（`$.path` 形式）、段落番号（0始まり整数、空行区切り）、本文位置（UTF-8 byte オフセット、0始まり整数）のいずれか。対象本文・JSON に解決できる値 |
 
@@ -91,9 +91,9 @@
 
 `--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
 
-- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。
-- `keywords`: `{ "keywords": ["空でない文字列を1個以上"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。文字数・件数の固定上限は設けない。
-- `config`: `{ "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の loopback HTTP URL だけを許可（`127.0.0.0/8`、`::1`、`localhost` 解決先）。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
+- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
+- `keywords`: `{ "keywords": ["空でない文字列を1個以上"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
+- `config`: `{ "provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
 
 ## 4. LLM 応答
 
@@ -159,7 +159,8 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 ```json
 {
   "schema_version": 1,
-  "scene_prose_id": "scene-v01-c01-s01-000001",
+  "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
+  "scene_prose_id": "scene-prose-v01-c01-s01-000001",
   "continuity_update_id": "continuity-v01-c01-s01-000001",
   "current_state_id": "gen-000123",
   "scene_card_id": "scene-card-v01-c01-s01-000001",
@@ -219,7 +220,7 @@ call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存す
   "technical_attempt": 1,
   "format_attempt": 1,
   "seed": 1,
-  "endpoint": "loopback OpenAI-compatible URL",
+  "endpoint": "loopback or private-LAN OpenAI-compatible URL",
   "model": "model identifier",
   "settings_id": "settings-000001",
   "request": "送信本文 | null",
@@ -229,7 +230,7 @@ call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存す
 }
 ```
 
-`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt=1`、`request=null` とする。
+`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
 
 ### 4.8 adoption record（採用記録）
 

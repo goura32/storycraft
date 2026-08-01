@@ -15,7 +15,7 @@ Storycraft は、作品の依頼文またはキーワードから、日本語の
 ## 必要環境
 
 - Python 3.14+
-- Ollama（ローカル LLM サーバー、デフォルト `http://ws1.local:11434/v1`）
+- Ollama（同一ホストまたは信頼したプライベート LAN 上の LLM サーバー。設定の `endpoint` に HTTP URL を指定）
 - 依存パッケージは `uv` で管理
 
 ## インストールと実行
@@ -37,19 +37,18 @@ uv run python -m storycraft.cli validate --help
 ### 1. 依頼文から始める場合
 
 ```bash
-# 設定ファイル作成
+# 設定ファイル作成（仕様書 §3.1 の閉じた形式）
 cat > config.json <<'EOF'
 {
-  "llm": {
-    "provider": "ollama",
-    "base_url": "http://ws1.local:11434/v1",
-    "model": "qwen3:35b-a3b",
-    "first_event_timeout_seconds": 3600,
-    "idle_timeout_seconds": 600
-  },
-  "quality": {
-    "max_critique_passes": 1
-  }
+  "provider": "ollama",
+  "endpoint": "http://192.168.1.50:11434",
+  "model": "qwen3:35b-a3b",
+  "technical_retry_limit": 3,
+  "quality_revision_limit": 0,
+  "invalid_response_limit": 3,
+  "chapter_per_volume_range": [1, 20],
+  "chapter_scene_range": [1, 20],
+  "scene_text_char_range": [1000, 12000]
 }
 EOF
 
@@ -156,8 +155,7 @@ src/storycraft/           # 実装コード
 ├── workspace.py          # 作業場所初期化・検証
 ├── run_state.py          # 実行状態 v3
 ├── volume_publication_stage.py  # 巻公開
-├── reviewed_candidate_stage.py  # 汎用候補生成/確認/修正
-├── reviewed_prose_stage.py      # 本文生成/確認/修正
+├── candidate_stage.py    # 汎用候補生成/確認/修正/採用
 ├── scene_prose_stage.py         # 場面本文
 ├── scene_continuity_stage.py    # 継続性更新
 ├── series_contracts.py          # 検証器
@@ -170,14 +168,14 @@ src/storycraft/           # 実装コード
 templates/prompts/
 ├── system/                      # システムプロンプト
 ├── schemas/                     # JSONスキーマ
-└── user/                        # ユーザープロンプト (generate/critique/revision × 15ステージ)
+└── user/                        # ユーザープロンプト (generate/critique/revision × 10ステージ)
 
 docs/
 ├── SPECIFICATION.md             # 仕様正本
 ├── IMPLEMENTATION_STATUS.md     # 実装状況
 └── design/                      # 設計書群
 
-tests/                          # 66テスト
+tests/                          # 自動試験
 ```
 
 > Storycraft は物語の意味生成を LLM に任せながら、状態、保存、継続性、再開、巻公開、最終巻公開による制作完了を明示的な契約と決定的なコードで管理します。

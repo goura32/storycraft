@@ -49,12 +49,23 @@ class CliV2AcceptanceTests(unittest.TestCase):
                 )()
                 self.assertEqual(main([]), 75)
 
-    def test_invalid_config_uses_closed_loopback_contract_and_does_not_create_workspace(self) -> None:
+    def test_private_lan_endpoint_is_accepted(self) -> None:
+        from storycraft.workspace import _validate_endpoint
+
+        for endpoint in (
+            "http://10.0.0.25:11434",
+            "http://172.16.10.25:11434",
+            "http://192.168.1.50:11434",
+            "http://[fd12:3456:789a::25]:11434",
+        ):
+            _validate_endpoint(endpoint)
+
+    def test_invalid_config_uses_private_lan_contract_and_does_not_create_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
             request.write_text(json.dumps({"title": "題", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
-            valid = {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}
+            valid = {"provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}
             invalid_cases = (
                 ("endpoint", "http://example.com:11434"),
                 ("endpoint", "https://127.0.0.1:11434"),

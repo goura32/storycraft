@@ -96,7 +96,7 @@ class RunStateV2Tests(unittest.TestCase):
                 "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2},
             },
             "targets": [
-                target("scene-artifact-v01-c01-s01-000002", "scene", "scenes/scene-artifact-v01-c01-s01-000002"),
+                target("scene-v01-c01-s01-000002", "scene", "scenes/scene-v01-c01-s01-000002"),
                 target("gen-000002", "generation", "generations/gen-000002"),
                 target("scene-commit-v01-c01-s01-000001", "scene-commit", "scenes/scene-commit-v01-c01-s01-000001"),
                 target("selection-000002", "selection", "runtime/selections/selection-000002"),

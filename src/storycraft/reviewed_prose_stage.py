@@ -10,7 +10,7 @@ import shutil
 import tempfile
 from typing import Any
 
-from .reviewed_candidate_stage import (
+from .candidate_utils import (
     fsync_directory,
     normalize_review,
     read_json,
@@ -206,11 +206,6 @@ class ReviewedProseStageRunner:
                         "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
                 )
                 self.state_store.save(blocked)
                 return blocked
@@ -301,11 +296,6 @@ class ReviewedProseStageRunner:
                         "issues": deepcopy(issues),
                     },
                     updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
                 )
                 self.state_store.save(blocked)
                 return blocked
@@ -342,11 +332,6 @@ class ReviewedProseStageRunner:
                         "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
                 )
                 self.state_store.save(blocked)
                 return blocked

@@ -24,10 +24,10 @@ class ArtifactRegistryV2Tests(unittest.TestCase):
             ("chapter-plan", "chapter-plan-v01-c02-000001", "design/chapter-plans/chapter-plan-v01-c02-000001", "chapter_plan.v01.c02"),
             ("scene-plan", "scene-plan-v01-c02-s03-000001", "design/scene-plans/scene-plan-v01-c02-s03-000001", "scene_plan.v01.c02.s03"),
             ("scene-card", "scene-card-v01-c02-s03-000001", "design/scene-cards/scene-card-v01-c02-s03-000001", "scene_card.v01.c02.s03"),
-            ("scene-prose", "scene-v01-c02-s03-000001", "scenes/scene-v01-c02-s03-000001", "scene_prose.v01.c02.s03"),
+            ("scene-prose", "scene-prose-v01-c02-s03-000001", "scenes/scene-prose-v01-c02-s03-000001", "scene_prose.v01.c02.s03"),
             ("continuity-update", "continuity-v01-c02-s03-000001", "scenes/continuity-v01-c02-s03-000001", "continuity_update.v01.c02.s03"),
             ("generation", "gen-000001", "generations/gen-000001", "current_state"),
-            ("scene", "scene-artifact-v01-c02-s03-000001", "scenes/scene-artifact-v01-c02-s03-000001", "scene.v01.c02.s03"),
+            ("scene", "scene-v01-c02-s03-000001", "scenes/scene-v01-c02-s03-000001", "scene.v01.c02.s03"),
             ("scene-commit", "scene-commit-v01-c02-s03-000001", "scenes/scene-commit-v01-c02-s03-000001", "scene_commit.v01.c02.s03"),
             ("selection", "selection-000001", "runtime/selections/selection-000001", None),
             ("adoption", "adoption-000001", "runtime/adoptions/adoption-000001", None),
@@ -47,7 +47,7 @@ class ArtifactRegistryV2Tests(unittest.TestCase):
                     self.assertEqual(canonical_slot(kind, artifact_id), slot)
 
     def test_scene_and_scene_commit_use_distinct_ids_and_final_directories(self) -> None:
-        scene_id = "scene-artifact-v01-c01-s01-000001"
+        scene_id = "scene-v01-c01-s01-000001"
         commit_id = "scene-commit-v01-c01-s01-000001"
         self.assertNotEqual(scene_id, commit_id)
         self.assertNotEqual(

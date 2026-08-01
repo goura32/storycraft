@@ -161,9 +161,14 @@ def generate(
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
                                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                                  settings_id=settings_id)
-    options = {"num_ctx": context_length}
+    # Use model's max context from capability, not settings
+    options = {"num_ctx": context_length, "seed": seed}
     if request_options:
-        options.update(request_options)
+        # Only allow user-specified sampling options; think/stream/num_ctx are provider-controlled
+        allowed = {"temperature", "top_p", "top_k", "repeat_penalty"}
+        for key, value in request_options.items():
+            if key in allowed:
+                options[key] = value
     body_value = {
         "model": model,
         "messages": messages if messages is not None else [{"role": "user", "content": prompt}],
@@ -197,7 +202,7 @@ def generate(
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=raw, transport="success",
                       validation={"result": "invalid", "checks": [], "failure_code": "schema_invalid"},
-                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed + 1,
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                       settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
@@ -206,7 +211,7 @@ def generate(
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=raw if "raw" in locals() else None, transport="success",
                       validation={"result": "invalid", "checks": [], "failure_code": "json_parse"},
-                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed + 1,
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                       settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
@@ -214,7 +219,7 @@ def generate(
     call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                   request=body, response=content, transport="success",
                   validation={"result": "valid", "checks": [], "failure_code": None},
-                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed + 1,
+                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                   settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
     if call_id is not None and call_id_sink is not None:
         call_id_sink(call_id)

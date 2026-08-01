@@ -88,7 +88,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                 self.assertEqual(posts[2]["response_format"]["json_schema"]["schema"]["properties"]["schema_version"]["const"], "candidate-response-v1")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted((root / "runtime/calls").glob("*/record.json"))]
                 self.assertEqual(len(calls), 8)
-                self.assertEqual([call["seed"] for call in calls], list(range(1, 9)))
+                self.assertEqual([call["seed"] for call in calls], [1, 1, 3, 3, 5, 5, 7, 7])
                 generated = next(call for call in calls if call["operation"] == "generate")
                 reviewed = next(call for call in calls if call["operation"] == "review")
                 self.assertEqual(generated["settings_id"], "settings-000001")

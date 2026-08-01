@@ -217,9 +217,9 @@ class CandidateStageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workspace(root, stage="scene_prose")
-            runner = CandidateStageRunner(root, CandidateStageSpec(stage="scene_prose", artifact_kind="scene-prose", next_stage="scene_continuity", next_target={"volume_number": 1, "chapter_number": 1, "scene_number": 1}, content_id_factory=lambda _root, _target: "scene-v01-c01-s01-000001"))
-            slots = {"request": "request-000001", "settings": "settings-000001", "scene_prose.v01.c01.s01": "scene-v01-c01-s01-000000", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001", "continuity_adoption.v01.c01.s01": "adoption-000099"}
-            self.assertEqual(runner.updated_slots(slots, "scene-v01-c01-s01-000001", "adoption-000001", "quality-000001"), {"request": "request-000001", "settings": "settings-000001", "scene_prose.v01.c01.s01": "scene-v01-c01-s01-000001", "scene_prose_adoption.v01.c01.s01": "adoption-000001", "scene_prose_disposition.v01.c01.s01": "quality-000001"})
+            runner = CandidateStageRunner(root, CandidateStageSpec(stage="scene_prose", artifact_kind="scene-prose", next_stage="scene_continuity", next_target={"volume_number": 1, "chapter_number": 1, "scene_number": 1}, content_id_factory=lambda _root, _target: "scene-prose-v01-c01-s01-000001"))
+            slots = {"request": "request-000001", "settings": "settings-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000000", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001", "continuity_adoption.v01.c01.s01": "adoption-000099"}
+            self.assertEqual(runner.updated_slots(slots, "scene-prose-v01-c01-s01-000001", "adoption-000001", "quality-000001"), {"request": "request-000001", "settings": "settings-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001", "scene_prose_adoption.v01.c01.s01": "adoption-000001", "scene_prose_disposition.v01.c01.s01": "quality-000001"})
 
     def test_zero_quality_limit_keeps_revising_until_a_clean_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

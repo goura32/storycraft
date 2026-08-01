@@ -108,7 +108,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             def call(call_id: str, operation: str, target: str | None) -> None:
                 write_record("runtime/calls", call_id, {
                     "schema_version": 1, "call_id": call_id, "operation": operation,
-                    "role": "provider", "target_candidate_id": target, "input_refs": [],
+                    "role": "provider", "target_candidate_id": target, "input_refs": ["selection-000001"] + ([target] if target else []),
                     "technical_attempt": 1, "format_attempt": 1, "seed": 1,
                     "endpoint": "http://127.0.0.1:11434/v1", "model": "test",
                     "settings_id": "settings-000001", "request": "{}", "response": "{}",
@@ -243,8 +243,8 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
                 "text": "本文"
             }
-            self._write_json(root / "scenes/scene-v01-c01-s01-000001/record.json", {
-                "schema_version": 1, "artifact_id": "scene-v01-c01-s01-000001", "artifact_kind": "scene-prose",
+            self._write_json(root / "scenes/scene-prose-v01-c01-s01-000001/record.json", {
+                "schema_version": 1, "artifact_id": "scene-prose-v01-c01-s01-000001", "artifact_kind": "scene-prose",
                 "input_selection_id": initial["current_selection_id"], "created_at": "2026-07-28T00:00:00Z",
                 "content": scene_prose_content,
             })
@@ -252,9 +252,9 @@ class WorkspaceV2Tests(unittest.TestCase):
             # Valid scene artifact content per closed schema
             scene_content = {
                 "scene_commit_id": "scene-commit-v01-c01-s01-000001",
-                "scene_id": "scene-v01-c01-s01-000001",  # points to the scene-prose artifact
+                "scene_id": "scene-prose-v01-c01-s01-000001",  # points to the scene-prose artifact
                 "scene_card_id": "scene-card-v01-c01-s01-000001",
-                "scene_prose_id": "scene-v01-c01-s01-000001",
+                "scene_prose_id": "scene-prose-v01-c01-s01-000001",
                 "continuity_update_id": "continuity-v01-c01-s01-000001",
                 "current_state_id": "gen-000001",
                 "quality_disposition_id": "quality-000001",
@@ -263,8 +263,8 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "scene_number": 1,
                 "created_at": "2026-07-28T00:00:00Z",
             }
-            self._write_json(root / "scenes/scene-artifact-v01-c01-s01-000001/record.json", {
-                "schema_version": 1, "artifact_id": "scene-artifact-v01-c01-s01-000001", "artifact_kind": "scene",
+            self._write_json(root / "scenes/scene-v01-c01-s01-000001/record.json", {
+                "schema_version": 1, "artifact_id": "scene-v01-c01-s01-000001", "artifact_kind": "scene",
                 "input_selection_id": initial["current_selection_id"], "created_at": "2026-07-28T00:00:00Z",
                 "content": scene_content,
             })
@@ -286,9 +286,9 @@ class WorkspaceV2Tests(unittest.TestCase):
             # Valid scene-commit content per closed schema
             scene_commit_content = {
                 "scene_commit_id": "scene-commit-v01-c01-s01-000001",
-                "scene_id": "scene-artifact-v01-c01-s01-000001",  # points to the scene artifact
+                "scene_id": "scene-v01-c01-s01-000001",  # points to the scene artifact
                 "scene_card_id": "scene-card-v01-c01-s01-000001",
-                "scene_prose_id": "scene-v01-c01-s01-000001",
+                "scene_prose_id": "scene-prose-v01-c01-s01-000001",
                 "continuity_update_id": "continuity-v01-c01-s01-000001",
                 "current_state_id": "gen-000001",
                 "quality_disposition_id": "quality-000001",
@@ -314,7 +314,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             self._write_json(root / "reviews/review-000001/record.json", {
                 "schema_version": 1, "review_id": "review-000001", "candidate_id": "candidate-000001",
                 "response": {"schema_version": "review-response-v1", "decision": "pass", "issues": []},
-                "call_id": "call-000001", "created_at": "2026-07-28T00:00:00Z",
+                "call_id": "call-000002", "created_at": "2026-07-28T00:00:00Z",
             })
 
             # Write candidate record
@@ -328,7 +328,15 @@ class WorkspaceV2Tests(unittest.TestCase):
             # Write call record
             self._write_json(root / "runtime/calls/call-000001/record.json", {
                 "schema_version": 1, "call_id": "call-000001", "operation": "generate",
-                "role": "scene_prose", "target_candidate_id": None, "input_refs": [],
+                "role": "scene_prose", "target_candidate_id": None, "input_refs": ["selection-000001"],
+                "technical_attempt": 1, "format_attempt": 1, "seed": 1,
+                "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
+                "request": "{}", "response": "{}", "transport": "success",
+                "validation": {"result": "valid", "checks": [], "failure_code": None},
+            })
+            self._write_json(root / "runtime/calls/call-000002/record.json", {
+                "schema_version": 1, "call_id": "call-000002", "operation": "review",
+                "role": "scene_prose", "target_candidate_id": "candidate-000001", "input_refs": ["selection-000001", "candidate-000001"],
                 "technical_attempt": 1, "format_attempt": 1, "seed": 1,
                 "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
                 "request": "{}", "response": "{}", "transport": "success",
@@ -364,7 +372,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "input_selection_id": initial["current_selection_id"],
                 "slots": {**slots, "series_plan": series_id, "volume_plan.v01": "volume-plan-v01-000001",
                           "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001",
-                          "scene_prose.v01.c01.s01": "scene-v01-c01-s01-000001",
+                          "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
                           "scene_prose_disposition.v01.c01.s01": "quality-000001", "current_state": "gen-000001"},
                 "created_at": "2026-07-28T00:00:00Z"
             }

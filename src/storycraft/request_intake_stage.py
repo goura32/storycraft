@@ -56,7 +56,8 @@ class RequestIntakeStageService:
             raise ContractError("request_intake settings payloadが不正です")
         context = {"keywords": {"keywords": keywords["keywords"], "language": keywords["language"]}, "settings": settings}
 
-        candidate = self._candidate(model.generate("request_intake", deepcopy(context)))
+        invalid_limit = self._invalid_limit(settings)
+        candidate = self._call_valid(model.generate, ("request_intake", deepcopy(context)), self._candidate, invalid_limit)
         candidate_id = self._reserve_directory_id("candidates", "candidate")
         generate_call = self._write_call("generate", None, [keywords_id, settings_id], candidate, settings_id, updated_at)
         self._write_audit("candidates", candidate_id, {
@@ -69,7 +70,9 @@ class RequestIntakeStageService:
         revision_count = 0
         review_ids: list[str] = []
         while True:
-            review = self._review(model.review("request_intake", deepcopy(context), deepcopy(candidate)))
+            review = self._call_valid(
+                model.review, ("request_intake", deepcopy(context), deepcopy(candidate)), self._review, invalid_limit,
+            )
             review_id = self._reserve_directory_id("reviews", "review")
             review_call = self._write_call("review", candidate_id, [keywords_id, settings_id, candidate_id], review, settings_id, updated_at)
             self._write_audit("reviews", review_id, {
@@ -82,7 +85,12 @@ class RequestIntakeStageService:
                 break
             if self._quality_limit(settings) != 0 and revision_count >= self._quality_limit(settings):
                 break
-            revised = self._candidate(model.revise("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)))
+            revised = self._call_valid(
+                model.revise,
+                ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
+                self._candidate,
+                invalid_limit,
+            )
             revised_id = self._reserve_directory_id("candidates", "candidate")
             revise_call = self._write_call("revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
             self._write_audit("candidates", revised_id, {
@@ -185,6 +193,23 @@ class RequestIntakeStageService:
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise ContractError("quality_revision_limitが不正です")
         return value
+
+    @staticmethod
+    def _invalid_limit(settings: dict[str, Any]) -> int:
+        value = settings.get("invalid_response_limit")
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ContractError("invalid_response_limitが不正です")
+        return value
+
+    @staticmethod
+    def _call_valid(method: Any, arguments: tuple[Any, ...], validator: Any, limit: int) -> dict[str, Any]:
+        last_error: ContractError | None = None
+        for _ in range(limit):
+            try:
+                return validator(method(*arguments))
+            except ContractError as exc:
+                last_error = exc
+        raise ContractError("request_intake応答がinvalid_response_limitまで不正です") from last_error
 
     def _write_call(self, operation: str, target_candidate_id: str | None, input_refs: list[str], response: dict[str, Any], settings_id: str, updated_at: str) -> str:
         call_id = f"call-{reserve_counter(self.workspace_root, 'next_call'):06d}"

@@ -202,9 +202,23 @@ def _validate_persisted_records(root: Path) -> None:
         if target is not None: _require_reference(target, candidates, f"call {identifier} target_candidate_id")
     for identifier, record in candidates.items():
         _require_reference(record["settings_id"], records, f"candidate {identifier} settings_id")
-        _require_reference(record["call_id"], calls, f"candidate {identifier} call_id")
+        call = _reference(record["call_id"], calls, f"candidate {identifier} call_id")
+        operation = call["operation"]
+        if operation not in {"generate", "revise"}:
+            raise ContractError(f"candidate {identifier} call operationが不正です")
+        if operation == "generate":
+            if call["target_candidate_id"] is not None:
+                raise ContractError(f"candidate {identifier} generate callのtargetが不正です")
+        else:
+            if record["parent_candidate_id"] is None or call["target_candidate_id"] != record["parent_candidate_id"]:
+                raise ContractError(f"candidate {identifier} revise callのtargetが親candidateと一致しません")
+            if record["review_record_id"] not in call["input_refs"]:
+                raise ContractError(f"candidate {identifier} revise callがreviewを入力参照していません")
         if record["input_selection_id"] is not None: _require_reference(record["input_selection_id"], selections, f"candidate {identifier} input_selection_id")
         if record["keywords_id"] is not None: _require_reference(record["keywords_id"], records, f"candidate {identifier} keywords_id")
+        for expected in (record["input_selection_id"], record["keywords_id"], record["parent_candidate_id"]):
+            if expected is not None and expected not in call["input_refs"]:
+                raise ContractError(f"candidate {identifier} callが宣言入力を参照していません")
         if record["parent_candidate_id"] is not None:
             _require_reference(record["parent_candidate_id"], candidates, f"candidate {identifier} parent_candidate_id")
             review = _reference(record["review_record_id"], reviews, f"candidate {identifier} review_record_id")
@@ -212,7 +226,9 @@ def _validate_persisted_records(root: Path) -> None:
                 raise ContractError("candidate revision reviewが親candidateを参照しません")
     for identifier, record in reviews.items():
         _require_reference(record["candidate_id"], candidates, f"review {identifier} candidate_id")
-        _require_reference(record["call_id"], calls, f"review {identifier} call_id")
+        call = _reference(record["call_id"], calls, f"review {identifier} call_id")
+        if call["operation"] != "review" or call["target_candidate_id"] != record["candidate_id"] or record["candidate_id"] not in call["input_refs"]:
+            raise ContractError(f"review {identifier} call provenanceが不正です")
     for identifier, record in qualities.items():
         _require_reference(record["candidate_id"], candidates, f"quality {identifier} candidate_id")
         _require_references(record["review_record_ids"], reviews, f"quality {identifier} review_record_ids")
@@ -338,7 +354,7 @@ def _validate_settings(value: object) -> None:
         raise ContractError(f"#/config/{sorted(unknown)[0]}: 未知項目です")
     if value.get("provider") != "ollama":
         raise ContractError("#/config/provider: 'ollama'でなければなりません")
-    _validate_loopback_endpoint(value.get("endpoint"))
+    _validate_endpoint(value.get("endpoint"))
     if not isinstance(value.get("model"), str) or not value["model"]:
         raise ContractError("#/config/model: 空でない文字列が必要です")
     for key, minimum in (("technical_retry_limit", 1), ("quality_revision_limit", 0), ("invalid_response_limit", 1)):
@@ -352,9 +368,9 @@ def _validate_settings(value: object) -> None:
     _validate_request_options(value.get("request_options"))
 
 
-def _validate_loopback_endpoint(endpoint: object) -> None:
+def _validate_endpoint(endpoint: object) -> None:
     if not isinstance(endpoint, str):
-        raise ContractError("#/config/endpoint: loopback HTTP URLが必要です")
+        raise ContractError("#/config/endpoint: LANまたはloopbackのHTTP URLが必要です")
     try:
         parsed = urlsplit(endpoint)
         port = parsed.port
@@ -369,22 +385,30 @@ def _validate_loopback_endpoint(endpoint: object) -> None:
         or parsed.query
         or parsed.fragment
     ):
-        raise ContractError("#/config/endpoint: userinfo、query、fragmentなしのloopback HTTP URLが必要です")
+        raise ContractError("#/config/endpoint: userinfo、query、fragmentなしのLANまたはloopback HTTP URLが必要です")
     host = parsed.hostname
-    if host == "localhost":
-        try:
-            addresses = {entry[4][0] for entry in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)}
-        except OSError as exc:
-            raise ContractError("#/config/endpoint: localhostを解決できません") from exc
-        if not addresses or any(not ipaddress.ip_address(address).is_loopback for address in addresses):
-            raise ContractError("#/config/endpoint: localhostの解決先はloopbackだけでなければなりません")
-        return
     try:
-        address = ipaddress.ip_address(host)
-    except ValueError as exc:
-        raise ContractError("#/config/endpoint: loopback hostが必要です") from exc
-    if not address.is_loopback:
-        raise ContractError("#/config/endpoint: loopback hostが必要です")
+        addresses = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            addresses = {
+                ipaddress.ip_address(entry[4][0])
+                for entry in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError) as exc:
+            raise ContractError("#/config/endpoint: hostを解決できません") from exc
+    if not addresses or any(not (address.is_loopback or _is_private_lan_address(address)) for address in addresses):
+        raise ContractError("#/config/endpoint: loopbackまたはプライベートLANのhostだけが許可されます")
+
+
+def _is_private_lan_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if address.version == 4:
+        return any(address in network for network in (
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        ))
+    return address in ipaddress.ip_network("fc00::/7")
 
 
 def _validate_request_options(options: object) -> None:
@@ -411,6 +435,10 @@ def _validate_request_options(options: object) -> None:
     top_k = options.get("top_k")
     if top_k is not None and (not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1):
         raise ContractError("#/config/request_options/top_k: 1以上の整数が必要です")
+    # Reject think/streaming/num_ctx as they are controlled by the provider boundary
+    for forbidden in ("think", "stream", "num_ctx"):
+        if forbidden in options:
+            raise ContractError(f"#/config/request_options/{forbidden}: このオプションは指定できません（プロバイダ境界で制御）")
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:

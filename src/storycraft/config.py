@@ -5,9 +5,11 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import math
 import os
+import socket
 from pathlib import Path
 import re
 from typing import Any
+import ipaddress
 from urllib.parse import parse_qsl, urlsplit
 
 import yaml
@@ -161,16 +163,30 @@ def _validate_base_url(value: object) -> str:
             "llm.base_urlはhttpまたはhttps URLが必要です"
         )
 
-    # Loopback-only enforcement per design spec: allow only
-    # 127.0.0.0/8, ::1, localhost (admin-cli-and-acceptance-contract §51)
+    # Allow loopback or a private LAN endpoint; reject public destinations.
     host = parsed.hostname
     if host is None:
         raise ContractError(
             "llm.base_urlへホスト名が必要です"
         )
-    if host != "localhost" and not host.startswith("127."):
+    try:
+        addresses = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            addresses = {
+                ipaddress.ip_address(entry[4][0])
+                for entry in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError) as exc:
+            raise ContractError(
+                "llm.base_urlのhostを解決できません"
+            ) from exc
+    if not addresses or any(
+        not (address.is_loopback or _is_private_lan_address(address))
+        for address in addresses
+    ):
         raise ContractError(
-            "llm.base_urlはloopbackアドレスのみ許可されます"
+            "llm.base_urlはloopbackまたはプライベートLANのhostだけ許可されます"
         )
 
     if (
@@ -197,6 +213,16 @@ def _validate_base_url(value: object) -> str:
             )
 
     return base_url
+
+
+def _is_private_lan_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if address.version == 4:
+        return any(address in network for network in (
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        ))
+    return address in ipaddress.ip_network("fc00::/7")
 
 
 def _validate_header_name(value: object) -> str:

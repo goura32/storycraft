@@ -54,7 +54,7 @@ def build_scene_commit_candidate(
         "brief_id": "brief-000001",
         "scene_id": f"scene-v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}-000001",
         "scene_card_id": scene_card.get("scene_card_id", f"scene-card-v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}-000001"),
-        "scene_prose_id": scene_prose.get("scene_prose_id", f"scene-v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}-000001"),
+        "scene_prose_id": scene_prose.get("scene_prose_id", f"scene-prose-v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}-000001"),
         "continuity_update_id": continuity_update.get("continuity_update_id", f"continuity-v{volume_number:02d}-c{chapter_number:02d}-s{scene_number:02d}-000001"),
         "basis_generation_id": basis_generation.get("generation_id", "gen-000001"),
         "volume_number": volume_number,

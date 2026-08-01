@@ -5,7 +5,7 @@ from collections.abc import Callable
 import os
 from pathlib import Path
 
-from .reviewed_candidate_stage import fsync_directory
+from .candidate_utils import fsync_directory
 from .series_contracts import ContractError
 
 

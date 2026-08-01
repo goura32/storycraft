@@ -31,7 +31,7 @@
 | `blocked` | 人手確認待ちの終端状態 | `last_error` は必須。通常操作で `running` に戻さない |
 | `completed` | 最終巻が公開済み | `current_stage`、`current_target`、場面、保留中確定はすべて `null` |
 
-`initializing`、`stopping`、`stopped`、`failed` は v2 の保存値にしません。作業場所作成は、作成用一時場所を検証してから、最初から `running` の v2 状態を確定します。
+`initializing`、`stopping`、`stopped`、`failed` は V1 の保存値にしません。作業場所作成は、作成用一時場所を検証してから、最初から `running` の V1 状態を確定します。
 
 `published_volumes` は巻番号の昇順で、重複なく `1..N` の連続列にします。各 ID は巻公開記録を参照します。単一の `current_publication_id` は廃止します。
 
@@ -89,4 +89,4 @@ volume_publication
 
 `run` は `running` のときだけ、LLM の初期化・次工程開始の前に保存済みの確定点を共通収束表で収束させてから工程を進めます。`blocked` のときは `status` と `validate` だけを許可します。提供者を呼ばない収束処理では LLM を初期化しません。
 
-失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、**形式不正再呼出し上限**、技術再試行上限、内部エラー、公開検証不合格では `blocked` と該当する `last_error.code` を保存して停止します。停止した作業場所は再開せず、新しい作業場所でやり直します。
+失敗応答、壊れた候補、公開済み巻を、再開時に採用・公開・直接編集してはなりません。不整合、**形式不正再呼出し上限**、技術再試行上限、内部エラー、公開検証不合格では `blocked` と該当する `last_error.code` を保存して停止します。ただし、`quality_revision_limit=0` の修正中で、すでに形式有効な候補がある場合の形式不正再呼出し上限だけは、最後の形式有効候補を `accepted_with_notice` として採用して次工程へ進みます。停止した作業場所は再開せず、新しい作業場所でやり直します。

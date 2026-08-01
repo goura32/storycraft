@@ -61,7 +61,7 @@ class OllamaV2Tests(unittest.TestCase):
         self.assertEqual(body["response_format"]["json_schema"]["schema"], {"type": "object"})
         self.assertTrue(body["think"])
         self.assertFalse(body["stream"])
-        self.assertEqual(body["options"], {"num_ctx": 8192, "temperature": 0.2, "top_k": 20})
+        self.assertEqual(body["options"], {"num_ctx": 8192, "seed": 1, "temperature": 0.2, "top_k": 20})
 
     def test_rejects_capability_with_wrong_model_id(self):
         Handler.capability = {"id": "other", "context_length": 8192}

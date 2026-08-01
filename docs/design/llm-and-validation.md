@@ -19,7 +19,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 ### 9. QualityLoop.run_stage 契約（仕様レベル）
 
-生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用とします。形式不正上限到達は原則 `blocked` だが、既存の形式有効候補がある無制限品質修正中だけは注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「形式不正上限回数」のみを記述します。
+生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用とします。形式不正上限到達は原則 `blocked` だが、既存の形式有効候補がある `quality_revision_limit=0` の修正中だけは注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「`invalid_response_limit`」を記述します。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
@@ -38,14 +38,16 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
+各論理処理の `format_attempt` は1から始め、成功 HTTP 応答が形式不正だったときだけ1増やします。各 `format_attempt` 内の `technical_attempt` は1から始め、通信失敗・提供者エラー・時間切れごとに増やします。技術的再試行が成功したら、その応答の形式検証結果を同じ `format_attempt` に記録します。技術的再試行上限に達した場合は形式不正を消費せず、論理処理を `blocked` にします。
+
 ```python
 def invoke_structured(operation):
-    for structural_attempt in range(1, settings.invalid_response_limit + 1):
-        response = call_with_technical_retries(operation, structural_attempt)
+    for format_attempt in range(1, settings.invalid_response_limit + 1):
+        response = call_with_technical_retries(operation, format_attempt)
         parsed = parse_and_validate(response)
         if parsed.valid:
             return parsed.value
-        persist_invalid_validation(operation, structural_attempt, parsed.error)
+        persist_invalid_validation(operation, format_attempt, parsed.error)
     return invalid_response_limit(operation)
 ```
 
@@ -62,7 +64,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。確認応答の `issues` は20件以下、各 `explanation` は500 Unicodeコードポイント以下、各 `evidence_locations` は5件以下とし、無効根拠位置は除外して修正入力に渡す。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。無効な根拠位置は除外して修正入力に渡します。`issues`、`explanation`、`evidence_locations` に人工的な件数・長さ上限は設けず、選択モデルの最大コンテキスト内で要求全体を送ります。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
@@ -74,6 +76,7 @@ def invoke_structured(operation):
 ```
 
 `quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
+正の `quality_revision_limit=N` は、重大指摘に対する修正を最大 `N` 回許可します。修正回数が `N` に達した時点で重大指摘が残っていれば、最後の形式有効候補を `accepted_with_notice` として採用します。`quality_revision_limit=0` は修正回数を制限せず、形式不正の連続発生だけを `invalid_response_limit` で制限します。
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
 
@@ -91,7 +94,7 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 ## 5. 生成・修正の共通候補スキーマ
 
-生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成・修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
+生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
 
 生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 

@@ -58,7 +58,10 @@ workspace/
     chapter-plans/...
     scene-plans/...
   generations/gen-000001/
-  scenes/scene-v01-c01-s01-000001/
+  scenes/scene-prose-v01-c01-s01-000001/record.json
+  scenes/continuity-v01-c01-s01-000001/record.json
+  scenes/scene-v01-c01-s01-000001/record.json
+  scenes/scene-commit-v01-c01-s01-000001/record.json
   publications/volume-pub-v01-000001/
 ```
 
@@ -84,9 +87,10 @@ ID は採番後に変更しません。
 | 章計画 | `chapter-plan-v{巻番号2桁}-c{章番号2桁}-{通番6桁}` | `next_chapter_plan` |
 | 場面計画 | `scene-plan-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_plan` |
 | 場面カード | `scene-card-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_card` |
-| 場面本文 | `scene-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene` |
+| 場面本文 | `scene-prose-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_prose` |
 | 継続性更新 | `continuity-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_continuity` |
-| 場面確定 | `scene-commit-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
+| 場面確定単位 | `scene-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene` |
+| 場面確定記録 | `scene-commit-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
 
 既存の `handoffs/`、`completion/`、全巻を結合した `series.md` は V1 新形式に存在しません。
 

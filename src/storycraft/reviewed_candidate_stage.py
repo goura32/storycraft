@@ -102,9 +102,6 @@ class ReviewedCandidateStageRunner:
         next_target: dict[str, Any],
         next_stage: str | None = None,
         after_adoption: CandidateAfterAdoption | None = None,
-        active_scene_id: str | None | object = (
-            _PRESERVE_ACTIVE_SCENE
-        ),
         adoption_metadata: dict[str, Any] | None = None,
         workspace_already_validated: bool = False,
         updated_at: str | None = None,
@@ -123,10 +120,6 @@ class ReviewedCandidateStageRunner:
                 f"expected={self.spec.stage!r}, "
                 f"actual={state['current_stage']!r}"
             )
-        if state["status"] not in {"initializing", "running"}:
-            raise ContractError(
-                "Candidate Stageを実行できるrun statusではありません"
-            )
 
         pending = state["pending_commit"]
         if (
@@ -141,15 +134,10 @@ class ReviewedCandidateStageRunner:
                 next_target=next_target,
                 next_stage=next_stage,
                 after_adoption=after_adoption,
-                active_scene_id=active_scene_id,
                 adoption_metadata=adoption_metadata,
                 recovering=True,
             )
 
-        if state["active_candidate"] is not None:
-            raise ContractError(
-                "未処理のactive_candidateがあります"
-            )
         if pending is not None:
             raise ContractError(
                 "pending_commitがあるためCandidate Stageを開始できません"
@@ -237,23 +225,18 @@ class ReviewedCandidateStageRunner:
                     timestamp=timestamp,
                 )
                 blocked = stop_state(
-                    state,
-                    status="blocked",
-                    last_error={
-                        "code": (
-                            f"{self.spec.stage.upper()}_REVIEW_INVALID"
-                        ),
-                        "message": safe_exception_message(exc),
-                    },
-                    updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
-                )
-                self.state_store.save(blocked)
-                return blocked
+                state,
+                status="blocked",
+                last_error={
+                    "code": (
+                        f"{self.spec.stage.upper()}_REVIEW_INVALID"
+                    ),
+                    "message": safe_exception_message(exc),
+                },
+                updated_at=timestamp,
+            )
+            self.state_store.save(blocked)
+            return blocked
 
             issues = critique["issues"]
             accepted = not issues
@@ -360,11 +343,6 @@ class ReviewedCandidateStageRunner:
                         "issues": deepcopy(issues),
                     },
                     updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
                 )
                 self.state_store.save(blocked)
                 return blocked
@@ -404,11 +382,6 @@ class ReviewedCandidateStageRunner:
                         "message": safe_exception_message(exc),
                     },
                     updated_at=timestamp,
-                    active_candidate={
-                        "kind": self.spec.stage,
-                        "candidate_id": candidate_id,
-                        "version": version,
-                    },
                 )
                 self.state_store.save(blocked)
                 return blocked
@@ -436,7 +409,6 @@ class ReviewedCandidateStageRunner:
         next_target: dict[str, Any],
         next_stage: str | None,
         after_adoption: CandidateAfterAdoption | None,
-        active_scene_id: str | None | object,
         adoption_metadata: dict[str, Any] | None,
         recovering: bool,
     ) -> dict[str, Any]:
@@ -543,10 +515,6 @@ class ReviewedCandidateStageRunner:
             return completed
 
         transition_kwargs: dict[str, Any] = {}
-        if active_scene_id is not _PRESERVE_ACTIVE_SCENE:
-            transition_kwargs["active_scene_id"] = (
-                active_scene_id
-            )
 
         advanced = advance_run_state(
             adopted_state,
@@ -555,7 +523,6 @@ class ReviewedCandidateStageRunner:
             ),
             next_target=deepcopy(next_target),
             updated_at=timestamp,
-            **transition_kwargs,
         )
         self.state_store.save(advanced)
         return advanced

@@ -90,7 +90,7 @@ class SceneProseStageService:
         }
 
     def _content_id(self, _root: Path, target: dict[str, Any]) -> str:
-        return f"scene-v{target['volume_number']:02d}-c{target['chapter_number']:02d}-s{target['scene_number']:02d}-{reserve_counter(self.workspace_root, 'next_scene'):06d}"
+        return f"scene-prose-v{target['volume_number']:02d}-c{target['chapter_number']:02d}-s{target['scene_number']:02d}-{reserve_counter(self.workspace_root, 'next_scene_prose'):06d}"
 
     @staticmethod
     def _validate_content(content: object, target: dict[str, int], settings: dict[str, Any]) -> None:
