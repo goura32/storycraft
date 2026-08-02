@@ -10,7 +10,7 @@ from storycraft.run_state import RunStateStore
 from storycraft.series_contracts import ContractError
 
 NOW = "2026-07-29T00:00:00Z"
-REQUEST = {"title": "t", "genre": "g", "premise": "p", "required_elements": [], "forbidden_elements": [], "ending_preference": "e", "volume_count": 4, "language": "ja"}
+REQUEST = {"title": "t", "genre": ["g"], "premise": "p", "required_elements": [], "avoid": [], "ending_preference": "e", "volume_count": 4, "language": "ja"}
 
 
 def write_record(root: Path, relative: str, record: dict) -> None:

@@ -370,13 +370,17 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
 def _validate_request(value: Optional[dict[str, Any]]) -> None:
     if value is None:
         return
-    fields = {"title", "genre", "premise", "required_elements", "forbidden_elements", "ending_preference", "volume_count", "language"}
+    fields = {"title", "genre", "premise", "required_elements", "avoid", "ending_preference", "volume_count", "language"}
     if set(value) != fields or value.get("language") != "ja":
         raise ContractError("request schemaが不正です")
-    for key in ("title", "genre", "premise", "ending_preference"):
+    for key in ("title", "premise", "ending_preference"):
         if not isinstance(value.get(key), str) or not value[key].strip():
             raise ContractError(f"request {key}が不正です")
-    for key in ("required_elements", "forbidden_elements"):
+    # genre: array of strings
+    genre = value.get("genre")
+    if not isinstance(genre, list) or not genre or any(not isinstance(x, str) or not x.strip() for x in genre) or len(genre) != len(set(genre)):
+        raise ContractError("request genreが不正です")
+    for key in ("required_elements", "avoid"):
         item = value.get(key)
         if not isinstance(item, list) or any(not isinstance(x, str) or not x.strip() for x in item) or len(item) != len(set(item)):
             raise ContractError(f"request {key}が不正です")

@@ -26,7 +26,7 @@ def workspace(root: Path, *, stage: str = "series_plan") -> None:
     write_json(root / "inputs/request-000001/record.json", {
         "schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request",
         "input_selection_id": None, "created_at": NOW,
-        "content": {"title": "依頼", "genre": "fantasy", "premise": "試験", "required_elements": ["塔"], "forbidden_elements": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
+        "content": {"title": "依頼", "genre": ["fantasy"], "premise": "試験", "required_elements": ["塔"], "avoid": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
     })
     write_json(root / "runtime/settings/settings-000001/record.json", {
         "schema_version": 1, "settings_id": "settings-000001",

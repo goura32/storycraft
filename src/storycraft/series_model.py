@@ -116,9 +116,14 @@ class OpenAIStoryModel:
         if stage not in ACTIVE_TEMPLATE_STAGES:
             raise ContractError(f"未知の生成工程です: {stage}")
         loader = get_template_loader()
-        template_kind = {"review": "critique", "revise": "revision"}.get(kind, kind)
+        template_kind = {"review": "critique", "revise": "fix"}.get(kind, kind)
         output_schema = json.dumps(OpenAIStoryModel._response_schema(kind, stage), ensure_ascii=False, indent=2)
         return loader.render_user(template_kind, stage, stage=stage, output_schema=output_schema, **kwargs)
+
+    def render_system(self, response_mode: str = "json") -> str:
+        """応答形式に対応するシステムプロンプトを描画する。"""
+        loader = get_template_loader()
+        return loader.render_system(response_mode=response_mode)
 
     @staticmethod
     def _response_schema(kind: str, stage: str) -> dict[str, Any]:
@@ -200,7 +205,7 @@ class OpenAIStoryModel:
             seed = getattr(self, "_seed_sequence", 0) + 1
             self._seed_sequence = seed + seed_step - 1
             messages = [
-                {"role": "system", "content": get_template_loader().render_system()},
+                {"role": "system", "content": self.render_system("json")},
                 {"role": "user", "content": user_prompt},
                 {
                     "__kind": kind, "__phase": stage, "__ref": ref,
@@ -262,9 +267,7 @@ class OpenAIStoryModel:
             messages = [
                 {
                     "role": "system",
-                    "content": get_template_loader().render_system(
-                        "prose"
-                    ),
+                    "content": self.render_system("prose"),
                 },
                 {"role": "user", "content": user_prompt},
                 {

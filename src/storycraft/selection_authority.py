@@ -19,13 +19,17 @@ from .series_contracts import ContractError
 ContentValidator = Callable[[dict[str, Any], dict[str, dict[str, Any]]], None]
 
 def _validate_request_content(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    fields = {"title", "genre", "premise", "required_elements", "forbidden_elements", "ending_preference", "volume_count", "language"}
+    fields = {"title", "genre", "premise", "required_elements", "avoid", "ending_preference", "volume_count", "language"}
     if set(content) != fields or content.get("language") != "ja":
         raise ContractError("request content")
-    for key in ("title", "genre", "premise", "ending_preference"):
+    for key in ("title", "premise", "ending_preference"):
         if not isinstance(content.get(key), str) or not content[key].strip():
             raise ContractError("request content")
-    for key in ("required_elements", "forbidden_elements"):
+    # genre: array of strings
+    genre = content.get("genre")
+    if not isinstance(genre, list) or not genre or any(not isinstance(x, str) or not x.strip() for x in genre) or len(genre) != len(set(genre)):
+        raise ContractError("request content")
+    for key in ("required_elements", "avoid"):
         item = content.get(key)
         if not isinstance(item, list) or any(not isinstance(x, str) or not x.strip() for x in item) or len(item) != len(set(item)):
             raise ContractError("request content")

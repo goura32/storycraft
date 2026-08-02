@@ -45,12 +45,6 @@
         "minLength": 1
       }
     },
-    "audience": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "tone": {
       "type": "array",
       "uniqueItems": true,

@@ -16,8 +16,8 @@ SETTINGS = {
     "scene_text_char_range": [1000, 1000],
 }
 REQUEST = {
-    "title": "霧の街", "genre": "幻想", "premise": "霧の街で真実を探す。",
-    "required_elements": ["霧"], "forbidden_elements": ["銃"],
+    "title": "霧の街", "genre": ["幻想"], "premise": "霧の街で真実を探す。",
+    "required_elements": ["霧"], "avoid": ["銃"],
     "ending_preference": "希望", "volume_count": 4, "language": "ja",
 }
 

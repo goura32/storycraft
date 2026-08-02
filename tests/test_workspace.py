@@ -21,7 +21,7 @@ class WorkspaceV2Tests(unittest.TestCase):
         create_workspace(
             root,
             workspace_id="ws-test",
-            request={"title": "題名", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
+            request={"title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
             settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
             created_at="2026-07-28T00:00:00Z",
         )
@@ -32,7 +32,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             create_workspace(
                 root,
                 workspace_id="ws-test",
-                request={"title": "題名", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
+                request={"title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
                 settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
                 created_at="2026-07-28T00:00:00Z",
             )

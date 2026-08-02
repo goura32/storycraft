@@ -54,9 +54,9 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
         handler = _OpenAICompatibleHandler
         handler.requests = []
         handler.completion_responses = [
-            {"schema_version": "candidate-response-v1", "artifact_kind": "request", "payload": {"title": "候補", "genre": "fantasy", "premise": "試験", "required_elements": ["塔"], "forbidden_elements": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}},
+            {"schema_version": "candidate-response-v1", "artifact_kind": "request", "payload": {"title": "候補", "genre": ["fantasy"], "premise": "試験", "required_elements": ["塔"], "avoid": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}},
             {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.title"], "explanation": "改稿"}]},
-            {"schema_version": "candidate-response-v1", "artifact_kind": "request", "payload": {"title": "改稿", "genre": "fantasy", "premise": "試験", "required_elements": ["塔"], "forbidden_elements": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}},
+            {"schema_version": "candidate-response-v1", "artifact_kind": "request", "payload": {"title": "改稿", "genre": ["fantasy"], "premise": "試験", "required_elements": ["塔"], "avoid": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}},
             {"schema_version": "review-response-v1", "decision": "pass", "issues": []},
         ]
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -66,7 +66,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary) / "workspace"
                 endpoint = f"http://127.0.0.1:{server.server_port}"
-                create_workspace(root, workspace_id="ws-000001", request={"title": "依頼", "genre": "fantasy", "premise": "試験", "required_elements": ["塔"], "forbidden_elements": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}, settings={"provider": "ollama", "endpoint": endpoint, "model": "fake-model", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 2], "chapter_scene_range": [1, 2], "scene_text_char_range": [100, 200]}, created_at=NOW)
+                create_workspace(root, workspace_id="ws-000001", request={"title": "依頼", "genre": ["fantasy"], "premise": "試験", "required_elements": ["塔"], "avoid": ["宇宙"], "ending_preference": "希望", "volume_count": 4, "language": "ja"}, settings={"provider": "ollama", "endpoint": endpoint, "model": "fake-model", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 2], "chapter_scene_range": [1, 2], "scene_text_char_range": [100, 200]}, created_at=NOW)
                 state = RunStateStore(root).load()
                 state.update({"current_stage": "request_intake", "current_target": {}})
                 RunStateStore(root).save(state)

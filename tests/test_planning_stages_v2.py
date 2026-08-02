@@ -177,8 +177,8 @@ class PlanningStagesV2Tests(unittest.TestCase):
             "input_selection_id": None,
             "created_at": NOW,
             "content": {
-                "title": "t", "genre": "f", "premise": "p", "required_elements": [],
-                "forbidden_elements": [], "ending_preference": "e", "volume_count": 4,
+                "title": "t", "genre": ["f"], "premise": "p", "required_elements": [],
+                "avoid": [], "ending_preference": "e", "volume_count": 4,
                 "language": "ja"
             }
         })

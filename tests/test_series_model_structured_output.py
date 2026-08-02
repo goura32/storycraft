@@ -13,7 +13,7 @@ class FakeTemplateLoader:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    def render_system(self) -> str:
+    def render_system(self, response_mode: str = "json") -> str:
         return "system prompt"
 
     def load_schema_object(

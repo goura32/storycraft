@@ -64,7 +64,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
-            request.write_text(json.dumps({"title": "題", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
+            request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
             valid = {"provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}
             invalid_cases = (
                 ("endpoint", "http://example.com:11434"),
@@ -97,7 +97,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             root = Path(temporary) / "novel"
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
-            request.write_text(json.dumps({"title": "題", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
+            request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
             config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}), encoding="utf-8")
             command = ["uv", "run", "storycraft"]
             initialized = subprocess.run(command + ["init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
@@ -132,7 +132,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             root = Path(temporary) / "novel"
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
-            request.write_text(json.dumps({"title": "題", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
+            request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
             config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:1", "model": "unavailable", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}), encoding="utf-8")
             command = ["uv", "run", "storycraft"]
             initialized = subprocess.run(command + ["init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
@@ -153,7 +153,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             root = Path(temporary) / "novel"
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
-            request.write_text(json.dumps({"title": "題", "genre": "幻想", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
+            request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}), encoding="utf-8")
             config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://localhost:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}), encoding="utf-8")
             result = subprocess.run(["uv", "run", "storycraft", "init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)

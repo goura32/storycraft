@@ -55,8 +55,8 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         (root / relative).mkdir(parents=True)
     _write_json(root / "runtime/counters.json", initial_counters())
     request = {
-        "title": "現在の依頼", "genre": "fantasy", "premise": "選択の物語",
-        "required_elements": ["灯台"], "forbidden_elements": ["宇宙"],
+        "title": "現在の依頼", "genre": ["fantasy"], "premise": "選択の物語",
+        "required_elements": ["灯台"], "avoid": ["宇宙"],
         "ending_preference": "希望", "volume_count": 4, "language": "ja",
     }
     settings = {"model": "fake-model", "quality_revision_limit": 0, "invalid_response_limit": 5}
@@ -182,8 +182,8 @@ class InitialDesignStageV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "fresh-workspace"
             request = {
-                "title": "現在の依頼", "genre": "fantasy", "premise": "選択の物語",
-                "required_elements": ["灯台"], "forbidden_elements": ["宇宙"],
+                "title": "現在の依頼", "genre": ["fantasy"], "premise": "選択の物語",
+                "required_elements": ["灯台"], "avoid": ["宇宙"],
                 "ending_preference": "希望", "volume_count": 4, "language": "ja",
             }
             settings = {

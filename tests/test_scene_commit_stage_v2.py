@@ -66,7 +66,7 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     write_json(root / "inputs/request-000001/record.json", {
         "schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request",
         "input_selection_id": None, "created_at": NOW,
-        "content": {"title": "題", "genre": "fantasy", "premise": "前提", "required_elements": [], "forbidden_elements": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
+        "content": {"title": "題", "genre": ["fantasy"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
     })
     write_json(root / "runtime/settings/settings-000001/record.json", {
         "schema_version": 1, "settings_id": "settings-000001", "payload": {"invalid_response_limit": 5}, "created_at": NOW,
