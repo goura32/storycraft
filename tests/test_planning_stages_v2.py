@@ -111,7 +111,7 @@ class Model:
 
 class PlanningStagesV2Tests(unittest.TestCase):
     def _workspace(self, root: Path, *, stage: str, target: dict[str, int], slots: dict[str, str], skip_final: str | None = None, expected_id: str | None = None) -> None:
-        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "runtime/validations", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
+        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
             (root / directory).mkdir(parents=True, exist_ok=True)
 
         # Define content for each kind

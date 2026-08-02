@@ -57,7 +57,7 @@ def write_clean_quality(root: Path, quality_id: str, candidate_id: str, prose: d
 def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
-    for relative in ("inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/calls", "runtime/validations", "runtime/adoptions", "runtime", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
+    for relative in ("inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/calls", "runtime/adoptions", "runtime", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
         (root / relative).mkdir(parents=True, exist_ok=True)
     counters = initial_counters()
     counters["next_scene"] = 2  # prose already reserved scene-v...-000001

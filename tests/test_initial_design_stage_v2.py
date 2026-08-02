@@ -48,7 +48,7 @@ def _write_json(path: Path, value: object) -> None:
 def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for relative in (
         "inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections",
-        "runtime/staging", "runtime/calls", "runtime/validations", "runtime/adoptions",
+        "runtime/staging", "runtime/calls", "runtime/adoptions",
         "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans",
         "design/scene-plans", "generations", "scenes", "publications",
     ):

@@ -23,7 +23,7 @@ from .series_contracts import ContractError
 
 _V2_DIRECTORIES = (
     "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
-    "runtime/staging", "runtime/selections", "runtime/calls", "runtime/validations",
+    "runtime/staging", "runtime/selections", "runtime/calls",
     "runtime/adoptions", "design", "design/initial", "design/series-plans",
     "design/volume-plans", "design/chapter-plans", "design/scene-plans", "generations",
     "scenes", "publications",

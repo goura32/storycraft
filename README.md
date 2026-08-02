@@ -14,7 +14,7 @@ Storycraft は、作品の依頼文またはキーワードから、日本語の
 
 ## 必要環境
 
-- Python 3.14+
+- Python 3.11+
 - Ollama（同一ホストまたは信頼したプライベート LAN 上の LLM サーバー。設定の `endpoint` に HTTP URL を指定）
 - 依存パッケージは `uv` で管理
 

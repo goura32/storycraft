@@ -80,7 +80,7 @@ class Model:
 
 class SceneProductionStagesV2Tests(unittest.TestCase):
     def _workspace(self, root: Path) -> None:
-        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "runtime/validations", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
+        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
             (root / directory).mkdir(parents=True, exist_ok=True)
         write_json(root / "runtime/counters.json", initial_counters())
         write_json(root / "inputs/request-000001/record.json", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": {"title": "題", "genre": ["fantasy"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}})
