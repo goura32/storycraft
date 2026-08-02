@@ -81,7 +81,7 @@
 `keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
 
 `init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を必須とする。他の採用済み内容成果物は、すでに確定した入力 selection ID を必須とする。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
-`settings` は `{ "schema_version": 1, "settings_id": "settings-000001", "config": <§3.1 config>, "created_at": "RFC3339" }` の未知項目を拒否する不変 JSON である。`config` は §3.1 の `config` と同じ閉じたスキーマ・型・範囲・相関制約に従い、初期化後に変更しない。
+`settings` は `{ "schema_version": 1, "settings_id": "settings-000001", "payload": <§3.1 config>, "created_at": "RFC3339" }` の未知項目を拒否する不変 JSON である。`payload` は §3.1 の `config` と同じ閉じたスキーマ・型・範囲・相関制約に従い、初期化後に変更しない。
 
 ### 3.0 候補・確認記録
 

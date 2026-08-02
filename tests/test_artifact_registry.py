@@ -70,6 +70,17 @@ class ArtifactRegistryV2Tests(unittest.TestCase):
                 with self.assertRaises(ContractError):
                     validate_artifact_reference(kind, artifact_id, slot)
 
+    def test_rejects_unscoped_quality_and_adoption_slots(self) -> None:
+        for kind, slot in (
+            ("quality-disposition", "scene_prose_disposition.evil"),
+            ("quality-disposition", "continuity_disposition.v00.c01.s01"),
+            ("adoption", "scene_prose_adoption"),
+            ("adoption", "scene_prose_adoption.v00.c01.s01"),
+        ):
+            with self.subTest(kind=kind, slot=slot):
+                with self.assertRaises(ContractError):
+                    validate_artifact_reference(kind, "quality-000001" if kind == "quality-disposition" else "adoption-000001", slot)
+
 
 if __name__ == "__main__":
     unittest.main()

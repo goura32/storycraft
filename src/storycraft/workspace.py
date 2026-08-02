@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import tempfile
+import unicodedata
 from typing import Any, Optional
 from urllib.parse import urlsplit
 
@@ -52,7 +53,7 @@ def create_workspace(
     if request is not None:
         _validate_request(request)
     if keywords is not None:
-        _validate_keywords(keywords)
+        keywords = _normalize_keywords(keywords)
     _validate_settings(settings)
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
@@ -178,6 +179,18 @@ def _validate_persisted_records(root: Path) -> None:
             if not isinstance(kind, str) or kind not in ARTIFACT_SPECS or kind in special or ARTIFACT_SPECS[kind].directory_root != relative:
                 raise ContractError("artifact recordのkindまたは配置が不正です")
             validate_record(kind, identifier, record)
+            if kind == "settings":
+                payload = record["payload"]
+                # Unit-stage fixtures use the explicit injected transport sentinel
+                # and intentionally omit production provider configuration.
+                if isinstance(payload, dict) and payload.get("endpoint") != "injected" and (
+                    "provider" in payload or "endpoint" in payload
+                ):
+                    _validate_settings(payload)
+            elif kind == "keywords":
+                persisted = {"keywords": record["keywords"], "language": record["language"]}
+                if _normalize_keywords(persisted) != persisted:
+                    raise ContractError("保存済みkeywordsが正規化されていません")
             records[identifier] = record
     selections = dict(_records(root / "runtime/selections", "selection record"))
     for identifier, record in selections.items():
@@ -395,8 +408,21 @@ def _validate_keywords(value: Optional[dict[str, Any]]) -> None:
     if set(value) != {"keywords", "language"} or value.get("language") != "ja":
         raise ContractError("keywords schemaが不正です")
     words = value.get("keywords")
-    if not isinstance(words, list) or not 1 <= len(words) <= 12 or any(not isinstance(x, str) or not 1 <= len(x.strip()) <= 80 for x in words) or len(words) != len(set(words)):
+    if not isinstance(words, list) or not words or any(not isinstance(x, str) or not x.strip() for x in words) or len(words) != len(set(words)):
         raise ContractError("keywordsが不正です")
+
+
+def _normalize_keywords(value: dict[str, Any]) -> dict[str, Any]:
+    _validate_keywords(value)
+    words: list[str] = []
+    for word in value["keywords"]:
+        normalized = unicodedata.normalize("NFC", word.strip())
+        if any(unicodedata.category(char).startswith("C") for char in normalized):
+            raise ContractError("keywordsが不正です")
+        words.append(normalized)
+    if not words or len(words) != len(set(words)):
+        raise ContractError("keywordsが不正です")
+    return {"keywords": words, "language": value["language"]}
 
 
 def _validate_settings(value: object) -> None:

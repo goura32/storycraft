@@ -99,12 +99,18 @@ def validate_artifact_reference(artifact_kind: object, artifact_id: object, slot
     if artifact_kind == "quality-disposition":
         spec.match_id(artifact_id)
         slot_str = str(slot) if isinstance(slot, str) else ""
-        if not slot_str.startswith("scene_prose_disposition.") and not slot_str.startswith("continuity_disposition."):
+        if re.fullmatch(r"(?:scene_prose|continuity)_disposition\.v(?!00)[0-9]{2}\.c(?!00)[0-9]{2}\.s(?!00)[0-9]{2}", slot_str) is None:
             raise ContractError("quality-dispositionのslotが不正です")
         return
     if artifact_kind == "adoption":
         spec.match_id(artifact_id)
-        if not isinstance(slot, str) or re.fullmatch(r"(?:initial_design|series_plan|volume_plan|chapter_plan|scene_plan|scene_card|scene_prose|continuity)_adoption(?:\.v[0-9]{2}(?:\.c[0-9]{2})?(?:\.s[0-9]{2})?)?", slot) is None:
+        if not isinstance(slot, str) or re.fullmatch(
+            r"(?:initial_design_adoption|series_plan_adoption|"
+            r"volume_plan_adoption\.v(?!00)[0-9]{2}|"
+            r"chapter_plan_adoption\.v(?!00)[0-9]{2}\.c(?!00)[0-9]{2}|"
+            r"(?:scene_plan|scene_card|scene_prose|continuity)_adoption\.v(?!00)[0-9]{2}\.c(?!00)[0-9]{2}\.s(?!00)[0-9]{2})",
+            slot,
+        ) is None:
             raise ContractError("adoptionのslotが不正です")
         return
     # Special sentinel slots that don't match the canonical pattern but are valid for this kind.

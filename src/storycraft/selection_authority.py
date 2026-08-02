@@ -298,6 +298,7 @@ def _read_record(workspace_root: Path, kind: str, artifact_id: str) -> dict[str,
 
 def _kind_for(slot: str, artifact_id: str) -> str:
     if slot.startswith("scene_prose_disposition.") or slot.startswith("continuity_disposition."):
+        validate_artifact_reference("quality-disposition", artifact_id, slot)
         return "quality-disposition"
     if slot == "prior_volume_plan":
         # Prior volume plan is always an adoption of a volume-plan artifact

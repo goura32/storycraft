@@ -10,7 +10,7 @@
 - planning成果物（series-plan、volume-plan、chapter-plan）は正本JSON Schemaのmodern形式を使用し、旧 `volumes` / `chapters` / `scenes` / `thread_allocations` payloadは採用しない。
 - series planは4〜10巻、`volume_summaries`はseriesの巻数と一致する。巻・章・場面の座標はartifact envelopeとselection slotで管理し、planning payloadへ重複保存しない。
 - 注意付き巻公開の `publication_notice_type="編集"` と原稿冒頭の定型文は実装・試験済み。公開 `record.json` は閉じたスキーマで、`publication_notice_type: null` は拒否される。
-- 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質上限で停止しない遷移は実装済み。`quality_revision_limit = 0`（無制限）時は安全上限として `invalid_response_limit` 回を超える修正は行わず、最後の形式有効版を注意付き採用して次工程へ進む。
+- 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質上限で停止しない遷移は実装済み。`quality_revision_limit = 0`（無制限）時は、形式有効な品質修正を上限なしで継続し、形式不正の再呼出しだけを `invalid_response_limit` で制限する。
 - 指摘対象だけに修正範囲を制限せず、成果物全体の整合性・品質改善のために置き換える契約は実装済み。`validate_revision_scope` は指摘フィールドの存在確認のみを行い、修正範囲を制限しない。
 - run-state は V1仕様の schema version `3` を使用。`run_id` と `stop_reason` は保存しない。`active_candidate` と `active_scene_id` は廃止済み。進捗を stage・target・不変 selectionと健全な `pending_commit` だけで表す契約を満たす。
 - `pending_commit` は仕様通りの閉じた構造で、`sha256` を持たず、bootstrapの`input_selection_id=null`、kindごとの閉じた`state_update`、target集合の完全一致を実装。クラッシュ収束のmanifestは仕様達成済み。

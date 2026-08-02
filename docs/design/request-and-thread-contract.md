@@ -13,7 +13,8 @@
 
 採用済み依頼は次を満たします。
 
-- `title` と `genre`: 空でない文字列
+- `title`: 空でない文字列
+- `genre`: 1件以上の重複しない空でない文字列配列
 - `premise`: 空でない文字列
 - `required_elements` と `avoid`: 文字列配列。重複なし
 - `ending_preference`: 空でない文字列

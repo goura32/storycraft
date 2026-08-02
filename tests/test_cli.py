@@ -126,6 +126,13 @@ class CliV2AcceptanceTests(unittest.TestCase):
             self.assertEqual(run.returncode, 4)
             self.assertEqual(run.stdout, "")
             self.assertEqual(set(json.loads(run.stderr)), {"ok", "code", "message"})
+            run_state = root / "runtime" / "run-state.json"
+            state = json.loads(run_state.read_text(encoding="utf-8"))
+            state["current_stage"] = "bogus"
+            run_state.write_text(json.dumps(state), encoding="utf-8")
+            invalid_state = subprocess.run(command + ["validate", "--workspace", str(root), "--json"], text=True, capture_output=True, check=False)
+            self.assertEqual(invalid_state.returncode, 5)
+            self.assertEqual(json.loads(invalid_state.stderr), {"ok": False, "code": "validation_failed", "message": "validation_failed"})
 
     def test_unavailable_provider_uses_machine_error_protocol_and_persists_technical_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

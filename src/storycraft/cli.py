@@ -95,7 +95,10 @@ def cmd_status(args: argparse.Namespace) -> dict[str, object]:
 
 def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
     root = Path(args.workspace).expanduser()
-    state = RunStateStore(root).load()
+    try:
+        state = RunStateStore(root).load()
+    except ContractError as exc:
+        raise ValidationFailed("validation_failed") from exc
     try:
         validate_workspace(root)
         passed = True

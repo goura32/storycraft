@@ -75,7 +75,7 @@ def invoke_structured(operation):
   重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` と `last_error.code=invalid_response_limit` とする。
 ```
 
-`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、安全上限として形式不正再呼出し上限 `invalid_response_limit` 回を超える修正は行わず、その時点で最後の形式有効版を注意付き採用して `blocked` としないで次工程へ進む。**
+`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（無制限）の場合、形式有効な品質修正は上限なしで継続し、形式不正の再呼出しだけを `invalid_response_limit` 回で制限して、その時点で最後の形式有効版を注意付き採用して次工程へ進む。**
 正の `quality_revision_limit=N` は、重大指摘に対する修正を最大 `N` 回許可します。修正回数が `N` に達した時点で重大指摘が残っていれば、最後の形式有効候補を `accepted_with_notice` として採用します。`quality_revision_limit=0` は修正回数を制限せず、形式不正の連続発生だけを `invalid_response_limit` で制限します。
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
