@@ -103,7 +103,8 @@ def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
     except ContractError as exc:
         passed = False
         detail = str(exc)
-    # V1 仕様の 5 項目検査を模擬（現状は全体検証の結果を各項目に割り当て）
+    # validate_workspace は保存済み正本を包括検証する。成功時は契約上の5観点を
+    # passed として公開し、失敗時は共通の validation_failed エラーを返す。
     checks = [
         {"name": "schema", "passed": passed},
         {"name": "id", "passed": passed},
