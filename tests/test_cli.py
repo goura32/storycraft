@@ -121,7 +121,10 @@ class CliV2AcceptanceTests(unittest.TestCase):
             invalidated = subprocess.run(command + ["validate", "--workspace", str(root), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(invalidated.returncode, 5)
             self.assertEqual(invalidated.stdout, "")
-            self.assertEqual(json.loads(invalidated.stderr), {"ok": False, "code": "validation_failed", "message": "validation_failed"})
+            invalidated_error = json.loads(invalidated.stderr)
+            self.assertEqual(invalidated_error["ok"], False)
+            self.assertEqual(invalidated_error["code"], "validation_failed")
+            self.assertNotEqual(invalidated_error["message"], "validation_failed")
             run = subprocess.run(command + ["run", "--workspace", str(root), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(run.returncode, 4)
             self.assertEqual(run.stdout, "")
@@ -132,7 +135,10 @@ class CliV2AcceptanceTests(unittest.TestCase):
             run_state.write_text(json.dumps(state), encoding="utf-8")
             invalid_state = subprocess.run(command + ["validate", "--workspace", str(root), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(invalid_state.returncode, 5)
-            self.assertEqual(json.loads(invalid_state.stderr), {"ok": False, "code": "validation_failed", "message": "validation_failed"})
+            invalid_state_error = json.loads(invalid_state.stderr)
+            self.assertEqual(invalid_state_error["ok"], False)
+            self.assertEqual(invalid_state_error["code"], "validation_failed")
+            self.assertEqual(invalid_state_error["message"], "validation_failed")
 
     def test_unavailable_provider_uses_machine_error_protocol_and_persists_technical_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

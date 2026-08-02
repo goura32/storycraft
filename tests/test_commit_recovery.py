@@ -48,7 +48,7 @@ def candidate_adoption_state() -> dict:
 def populate_candidate_adoption_staging(root: Path) -> None:
     staging = "runtime/staging/candidate-adoption"
     write_record(root, "runtime/selections/selection-000001", {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"request": "request-000001", "settings": "settings-000001"}, "created_at": NOW})
-    write_record(root, "settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+    write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
     write_record(root, "runtime/calls/call-000001", {"schema_version": 1, "call_id": "call-000001", "operation": "generate", "role": "writer", "target_candidate_id": None, "input_refs": [], "technical_attempt": 1, "format_attempt": 1, "seed": 1, "endpoint": "http://127.0.0.1", "model": "test", "settings_id": "settings-000001", "request": "request", "response": "response", "transport": "success", "validation": {"result": "valid", "checks": [], "failure_code": None}})
     write_record(root, "runtime/calls/call-000002", {"schema_version": 1, "call_id": "call-000002", "operation": "review", "role": "reviewer", "target_candidate_id": "candidate-000001", "input_refs": [], "technical_attempt": 1, "format_attempt": 1, "seed": 1, "endpoint": "http://127.0.0.1", "model": "test", "settings_id": "settings-000001", "request": "request", "response": "response", "transport": "success", "validation": {"result": "valid", "checks": [], "failure_code": None}})
     write_record(root, "candidates/candidate-000001", {"schema_version": 1, "candidate_id": "candidate-000001", "artifact_kind": "series-plan", "input_selection_id": "selection-000001", "keywords_id": None, "settings_id": "settings-000001", "payload": {"title": "plan"}, "parent_candidate_id": None, "review_record_id": None, "call_id": "call-000001", "created_at": NOW})
@@ -138,7 +138,7 @@ class CommitRecoveryTests(unittest.TestCase):
                 populate_staging(root)
                 for parent in ("inputs", "runtime/adoptions", "runtime/selections"):
                     (root / parent).mkdir(parents=True)
-                write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+                write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
                 staging = root / "runtime/staging/adopt/inputs/request-000001"
                 final = root / "inputs/request-000001"
                 if location in {"final", "invalid-final", "both"}:
@@ -173,7 +173,7 @@ class CommitRecoveryTests(unittest.TestCase):
             populate_staging(root)
             for parent in ("inputs", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             (root / "runtime/staging/adopt/runtime/adoptions/adoption-000001").rename(root / "runtime/adoptions/adoption-000001")
             RunStateStore(root).save(state)
 
@@ -201,7 +201,7 @@ class CommitRecoveryTests(unittest.TestCase):
             populate_staging(root)
             for parent in ("inputs", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             RunStateStore(root).save(state)
             recovered = recover_pending_commit(root)
             self.assertIsNone(recovered["pending_commit"])
@@ -226,7 +226,7 @@ class CommitRecoveryTests(unittest.TestCase):
             populate_staging(root)
             for parent in ("inputs", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             external = root / "external-source"
             (root / "runtime/staging/adopt/inputs").rename(external)
             (root / "runtime/staging/adopt/inputs").symlink_to(external, target_is_directory=True)
@@ -245,7 +245,7 @@ class CommitRecoveryTests(unittest.TestCase):
             for parent in ("inputs", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
             write_record(root, "inputs/request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_candidate_adoption_staging(root)
             external_design = root / "external-design"
             (external_design / "series-plans").mkdir(parents=True)
@@ -264,7 +264,7 @@ class CommitRecoveryTests(unittest.TestCase):
             for parent in ("inputs", "design/series-plans", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
             write_record(root, "inputs/request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_candidate_adoption_staging(root)
             quality = root / "quality/quality-000001/record.json"
             value = json.loads(quality.read_text(encoding="utf-8"))
@@ -281,7 +281,7 @@ class CommitRecoveryTests(unittest.TestCase):
             for parent in ("inputs", "design/series-plans", "runtime/adoptions", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
             write_record(root, "inputs/request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_candidate_adoption_staging(root)
             selection = root / "runtime/staging/candidate-adoption/selection-000002/record.json"
             value = json.loads(selection.read_text(encoding="utf-8"))
@@ -297,7 +297,7 @@ class CommitRecoveryTests(unittest.TestCase):
             root = Path(temp)
             for parent in ("scenes", "generations", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_scene_commit_staging(root)
             RunStateStore(root).save(scene_commit_state())
 
@@ -312,7 +312,7 @@ class CommitRecoveryTests(unittest.TestCase):
             root = Path(temp)
             for parent in ("scenes", "generations", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_scene_commit_staging(root)
             RunStateStore(root).save(scene_commit_state())
             (root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json").unlink()
@@ -327,7 +327,7 @@ class CommitRecoveryTests(unittest.TestCase):
             root = Path(temp)
             for parent in ("scenes", "generations", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_scene_commit_staging(root)
             card = root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json"
             value = json.loads(card.read_text(encoding="utf-8"))
@@ -349,7 +349,7 @@ class CommitRecoveryTests(unittest.TestCase):
             root = Path(temp)
             for parent in ("scenes", "generations", "runtime/selections"):
                 (root / parent).mkdir(parents=True)
-            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             populate_scene_commit_staging(root)
             commit = root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/scene-commit-v01-c01-s01-000001/record.json"
             value = json.loads(commit.read_text(encoding="utf-8"))

@@ -148,7 +148,13 @@ class InitialDesignStageService:
             if not critical or (quality_limit != 0 and revision_count >= quality_limit):
                 break
             bind_call([input_selection_id, candidate_id, review_id], candidate_id)
-            revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
+            try:
+                revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
+            except ContractError:
+                # The current candidate is already structurally valid.  A failed
+                # revision must not discard it; retain it with the current critical
+                # review as an accepted-with-notice result.
+                break
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call_id = self._call_id(model, "revise")
             self._write_audit_record("runtime/calls", revise_call_id, {

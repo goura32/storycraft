@@ -96,12 +96,18 @@ class RequestIntakeStageService:
             if self._quality_limit(settings) != 0 and revision_count >= self._quality_limit(settings):
                 break
             bind_call([keywords_id, settings_id, candidate_id, review_id], candidate_id)
-            revised = self._call_valid(
-                model.revise,
-                ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
-                self._candidate,
-                invalid_limit,
-            )
+            try:
+                revised = self._call_valid(
+                    model.revise,
+                    ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
+                    self._candidate,
+                    invalid_limit,
+                )
+            except ContractError:
+                # Keep the last structurally valid candidate and accept it with
+                # the current critical review rather than blocking on a revision
+                # response that never became structurally valid.
+                break
             revised_id = self._reserve_directory_id("candidates", "candidate")
             revise_call = self._write_call(model, "revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
             self._write_audit("candidates", revised_id, {

@@ -118,7 +118,9 @@ def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
     if detail:
         checks[0]["detail"] = detail  # 最初の項目に詳細を入れる
     if not passed:
-        raise ValidationFailed("validation_failed")
+        # Preserve the deterministic validator detail in the public error
+        # message; the error envelope remains the documented three-key shape.
+        raise ValidationFailed(detail or "validation_failed")
     return {**_common(state), "checks": checks}
 
 

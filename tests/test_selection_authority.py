@@ -28,7 +28,7 @@ class SelectionAuthorityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             write_record(root, "inputs", "request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             value = snapshot("selection-000001", {"request": "request-000001", "settings": "settings-000001"})
             self.assertEqual(set(resolve_selection(root, value)), {"request", "settings"})
 
@@ -65,7 +65,7 @@ class SelectionAuthorityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             write_record(root, "inputs", "request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             parent = snapshot("selection-000001", {"request": "request-000001", "settings": "settings-000001"})
             write_record(root, "runtime/selections", "selection-000001", parent)
             write_record(root, "design/initial", "initial-design-000001", {"schema_version": 1, "artifact_id": "initial-design-000001", "artifact_kind": "initial-design", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
@@ -95,7 +95,7 @@ class SelectionAuthorityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             write_record(root, "inputs", "request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
-            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {}, "created_at": NOW})
+            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
             parent = snapshot("selection-000001", {"request": "request-000001", "settings": "settings-000001"})
             write_record(root, "runtime/selections", "selection-000001", parent)
             write_record(root, "design/initial", "initial-design-000001", {"schema_version": 1, "artifact_id": "initial-design-000001", "artifact_kind": "initial-design", "input_selection_id": "selection-000001", "created_at": NOW, "content": {"valid": False}})

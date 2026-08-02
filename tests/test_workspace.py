@@ -122,7 +122,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 write_record("candidates", candidate_id, {
                     "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": "initial-design",
                     "input_selection_id": "selection-000001", "keywords_id": None,
-                    "settings_id": "settings-000001", "payload": {}, "parent_candidate_id": None,
+                    "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "parent_candidate_id": None,
                     "review_record_id": None, "call_id": call_id, "created_at": now,
                 })
             call("call-000003", "review", "candidate-000002")

@@ -99,7 +99,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
         (root / relative).mkdir(parents=True, exist_ok=True)
     write_json(root / "runtime/counters.json", initial_counters())
     write_json(root / "runtime/settings/settings-000001/record.json", {
-        "schema_version": 1, "settings_id": "settings-000001", "payload": {"invalid_response_limit": 5}, "created_at": NOW,
+        "schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected", "invalid_response_limit": 5}, "created_at": NOW,
     })
     selections = SelectionSnapshotStore(root)
     base = selections.create(slots={"settings": "settings-000001"}, created_at=NOW)

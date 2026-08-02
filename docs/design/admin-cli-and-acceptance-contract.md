@@ -34,7 +34,7 @@ storycraft validate --workspace PATH [--json]
 
 **`status --json` 固有項目**: 共通項目だけを出力する。内部パスとロック内部情報は出力しない。
 
-**`validate --json` 固有項目**: 共通項目に加え、`checks` を `schema`、`id`、`reference`、`range`、`evidence` のこの順で出力する。各要素は `{name: "schema | id | reference | range | evidence", passed: bool, detail?: string}` とし、`detail` は `passed=false` のときだけ非空文字列で必須とする。
+**`validate --json` 固有項目**: 成功時は共通項目に加え、`checks` を `schema`、`id`、`reference`、`range`、`evidence` のこの順で出力する。各要素は `{name: "schema | id | reference | range | evidence", passed: true}` とする。検証失敗時はエラー時の標準出力空・標準エラー一行 JSON 契約を優先し、`message` に決定的検証器の失敗詳細（人間用短文または JSON pointer）を入れる。
 
 **`init` 成功時出力**: `--json` 指定時 `{workspace_id, status: "created", current_selection_id}`、非指定時は人間用メッセージのみ。
 

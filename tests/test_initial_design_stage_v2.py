@@ -59,7 +59,7 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "required_elements": ["灯台"], "avoid": ["宇宙"],
         "ending_preference": "希望", "volume_count": 4, "language": "ja",
     }
-    settings = {"model": "fake-model", "quality_revision_limit": 0, "invalid_response_limit": 5}
+    settings = {"endpoint": "injected", "model": "fake-model", "quality_revision_limit": 0, "invalid_response_limit": 5}
     _write_json(root / "inputs/request-000001/record.json", {
         "schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request",
         "input_selection_id": None, "created_at": TIMESTAMP, "content": request,

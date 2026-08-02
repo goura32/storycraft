@@ -185,7 +185,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
         write_json(root / "runtime/settings/settings-000001/record.json", {
             "schema_version": 1,
             "settings_id": "settings-000001",
-            "payload": {"model": "fake", "quality_revision_limit": 0, "invalid_response_limit": 5},
+            "payload": {"endpoint": "injected", "model": "fake", "quality_revision_limit": 0, "invalid_response_limit": 5},
             "created_at": NOW
         })
 

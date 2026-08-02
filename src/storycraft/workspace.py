@@ -183,9 +183,7 @@ def _validate_persisted_records(root: Path) -> None:
                 payload = record["payload"]
                 # Unit-stage fixtures use the explicit injected transport sentinel
                 # and intentionally omit production provider configuration.
-                if isinstance(payload, dict) and payload.get("endpoint") != "injected" and (
-                    "provider" in payload or "endpoint" in payload
-                ):
+                if not (isinstance(payload, dict) and payload.get("endpoint") == "injected"):
                     _validate_settings(payload)
             elif kind == "keywords":
                 persisted = {"keywords": record["keywords"], "language": record["language"]}
