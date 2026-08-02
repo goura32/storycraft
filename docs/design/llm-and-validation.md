@@ -2,16 +2,16 @@
 
 ## 1. 責務の分離
 
-|| 層 | 責務 | 採用可否 |
-||---|---|---|
-|| `LLMClient` | Ollama の送受信、通信失敗、時間切れ、技術的再試行、シード、呼出し保存 | 決めない |
-|| `StructuredOperation` | JSON 解析、スキーマ、ID、参照、更新範囲、**形式不正上限回数まで** | 形式有効だけを決める |
-|| `QualityLoop` | 生成、独立確認、修正、再確認、品質上限時の注意付き採用 | 通常工程の候補を採用する |
-|| `ArtifactState` | 不変確定、採用参照、停止、復旧 | LLM 記録を物語正本にしない |
+| 層 | 責務 | 採用可否 |
+|---|---|---|
+| `LLMClient` | Ollama の送受信、通信失敗、時間切れ、技術的再試行、シード、呼出し保存 | 決めない |
+| `StructuredOperation` | JSON 解析、スキーマ、ID、参照、更新範囲、`invalid_response_limit` 回までの形式不正再呼出し | 形式有効だけを決める |
+| `QualityLoop` | 生成、独立確認、修正、再確認、品質上限時の注意付き採用 | 通常工程の候補を採用する |
+| `ArtifactState` | 不変確定、採用参照、停止、復旧 | LLM 記録を物語正本にしない |
 
 ### 7. LLMClient.invoke インターフェース契約（仕様レベル）
 
-`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは技術的失敗として `technical_retry_limit` を消費する。成功 HTTP の capability payload で `id` が不一致、`context_length` が欠落または正整数でない場合は形式不正として `invalid_response_limit` を消費する。いずれも各物理試行を `model_capability` call record として保存し、該当上限到達時はそれぞれ `technical_retry_exhausted` または `invalid_response_limit` で `blocked` にする。クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
+`LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは技術的失敗として扱い、`technical_retry_limit` は各論理処理で許可する物理試行回数（初回を含む）です。成功 HTTP の capability payload で `id` が不一致、`context_length` が欠落または正整数でない場合は形式不正として `invalid_response_limit` を消費する。いずれも各物理試行を `model_capability` call record として保存し、該当上限到達時はそれぞれ `technical_retry_exhausted` または `invalid_response_limit` で `blocked` にする。クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
 
 ### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
 
@@ -19,7 +19,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 ### 9. QualityLoop.run_stage 契約（仕様レベル）
 
-生成・確認・修正・再確認の 4 段階ループを回し、品質修正上限到達時は注意付き採用とします。形式不正上限到達は原則 `blocked` だが、既存の形式有効候補がある `quality_revision_limit=0` の修正中だけは注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「`invalid_response_limit`」を記述します。
+生成・決定的検証・確認を行い、重大な指摘があれば修正・再確認を繰り返します。品質修正上限到達時は注意付き採用とします。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合は注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「`invalid_response_limit`」を記述します。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
@@ -34,7 +34,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
 | 技術的再試行 | 接続不能、提供者エラー、初回・idle 時間切れ、ストリーム中断 | `technical_retry_limit`。作業場所作成時に固定 | `blocked`、`last_error.code=technical_retry_exhausted` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、成功 HTTP の capability payload 不正 | 各論理処理で初回を含め**上限回数** | 原則 `blocked`、`last_error.code=invalid_response_limit`。ただし無制限品質修正中で、すでに形式有効な候補がある改稿だけは、その候補を `accepted_with_notice` として採用 |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、成功 HTTP の capability payload 不正 | 各論理処理で初回を含め `invalid_response_limit` 回 | 生成・確認で有効候補がなければ `blocked`、`last_error.code=invalid_response_limit`。`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合だけ、その候補を `accepted_with_notice` として採用 |
 
 `candidate.generate`、`candidate.review`、`candidate.revision` は別々の処理です。`request` を含むすべての CandidateResponse 種類に同じ品質ループを適用します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
@@ -51,7 +51,7 @@ def invoke_structured(operation):
     return invalid_response_limit(operation)
 ```
 
-`invalid_response_limit` は、既存の形式有効候補がある無制限品質修正ならその候補を `accepted_with_notice` として返す。それ以外は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
+`invalid_response_limit` は、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合だけ、その候補を `accepted_with_notice` として返す。それ以外は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
 
 ## 3. 通常の品質ループ
 

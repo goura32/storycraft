@@ -44,7 +44,7 @@
 `last_error` は `null` または `{ "code": "固定診断コード", "message": "短い説明", "evidence_refs": ["call/artifact ID"], "occurred_at": "UTC 時刻" }` です。`blocked` では必須で、`code` は `invalid_response_limit`、`technical_retry_exhausted`、`internal_error`、`authority_inconsistency`、`publication_invalid` のいずれかとします。これは `status` と `validate` の診断用であり、CLI stderr の error `code` enum とは別です。
 
 - `invalid_response_limit`: **形式不正再呼出し（per-call retry）の上限回数到達**（`invalid_response_limit` 設定値）。各 LLM 呼出しごとの形式不正リトライが上限に達した場合
-- `technical_retry_exhausted`: 技術的再試行の上限回数到達（`technical_retry_limit` 設定値）
+- `technical_retry_exhausted`: 各論理処理で許可された物理試行回数（初回を含む `technical_retry_limit` 設定値）の全失敗
 - `internal_error`: 内部検証器の例外、実装不能な状態
 - `authority_inconsistency`: 保存済み settings、参照（選択スナップショット）、確定物（作品状態・計画・場面・公開記録）のいずれかでスキーマ・ID・参照の整合性が崩れた場合。`validate` は検出結果だけを返し、`run` の事前検証または工程検証が検出した場合だけ正本不整合として `blocked` にする
 - `publication_invalid`: 巻公開検証で、計画・場面・継続性更新の決定的検証不合格、品質判定集約規則不一致、`publication_notice_type` 不正、必須参照の欠落・不一致、原稿内容の決定的構築不合格のいずれか。`volume_publication` 工程の決定的検証で検出され `blocked` にする

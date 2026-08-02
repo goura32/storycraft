@@ -19,14 +19,14 @@ storycraft validate --workspace PATH [--json]
 
 `run` は健全で一意な保留中確定を収束してから完了まで実行し、停止中になった場合は終了コード `4`。停止中の `run` は終了コード `4` で変更しない。`status` と `validate` は提供者を初期化せず、状態を書き換えず、書込み lock を取得・読取・削除しない。
 
-|| コード | 意味 |
-||---|---|
-|| 0 | `run` が完了した |
-|| 2 | 引数、作業場所、設定不正 |
-|| 4 | 停止中、または実行不能な状態 |
-|| 5 | validate 不合格 |
-|| 75 | ロック取得不能 |
-|| 70 | 内部エラー |
+| コード | 意味 |
+|---|---|
+| 0 | `run` が完了した |
+| 2 | 引数、作業場所、設定不正 |
+| 4 | 停止中、または実行不能な状態 |
+| 5 | validate 不合格 |
+| 75 | ロック取得不能 |
+| 70 | 内部エラー |
 
 `--json` の成功時標準出力は一行オブジェクト、未知項目なし。これは run-state の公開用射影であり、内部 run-state や manifest をそのまま出力しない。共通項目は `workspace_id`、`status`、`current_stage`、`current_target`、`current_selection_id`、`last_error`、`pending_commit`。`pending_commit` は `null`、または `{ "kind": "candidate_adoption | scene_commit | volume_publication", "pending_target_count": 0, "finalized_target_count": 0 }` とする。内部 manifest のパス、ダイジェスト、target ID、staging 相対パス、最終パスは出力しない。`completed` の `current_target` と `pending_commit` は `null`、その他の状態の `current_target` は run-state の値をそのまま出力する。非 JSON の成功時標準出力は人間用表示だけ。エラー時は `--json` の有無にかかわらず、標準出力は空、標準エラー出力は一行 JSON `{"ok":false,"code":"...","message":"..."}` とする。`code` は `invalid_argument`（終了コード `2`）、`blocked`（`4`）、`validation_failed`（`5`）、`internal_error`（`70`）、`lock_unavailable`（`75`）、`invalid_response_limit`（`4`）、`technical_retry_exhausted`（`4`）、`authority_inconsistency`（`4`）、`publication_invalid`（`4`）のいずれかだけを許可する。実行中に `blocked` を正常に保存できた失敗は終了コード `4` を優先し、状態保存そのものに失敗した内部エラーだけを `70` とする。
 
@@ -58,8 +58,8 @@ storycraft validate --workspace PATH [--json]
 | 2 | 4巻完走 | 全工程正常遷移 | 各巻公開後だけ次巻、最終巻で `completed` |
 | 3 | 品質上限到達 | 重大指摘上限到達時の注意付き採用 | `quality_revision_limit=2` で3回重大指摘 → `accepted_with_notice`、品質判定に `notice_type=編集` |
 | 4 | 品質無制限時の修正安全上限 | 最後の形式有効候補がある場合の注意付き採用 | `quality_revision_limit=0`、有効候補への修正が `invalid_response_limit=2` 回連続で形式不正 → 直前の有効候補を `accepted_with_notice` として採用 |
-| 5 | 形式不正上限到達 | 形式不正**上限回数**の停止 | 初回から**上限回数**連続 `valid=false` → exit 4、`status=blocked`、`last_error.code=invalid_response_limit` |
-| 6 | 技術的再試行上限 | 技術的失敗上限到達の停止 | `technical_retry_limit=2` で3回失敗 → exit 4 |
+| 5 | 形式不正上限到達 | 有効候補がない形式不正上限の停止 | 生成または確認が初回から `invalid_response_limit` 回連続 `valid=false` → exit 4、`status=blocked`、`last_error.code=invalid_response_limit`。修正中に既存の形式有効候補がある場合はシナリオ4を適用 |
+| 6 | 技術的再試行上限 | 技術的失敗の物理試行上限到達による停止 | `technical_retry_limit=2`（初回を含む最大2回）で2回とも失敗 → exit 4 |
 | 7 | 最大コンテキスト超過 | 提供者のコンテキスト超過を技術的失敗として扱う | 指定モデルの最大コンテキスト超過を返す → 技術的再試行、上限到達で exit 4 |
 | 8 | 中断収束 | 異常終了後の健全pending収束 | `scene_commit` staging残存 → `run` でmanifest検証→確定→次scene_plan |
 | 9 | 巻公開決定的検証 | 公開注意あり/なしの原稿出力分岐 | 重大指摘あり → `publication_notice_type=編集`、冒頭に定型文 |

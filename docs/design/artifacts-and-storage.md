@@ -102,7 +102,7 @@ ID は採番後に変更しません。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。
 3. 形式、必須項目、参照実在、採用状態、内容の内部整合を決定的に検証する。同じ manifest の target を参照する場合は、その staging target 全体を閉じた参照集合として解決する。manifest 外の参照は最終配置だけを許可する。
 4. [状態と遷移](state-and-transitions.md#21-現在対象と保留中確定)で定める `pending_commit` manifest を保存する。
-5. manifest の `pending` target を一つずつ原子的に名前変更する。再起動時に `pending` target の最終配置だけが有効なら、rename 後・manifest 更新前の正常な中断として target を `finalized` に進める。成功した target は `finalized` に更新する。異なる target の staging と最終配置が同時にあっても停止しない。
+5. manifest の `pending` target を一つずつ原子的に名前変更する。再起動時に `pending` target の最終配置だけが有効なら、rename 後・manifest 更新前の正常な中断として target を `finalized` に進める。成功した target は `finalized` に更新する。**同一 target の staging と最終配置が同時にある場合は、manifest と配置の不整合として `blocked` にする。**
 6. 全 target の種類、ID、スキーマ、参照を最終配置で再検証する。
 7. 実行状態の採用参照・公開記録・次工程を更新し、`pending_commit` を消す。
 

@@ -59,7 +59,7 @@ cat > request.json <<'EOF'
   "genre": "現代ファンタジー",
   "premise": "霧に包まれた街の古い図書館で、司書が消えた本の謎を追う",
   "required_elements": ["図書館", "霧", "消えた本", "司書"],
-  "forbidden_elements": ["異世界転生", "チート能力", "ハーレム"],
+  "avoid": ["異世界転生", "チート能力", "ハーレム"],
   "ending_preference": "謎が解けて街の霧が晴れ、図書館が再生する",
   "volume_count": 4,
   "language": "ja"

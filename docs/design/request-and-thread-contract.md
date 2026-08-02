@@ -15,7 +15,7 @@
 
 - `title` と `genre`: 空でない文字列
 - `premise`: 空でない文字列
-- `required_elements` と `forbidden_elements`: 文字列配列。重複なし
+- `required_elements` と `avoid`: 文字列配列。重複なし
 - `ending_preference`: 空でない文字列
 - `volume_count`: 4〜10 の整数
 - `language`: `ja`

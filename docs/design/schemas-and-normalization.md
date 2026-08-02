@@ -21,7 +21,7 @@
 | スキーマ版 | 正の整数。LLM 応答だけ `*-v1` 文字列 |
 | 成果物参照 | `artifact_kind` と `artifact_id` のオブジェクト |
 | 座標 | `volume_number`、`chapter_number`、`scene_number`。すべて 1 以上の整数 |
-| 根拠位置 | JSON パス（`$.path` 形式）、段落番号（0始まり整数、空行区切り）、本文位置（UTF-8 byte オフセット、0始まり整数）のいずれか。対象本文・JSON に解決できる値 |
+| 根拠位置 | `$.path`（JSON パス）、`paragraph:N`（空行区切りの0始まり段落番号）、`prose:N`（本文のUTF-8 byte オフセット、0始まり）のいずれか。対象本文・JSON に解決できる値 |
 
 配列の ID は重複不可です。列挙値外、参照先なし、座標不一致、未知項目は形式不正です。
 
@@ -91,7 +91,7 @@
 
 `--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
 
-- `request`: `title`、`genre`、`premise`、`required_elements`、`forbidden_elements`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
+- `request`: `title`、`genre`、`premise`、`required_elements`、`avoid`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
 - `keywords`: `{ "keywords": ["空でない文字列を1個以上"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
 - `config`: `{ "provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
 
@@ -122,7 +122,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
   "decision": "pass | issues",
   "issues": [{
     "severity": "critical | notice",
-    "evidence_locations": ["JSON path | paragraph index | prose offset"],
+    "evidence_locations": ["$.path | paragraph:N | prose:N"],
     "explanation": "..."
   }]
 }
@@ -130,7 +130,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 - `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない。`issues` の全件が根拠位置不正で除外された応答は `issues` の条件を満たさない形式不正として扱い、`invalid_response_limit` を消費する。`pass` へ正規化して採用してはならない
 - `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
-- `evidence_locations`: JSON path / 段落番号 / 本文オフセットのいずれか。対象本文・JSON に解決できる値
+- `evidence_locations`: `$.path`、`paragraph:N`、`prose:N` のいずれか。`N` は0始まりで、`paragraph` は空行区切りの段落番号、`prose` は本文のUTF-8 byte オフセット。対象本文・JSON に解決できない値は形式不正
 - `code`、`affected_artifact_ids`、`disposition`、`revision_instruction` はシステム側が確認記録作成時に付与し、LLM 応答には含めない
 ### 4.3 quality-disposition (品質判定記録) — `quality/{id}/record.json`
 
@@ -256,7 +256,7 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 
 | 種類 | 種別別内容検証器が検証する必須内容項目 |
 |---|---|
-| 依頼 | 題名、ジャンル、前提、required_elements、forbidden_elements、ending_preference、volume_count、言語 |
+| 依頼 | 題名、ジャンル、前提、required_elements、avoid、ending_preference、volume_count、言語 |
 | initial-design | core、cast、world、knowledge_model、unresolved_threads、ending_conditions |
 | 作品状態 | story_facts、character_knowledge、reader_disclosures、unresolved_thread_states、timeline_position |
 | series-plan | `volume_count`、`series_objectives`、`volume_summaries`、character/relationship arc、thread progression、revelation schedule、ending path、global constraints |
