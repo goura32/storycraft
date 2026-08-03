@@ -24,13 +24,13 @@
 | 区分 | 内容 |
 |---|---|
 | 責務 | 一巻で扱う人物・対立・転換・未解決事項の予定と章構成を作る |
-| 必須入力スロット | `settings`、第1巻は `current_state`、`series_plan`。第2巻以降はこれらに `prior_volume_plan` を加える。`request` と `initial_design` はこれらの採用済み正本から必要な意味内容を読み直さない。`settings` は物語の意味内容ではなく LLM 実行設定として必須 |
+| 必須入力スロット | `settings`、第1巻は `current_state` と `series_plan`。第2巻以降はこれらに、直前に公開された巻番号を `NN` とする `volume_plan.vNN` を加える。`request` と `initial_design` はこれらの採用済み正本から必要な意味内容を読み直さない。`settings` は物語の意味内容ではなく LLM 実行設定として必須 |
 | 決定的前提 | 第1巻以外は直前巻の `volume_publication` が公開済みであること |
 | 次工程 | `chapter_plan`、対象は当該巻第1章 |
 
 `volume-plan`のpayloadは巻番号を重複保持せず、`chapter_summaries`で章番号と章の目的を表します。巻番号は`volume_plan.vNN`のselection slotとartifact IDで束縛します。
 
-コードは、対象巻がシリーズ計画の未公開の次巻であること、直前巻が公開済みであること、割当がシリーズ計画の対象巻の範囲内であること、章番号が連続すること、章数が settings の `chapter_per_volume_range` 内であることを検証します。LLM は、正規形現在状態と採用計画だけに対する巻の役割、人物・未解決事項の進行が適切かを確認します。
+コードは、対象巻がシリーズ計画の未公開の次巻であること、直前巻が公開済みであること、割当がシリーズ計画の対象巻の範囲内であること、章番号が連続すること、章数が settings の `chapter_per_volume_range` 内であることを検証します。LLM は、正規形現在状態と採用計画に対して、巻の役割、人物・未解決事項の割当、前巻計画からの継続条件に矛盾がないかを確認します。
 
 ## 4. 章計画
 
@@ -49,7 +49,7 @@
 |---|---|
 | 責務 | 一場面が達成する物語上の目的、未解決事項の進行・解決予定、次の場面へ渡す予定を作る |
 | 必須入力スロット | `settings`、`initial_design`、`current_state`、`series_plan`、対象 `volume_plan`、対象 `chapter_plan` |
-| 出力成果物 | `scene-plan`。場面座標、目的、対象人物、未解決事項割当、予定する事実変化、次場面条件 |
+| 出力成果物 | `scene-plan`。対象座標は artifact ID と selection slot で束縛し、目的、対象人物、未解決事項割当、予定する事実変化、次場面条件を持つ |
 | 次工程 | `scene_card`、同一場面座標 |
 
 コードは、座標が章計画の未確定の次場面であること、未解決事項割当が親計画の対象範囲内であること、`resolve` がシリーズ計画で定めた対象巻と一致することを検証します。LLM は、場面目的、人物の動機、予定する変化、結末条件への寄与が意味的に成立することを確認します。
@@ -65,7 +65,7 @@
 | `chapter_plan` | `chapter_plan.vNN.cMM`、`chapter_plan_adoption.vNN.cMM` | `scene_plan.vNN.cMM.s01` |
 | `scene_plan` | `scene_plan.vNN.cMM.sKK`、`scene_plan_adoption.vNN.cMM.sKK` | `scene_card.vNN.cMM.sKK` |
 
-採用記録は候補 ID と品質判定 ID を参照します。次工程は計画候補の固定パスや有効候補を読まず、このスロットを読むだけです。章・場面座標は常に二桁ゼロ埋めです。第1巻では `prior_volume_plan` を入力にしません。場面確定の selection 更新は、当該巻の `volume_plan` を `prior_volume_plan` に固定します。第2巻以降の `volume_plan` は、この slot を必須入力とします。
+採用記録は候補 ID と品質判定 ID を参照します。次工程は計画候補の固定パスや有効候補を読まず、このスロットを読むだけです。章・場面座標は常に二桁ゼロ埋めです。第1巻以外の `volume_plan` は、直前に公開された巻番号を `NN` とする `volume_plan.vNN` slot を必須入力とします。場面確定の selection 更新で、当該巻の計画を別名の slot に複写しません。
 
 ## 7. 修正・失敗
 

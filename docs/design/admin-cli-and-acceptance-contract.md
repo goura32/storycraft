@@ -2,7 +2,7 @@
 
 ## 1. 失敗時の扱い
 
-V1 は一人だけが一つのローカル作業場所を扱う。正本、参照、確定物、一時保存の不整合を検出した作業場所は `blocked` のままとし、復旧・参照選び直し・直接編集による再開を行わない。利用者は `status` と `validate` で診断を確認し、必要なら新しい作業場所を作る。
+V1 は一人だけが一つのローカル作業場所を扱う。正本、参照、確定物、一時保存の不整合を検出した作業場所は `blocked` のままとし、復旧・参照選び直し・直接編集による再開を行わない。利用者は `status` と `validate` で診断を確認し、継続する場合は新しい作業場所を作る。
 
 `run` は `blocked` を解除しない。`status` と `validate` だけが停止中に許可され、状態を変更しない。
 
@@ -28,7 +28,7 @@ storycraft validate --workspace PATH [--json]
 | 75 | ロック取得不能 |
 | 70 | 内部エラー |
 
-`--json` の成功時標準出力は一行オブジェクト、未知項目なし。これは run-state の公開用射影であり、内部 run-state や manifest をそのまま出力しない。共通項目は `workspace_id`、`status`、`current_stage`、`current_target`、`current_selection_id`、`last_error`、`pending_commit`。`pending_commit` は `null`、または `{ "kind": "candidate_adoption | scene_commit | volume_publication", "pending_target_count": 0, "finalized_target_count": 0 }` とする。内部 manifest のパス、ダイジェスト、target ID、staging 相対パス、最終パスは出力しない。`completed` の `current_target` と `pending_commit` は `null`、その他の状態の `current_target` は run-state の値をそのまま出力する。非 JSON の成功時標準出力は人間用表示だけ。エラー時は `--json` の有無にかかわらず、標準出力は空、標準エラー出力は一行 JSON `{"ok":false,"code":"...","message":"..."}` とする。`code` は `invalid_argument`（終了コード `2`）、`blocked`（`4`）、`validation_failed`（`5`）、`internal_error`（`70`）、`lock_unavailable`（`75`）、`invalid_response_limit`（`4`）、`technical_retry_exhausted`（`4`）、`authority_inconsistency`（`4`）、`publication_invalid`（`4`）のいずれかだけを許可する。実行中に `blocked` を正常に保存できた失敗は終了コード `4` を優先し、状態保存そのものに失敗した内部エラーだけを `70` とする。
+`--json` の成功時標準出力は一行オブジェクト、未知項目なし。これは run-state の公開用射影であり、内部 run-state や manifest をそのまま出力しない。共通項目は `workspace_id`、`status`、`current_stage`、`current_target`、`current_selection_id`、`last_error`、`pending_commit`。`pending_commit` は `null`、または `{ "kind": "candidate_adoption | scene_commit | volume_publication", "pending_target_count": 0, "finalized_target_count": 0 }` とする。内部 manifest のパス、ダイジェスト、target ID、staging 相対パス、最終パスは出力しない。`completed` の `current_stage`、`current_target`、`pending_commit` はすべて `null`、その他の状態の `current_target` は run-state の値をそのまま出力する。非 JSON の成功時標準出力は人間用表示だけ。エラー時は `--json` の有無にかかわらず、標準出力は空、標準エラー出力は一行 JSON `{"ok":false,"code":"...","message":"..."}` とする。`code` は `invalid_argument`（終了コード `2`）、`blocked`（`4`）、`validation_failed`（`5`）、`internal_error`（`70`）、`lock_unavailable`（`75`）、`invalid_response_limit`（`4`）、`technical_retry_exhausted`（`4`）、`authority_inconsistency`（`4`）、`publication_invalid`（`4`）のいずれかだけを許可する。実行中に `blocked` を正常に保存できた失敗は終了コード `4` を優先し、状態保存そのものに失敗した内部エラーだけを `70` とする。
 
 **エラー message 形式**: `message` には JSON pointer（`#/field/subfield` 形式）または人間用短文を入れる。`init --config` 設定検証エラー時は `#/config/field` を含める。
 
@@ -48,7 +48,7 @@ storycraft validate --workspace PATH [--json]
 
 **模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、モデル最大コンテキスト長を返す OpenAI 互換のモデル情報応答も提供する。`messages`、`think: true`、シード、`options.num_ctx`、JSON Schema の `response_format` を検査し、`choices[0].message.content` に応答を返す。温度等は設定で指定された場合だけ検査する。実装クラス・メソッドシグネチャはコード側で定義。
 
-**設定検証契約**: `init --config FILE` は JSON がスキーマ（§3.1）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。`request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#31-init-入力) に従う。
+**設定検証契約**: `init --config FILE` は JSON がスキーマ（§2.2）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。`request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#22-init-入力) に従う。
 
 **受入試験シナリオ（10件、仕様レベル）**:
 

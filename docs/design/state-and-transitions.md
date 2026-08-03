@@ -25,11 +25,11 @@
 }
 ```
 
-| 値 | 意味 | 不変条件 |
+| 状態値 | 意味 | 不変条件 |
 |---|---|---|
 | `running` | 次工程または確定途中の収束を実行できる | `last_error` は `null` |
-| `blocked` | 人手確認待ちの終端状態 | `last_error` は必須。通常操作で `running` に戻さない |
-| `completed` | 最終巻が公開済み | `current_stage`、`current_target`、場面、保留中確定はすべて `null` |
+| `blocked` | 人手確認待ちの終端状態 | `last_error` は必須。`run` で `running` に戻さない |
+| `completed` | 最終巻が公開済み | `last_error`、`current_stage`、`current_target`、保留中確定は `null`。`current_selection_id` は最終選択を指す |
 
 `initializing`、`stopping`、`stopped`、`failed` は V1 の保存値にしません。作業場所作成は、作成用一時場所を検証してから、最初から `running` の V1 状態を確定します。
 
@@ -63,10 +63,10 @@ manifest に載っていない **当該 manifest の `staging_path` 配下また
 
 ## 3. 工程遷移
 
-`request_intake` はキーワード入口だけの保存工程です。直接依頼では `initial_design` を最初の工程とします。
+`request_intake` はキーワード入口を正式な依頼文へ変換して採用する工程です。直接依頼では `initial_design` を最初の工程とします。
 
 ```text
-input → request_intake → initial_design → series_plan → volume_plan → chapter_plan → scene_plan
+input → { keywords: request_intake | direct request: initial_design } → series_plan → volume_plan → chapter_plan → scene_plan
 → scene_card → scene_prose → scene_continuity → scene_commit → volume_publication
 ```
 

@@ -37,7 +37,7 @@ uv run python -m storycraft.cli validate --help
 ### 1. 依頼文から始める場合
 
 ```bash
-# 設定ファイル作成（仕様書 §3.1 の閉じた形式）
+# 設定ファイル作成（[仕様書 §3 の設定形式](docs/SPECIFICATION.md#3-入力と操作)）
 cat > config.json <<'EOF'
 {
   "provider": "ollama",
@@ -122,7 +122,7 @@ uv run python -m storycraft.cli validate --workspace ./my-novel --json
 - 確定した作品の状態、場面、計画、公開用原稿は書き換えない
 - 本文中の根拠がない物語上の事実や現在状態は作らない
 - LLM が作った候補は、コードによる検証と独立した確認を経て採用する
-- 必要な根拠は採用済み正本を明示参照して渡し、機械的な抜粋・切り詰めや引継ぎ要約を使わない
+- 必要な根拠は採用済み正本を明示参照して渡し、正本を代替する機械的な抜粋・切り詰めや引継ぎ要約を使わない
 - 復旧と公開は決定的に行い、確定済み成果物を上書きしない
 - 読者向けの公開単位は巻だけであり、最終巻の公開でシリーズ制作も完了する
 - ローカル LLM 専用のため、トークン量や費用による予算管理は行わない
@@ -168,7 +168,7 @@ src/storycraft/           # 実装コード
 templates/prompts/
 ├── system/                      # システムプロンプト
 ├── schemas/                     # JSONスキーマ
-└── user/                        # ユーザープロンプト (generate/critique/revision × 10ステージ)
+└── user/                        # ユーザープロンプト (generate/critique/revision × 9 LLM工程)
 
 docs/
 ├── SPECIFICATION.md             # 仕様正本

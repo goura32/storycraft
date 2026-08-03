@@ -30,7 +30,7 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 
 ## 6. 巻公開の詳細
 
-巻公開の一時保存は公開記録と原稿を含みます。記録は全場面、品質判定、計画、現在状態、設定を現在選択のスロットと照合します。公開は選択スナップショットのスロットを変更しないため、後続選択を作りません。最終配置への原子的な名前変更後だけ公開済み巻を追加します。
+巻公開の一時保存は公開記録と原稿を含みます。公開時は `input_selection_id` から全場面、品質判定、計画、現在状態、設定を導出して現在選択のスロットと照合します。導出可能な ID 群を公開記録へ複写しません。公開は選択スナップショットのスロットを変更しないため、後続選択を作りません。最終配置への原子的な名前変更後だけ公開済み巻を追加します。
 
 ロックの契約（仕様レベル）:
 
@@ -43,13 +43,12 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 - 単一成果物: `^[a-z_]+$`（例: `request`, `settings`, `series_plan`, `initial_design`, `current_state`）
 - 座標付き成果物: `^[a-z_]+\\.v[0-9]{2}(\\.c[0-9]{2})?(\\.s[0-9]{2})?$`
 - 本文品質判定: `^scene_prose_disposition\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}$`
-- 巻公開入力: `^prior_volume_plan$`
 
 選択スナップショットの状態遷移（仕様レベル）:
 
 - 最初の selection は `input_selection_id=null`、依頼採用時に `request` と `settings` スロットを持つ
 - `initial_design` 採用で `initial_design`、`current_state`（最初の generation）、`initial_design_adoption` を追加
 - `series_plan`、`volume_plan`、`chapter_plan`、`scene_plan`、`scene_card` 採用で各スロットを追加
-- `scene_prose` と `scene_continuity` の採用では、対応する内容、採用記録、品質判定の各スロットだけを追加し、`scene_commit` の確定でだけ `scene`、`current_state`（新 generation）、`scene_commit`、`prior_volume_plan`（当該巻の volume_plan）を追加
+- `scene_prose` と `scene_continuity` の採用では、対応する内容、採用記録、品質判定の各スロットだけを追加し、`scene_commit` の確定でだけ `scene`、`current_state`（新 generation）、`scene_commit` を追加する。当該巻の `volume_plan.vNN` は同じ selection lineage に残す
 - `volume_publication` は入力 selection を変更せず、公開記録を `published_volumes` にだけ追加して次巻または完了へ進む
 - 新 selection を作る工程だけが不変ファイルを作成し、`runtime/run-state.json` の `current_selection_id` を原子的に書き換える

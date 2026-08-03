@@ -61,7 +61,7 @@
 | `scene_card` | `scene_card.vNN.cMM.sKK`、`scene_card_adoption.vNN.cMM.sKK` | `scene_prose.vNN.cMM.sKK` |
 | `scene_prose` | `scene_prose.vNN.cMM.sKK`、`scene_prose_adoption.vNN.cMM.sKK`、`scene_prose_disposition.vNN.cMM.sKK` | `scene_continuity.vNN.cMM.sKK` |
 | `scene_continuity` | `continuity_update.vNN.cMM.sKK`、`continuity_adoption.vNN.cMM.sKK`、`continuity_disposition.vNN.cMM.sKK` | `scene_commit.vNN.cMM.sKK` |
-| `scene_commit` | `scene.vNN.cMM.sKK`、`current_state`、`scene_commit.vNN.cMM.sKK`、`prior_volume_plan` | 次場面・次章・巻公開 |
+| `scene_commit` | `scene.vNN.cMM.sKK`、`current_state`、`scene_commit.vNN.cMM.sKK` | 次場面・次章・巻公開 |
 
 本文採用を置換するときは、同じ場面の継続性更新、継続性採用記録、継続性品質判定スロットを後続スナップショットから除外し、新本文から再作成します。次工程は候補の固定パスや有効候補を読まず、このスロットを読むだけです。
 

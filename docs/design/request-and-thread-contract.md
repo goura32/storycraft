@@ -46,7 +46,7 @@
 - series-plan: `thread_id`、`action`、`volume_number`、`required_conditions`。結末必須事項の `resolve` 対象巻は一意。
 - volume-plan: `thread_id`、`action`、`chapter_number`、`required_conditions`。親 series-plan と同じ巻・操作・条件に限る。
 - chapter-plan: `thread_id`、`action`、`scene_number`、`required_conditions`。親 volume-plan と同じ巻・章・操作・条件に限る。
-- scene-plan: `thread_id`、`action`、完全座標 `{volume_number, chapter_number, scene_number}`、`required_conditions`。親 chapter-plan と同じ操作・条件に限る。
+- scene-plan: `thread_id`、`action`、selection slot と artifact ID で束縛する完全座標 `{volume_number, chapter_number, scene_number}`、`required_conditions`。親 chapter-plan と同じ操作・条件に限る。座標を payload に重複保存しない。
 
 `required_conditions` と `resolved_condition_refs` は、初期設計でコード採番した `ending_condition_id` だけを参照します。説明文を代用しません。
 

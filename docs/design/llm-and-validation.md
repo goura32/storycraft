@@ -9,15 +9,15 @@
 | `QualityLoop` | 生成、独立確認、修正、再確認、品質上限時の注意付き採用 | 通常工程の候補を採用する |
 | `ArtifactState` | 不変確定、採用参照、停止、復旧 | LLM 記録を物語正本にしない |
 
-### 7. LLMClient.invoke インターフェース契約（仕様レベル）
+### 1.1 LLMClient.invoke インターフェース契約（仕様レベル）
 
 `LLMClient` は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。HTTP・接続・時間切れは技術的失敗として扱い、`technical_retry_limit` は各論理処理で許可する物理試行回数（初回を含む）です。成功 HTTP の capability payload で `id` が不一致、`context_length` が欠落または正整数でない場合は形式不正として `invalid_response_limit` を消費する。いずれも各物理試行を `model_capability` call record として保存し、該当上限到達時はそれぞれ `technical_retry_exhausted` または `invalid_response_limit` で `blocked` にする。クライアント自身の契約違反・例外だけは LLM未呼出の `internal_error` とする。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。応答は `choices[0].message.content` だけを構造化応答として読む。Ollama ネイティブ API（`/api/generate` 等）は使わない。
 
-### 8. StructuredOperation.parse_and_validate 契約（仕様レベル）
+### 1.2 StructuredOperation.parse_and_validate 契約（仕様レベル）
 
 JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根拠位置解決を決定的に行います。実装関数シグネチャはコード側で定義し、契約には「未知項目拒否」「スキーマ・ID・参照・範囲・根拠位置の 5 観点で検証」「不合格は形式不正 1 回と数える」のみを記述します。
 
-### 9. QualityLoop.run_stage 契約（仕様レベル）
+### 1.3 QualityLoop.run_stage 契約（仕様レベル）
 
 生成・決定的検証・確認を行い、重大な指摘があれば修正・再確認を繰り返します。品質修正上限到達時は注意付き採用とします。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合は注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「`invalid_response_limit`」を記述します。
 
@@ -25,7 +25,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 すべての生成・確認・修正呼出しは Thinking を有効化する（OpenAI 互換 request の `think: true`）。実行時は、選択したモデルが公開する最大コンテキスト長を前記 endpoint から取得し、その値を request の `options.num_ctx` に指定する。トークン量・文字数・費用を理由に入力を配分・切詰め・停止しない。provider がモデルの context window 超過を返した場合は技術的失敗として再試行し、上限到達時は `technical_retry_exhausted` とする。
 
-温度、`top_p`、`top_k`、`repeat_penalty` などの推論パラメータは `settings.request_options` で任意に指定できる。**既定では `request_options` を省略し、これらのキーを request に送らない。**指定されたキーだけを `options` に追加し、Ollama のモデル既定値を上書きしない。
+温度、`top_p`、`top_k`、`repeat_penalty` は `settings.request_options` で任意に指定できる。**既定では `request_options` を省略し、これらのキーを request に送らない。**指定されたキーだけを `options` に追加し、Ollama のモデル既定値を上書きしない。
 
 ## 2. 二種類の再試行
 
@@ -40,16 +40,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 各論理処理の `format_attempt` は1から始め、成功 HTTP 応答が形式不正だったときだけ1増やします。各 `format_attempt` 内の `technical_attempt` は1から始め、通信失敗・提供者エラー・時間切れごとに増やします。技術的再試行が成功したら、その応答の形式検証結果を同じ `format_attempt` に記録します。技術的再試行上限に達した場合は形式不正を消費せず、論理処理を `blocked` にします。
 
-```python
-def invoke_structured(operation):
-    for format_attempt in range(1, settings.invalid_response_limit + 1):
-        response = call_with_technical_retries(operation, format_attempt)
-        parsed = parse_and_validate(response)
-        if parsed.valid:
-            return parsed.value
-        persist_invalid_validation(operation, format_attempt, parsed.error)
-    return invalid_response_limit(operation)
-```
+各論理処理は `format_attempt=1` から開始し、各回で技術的再試行を完了してから応答を決定的に検証します。有効ならその値を返し、形式不正なら次のシードで次の `format_attempt` に進めます。すべての物理呼出しと検証結果は対応する call record に保存します。上限まで有効な応答がなければ、処理を `invalid_response_limit` として終了します。独立した validation 成果物や、ここで定めた関数名の実装契約は持ちません。
 
 `invalid_response_limit` は、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合だけ、その候補を `accepted_with_notice` として返す。それ以外は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
 
@@ -64,7 +55,7 @@ def invoke_structured(operation):
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約の必須入力スロットを表の順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。明示参照が許される場合は工程契約に slot 名と成果物 ID を列挙し、その後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。無効な根拠位置は除外して修正入力に渡します。`issues`、`explanation`、`evidence_locations` に人工的な件数・長さ上限は設けず、選択モデルの最大コンテキスト内で要求全体を送ります。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約が列挙する必須入力スロットの順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。工程契約が明示参照を列挙する場合は、slot 名と成果物 ID をその後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。無効な根拠位置は除外して修正入力に渡します。`issues`、`explanation`、`evidence_locations` に人工的な件数・長さ上限は設けず、選択モデルの最大コンテキスト内で要求全体を送ります。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
@@ -90,19 +81,19 @@ LLM は、候補、確認、修正のいずれでも、新しい成果物 ID、�
 
 例外は、呼出し時に読み取り専用カタログとして渡した**既存 ID の選択**だけです。選択可能 ID の全一覧、各 ID の説明、選択対象の種別を入力に含め、出力検証器は選択値がその一覧に含まれることだけを許可します。LLM が新しい ID を作る、一覧外 ID を返す、ID を推測して補うことは形式不正です。
 
-新規人物・新規未解決事項のように新しい識別子が必要な候補は、LLM が名前・役割・説明・関係などの意味内容だけを返します。コードが候補全体を形式検証した後に ID を採番し、名前・関係記述を解決して正規形内容に ID を付与します。解決不能な参照、同名曖昧性、重複は形式不正です。
+新規人物・新規未解決事項のように新しい識別子が必要な候補は、LLM が名前・役割・説明・関係の意味内容だけを返します。コードが候補全体を形式検証した後に ID を採番し、名前・関係記述を解決して正規形内容に ID を付与します。解決不能な参照、同名曖昧性、重複は形式不正です。
 
 ## 5. 生成・修正の共通候補スキーマ
 
-生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#41-candidateresponse-生成修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
+生成と修正は、[`schemas-and-normalization.md` の CandidateResponse](schemas-and-normalization.md#31-candidateresponse-生成修正の応答) を返します。工程ごとに異なるのは `artifact_kind` が示す `payload` スキーマだけです。修正専用スキーマ、差分だけを返すスキーマ、部分成果物だけを返すスキーマは持ちません。
 
 生成と修正の LLM 応答は完全に同じスキーマであり、元候補 ID、対象確認記録 ID、基準選択 ID を含めません。これらは LLM 呼出しの入力コンテキストと、応答保存時にシステムが作る候補記録にだけ保持します。`payload` は必ず同じ成果物種類の完全スキーマを満たし、部分差分を返してはなりません。`generation` と `scene` はコード専用成果物であり、この応答の `artifact_kind` に含めません。`scene-prose` を修正した場合は、新候補採用後に対応する継続性更新を新たに生成します。
 
-`ReviewResponse` の JSON スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.2](schemas-and-normalization.md#42-reviewresponse-確認の応答) です。ここでは品質ループ上の入力・採用規則だけを定めます。
+`ReviewResponse` の JSON スキーマと相関制約の正本は [`schemas-and-normalization.md` の §3.2](schemas-and-normalization.md#32-reviewresponse-確認の応答) です。ここでは品質ループ上の入力・採用規則だけを定めます。
 
-## 7. 最小記録形式
+## 6. 最小記録形式
 
-call record は `runtime/calls/<call-id>/record.json` に保存します。完全な保存スキーマと相関制約の正本は [`schemas-and-normalization.md` の §4.7](schemas-and-normalization.md#47-call-record呼出し記録) です。待機時間の実測値は保存しません。
+call record は `runtime/calls/<call-id>/record.json` に保存します。完全な保存スキーマと相関制約の正本は [`schemas-and-normalization.md` の §3.7](schemas-and-normalization.md#37-call-record呼出し記録) です。待機時間の実測値は保存しません。
 
 `quality-disposition.json` は採用済み品質判定 `quality/<quality-id>/record.json` の内容を指す名称であり、別ファイルを作らない。`quality-id` は `quality-{通番6桁}`、採用記録と本文採用 slot が同じ ID を参照する。
 

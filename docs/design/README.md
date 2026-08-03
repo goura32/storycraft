@@ -5,9 +5,9 @@
 このディレクトリは、[仕様書](../SPECIFICATION.md)の契約を実装へ落とす設計を定めます。仕様書が唯一の規範的な製品仕様です。この設計書群は仕様を上書きせず、矛盾した場合は仕様書を先に修正してから設計を直します。
 
 - 仕様書: 利用者に約束する振る舞いと禁止事項
-- 実装設計: データ形式、処理境界、保存順序、移行順序
+- 実装設計: データ形式、処理境界、保存順序、移行方針
 - 実装状況: 現行コードとの差分記録
-- 試験: 設計の最小限の受入確認。設計の根拠や正本ではない
+- 試験: 設計の受入確認。設計の根拠や正本ではない
 
 ここにない細部を実装時の都合だけで追加してはなりません。正本、状態、外部連携、保存形式、復旧経路を増やす場合は、先にこの設計書と仕様書の整合を確認します。
 
@@ -22,12 +22,12 @@
 | [依頼入口と未解決事項](request-and-thread-contract.md) | キーワード入口、依頼採用、予定から本文根拠・解決まで |
 | [工程処理](stage-operation-contract.md) | 処理、確定点、工程ごとの対象と停止 |
 | [確定と復旧](commit-and-recovery-contract.md) | ロック、原子的確定、異常終了収束表 |
-| [通常 CLI・受入](admin-cli-and-acceptance-contract.md) | 通常 CLI、模擬 Ollama、最小受入 |
+| [通常 CLI・受入](admin-cli-and-acceptance-contract.md) | 通常 CLI、模擬 Ollama、受入確認 |
 | [状態と遷移](state-and-transitions.md) | 実行状態、工程、停止 |
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |
 | [巻公開](volume-publication.md) | 全巻共通の巻公開記録、原稿、復旧 |
-| [移行と受入](migration-and-acceptance.md) | 旧実装の置換順序、最少の受入確認、廃止対象 |
+| [移行方針と受入](migration-and-acceptance.md) | V1新規作業場所の拒否条件、受入確認、廃止対象 |
 
 ## 3. 共通原則
 

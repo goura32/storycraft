@@ -33,18 +33,11 @@ publications/
   "volume_publication_id": "volume-pub-v04-000004",
   "volume_number": 4,
   "input_selection_id": "selection-000077",
-  "settings_id": "settings-000001",
-  "series_plan_id": "series-plan-000004",
-  "volume_plan_id": "volume-plan-v04-000001",
-  "current_state_id": "gen-000123",
-  "chapter_plan_ids": ["chapter-plan-v04-c01-000001"],
-  "scene_ids": ["scene-v04-c01-s01-000001"],
-  "quality_disposition_refs": ["quality-000123"],
   "created_at": "..."
 }
 ```
 
-`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`、`settings_id`、`series_plan_id`、`volume_plan_id`、`current_state_id`、`chapter_plan_ids`、`scene_ids`、`quality_disposition_refs`、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。`volume_number` は input selection から導出する採用済み volume plan の巻番号と一致し、同selectionから導出する全対象 scene、scene prose、scene prose品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
+`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。設定、計画、状態、場面、品質判定は `input_selection_id` から導出し、record へ複写しない。`volume_number` は導出した採用済み volume plan の巻番号と一致し、同じ selection から導出する全対象 scene、scene prose、scene prose 品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
 
 **公開注意集約規則（決定的）:**
 - 対象場面の `quality_disposition` すべてについて、`remaining_major_issues` が空でないかを確認する
@@ -52,7 +45,7 @@ publications/
 - すべて空なら `publication_notice_type` キーを省略する（`null` を書かない）
 - 対象本文ごとに品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` のいずれかであることを確認する。欠落・重複・列挙外なら公開を拒否する（`publication_invalid` で `blocked`）
 
-コードは `input_selection_id` から対象の計画・状態・場面・本文品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。
+コードは `input_selection_id` から対象の計画・状態・場面・本文品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。公開記録には導出可能な ID 群を再保存しません。
 
 ## 3. 結末必須事項の扱い
 
