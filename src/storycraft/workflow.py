@@ -221,11 +221,13 @@ def run(
             if state["status"] == "blocked":
                 raise RunUnavailable("blocked")
             if state["pending_commit"] is not None:
+                pending_kind = state["pending_commit"].get("kind") if isinstance(state["pending_commit"], dict) else None
                 try:
                     state = recover_pending_commit(root)
                 except Exception as exc:
-                    _block(store, state, "authority_inconsistency", str(exc))
-                    raise RunUnavailable("authority_inconsistency") from exc
+                    code = _stage_error_code(pending_kind, exc)
+                    _block(store, state, code, str(exc))
+                    raise RunUnavailable(code) from exc
                 if state["status"] == "completed":
                     return state
                 continue

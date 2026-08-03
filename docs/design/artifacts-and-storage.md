@@ -117,7 +117,7 @@ ID は採番後に変更しません。
 - `candidates/<candidate-id>/record.json`: `schema_version`、`candidate_id`、`artifact_kind`、`input_selection_id`、`keywords_id`、`settings_id`、工程 payload、生成または修正元 candidate ID、対応する call ID、作成時刻を持つ不変候補記録。selection 前の `request_intake` だけは `keywords_id` を持ち、他工程では `null` とする。
 - `reviews/<review-id>/record.json`: `schema_version`、`review_id`、対象 candidate ID、ReviewResponse、対応する call ID、作成時刻を持つ不変確認記録
 - `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。品質判定は採用記録を参照しない。
-- `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
+- `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot、継続性更新採用では `continuity_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
 
 依頼/応答に認証情報、Authorization、secret header、思考過程を保存しません。呼出し記録は作品状態や公開原稿の正本ではありません。
 

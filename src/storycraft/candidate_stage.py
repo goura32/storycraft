@@ -125,9 +125,12 @@ class CandidateStageRunner:
                     invalid_limit=invalid_limit,
                 )
             except InvalidResponseLimitError:
-                # A structurally valid candidate already exists.  Preserve it
-                # with the critical review rather than blocking on a malformed
-                # revision response, regardless of the configured quality cap.
+                # Only an explicitly unbounded quality loop may accept the last
+                # valid candidate after a malformed revision.  A finite quality
+                # limit is a contract boundary: a failed revision blocks rather
+                # than silently turning into accepted_with_notice.
+                if limit != 0:
+                    raise
                 return self._adopt(state, slots, input_selection_id, candidate_id, candidate, review_ids, revision_count, critical, updated_at)
             revised_id = self._reserve("candidates", "candidate")
             revise_call = self._physical_call_id(model, "revise")

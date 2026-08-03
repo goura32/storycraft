@@ -160,7 +160,15 @@ class WorkflowDispatcherTests(unittest.TestCase):
         self.assertEqual(self.last_store.state["status"], "blocked")
         self.assertEqual(self.last_store.state["last_error"]["code"], "publication_invalid")
 
-    def test_unexpected_internal_failure_is_persisted_as_internal_error(self) -> None:
+    def test_recovery_contract_error_uses_pending_publication_kind_for_diagnostic(self) -> None:
+        from storycraft.workflow import RunUnavailable
+
+        state = running("volume_publication", pending_commit={"kind": "volume_publication"})
+        with patch("storycraft.workflow.recover_pending_commit", side_effect=ContractError("bad publication manifest")):
+            with self.assertRaisesRegex(RunUnavailable, "publication_invalid"):
+                self._run(state)
+        self.assertEqual(self.last_store.state["last_error"]["code"], "publication_invalid")
+
         from storycraft.workflow import RunUnavailable
 
         state = running("scene_commit")

@@ -53,6 +53,7 @@ class SceneCommitStageService:
             SelectionSnapshotStore(self.workspace_root).load(input_selection_id),
         )
         values = self._inputs(slots, volume, chapter, scene_number)
+        self._validate_quality_disposition(values["continuity_disposition"])
         scene_plan = values["scene_plan"]["content"]
         scene_card = values["scene_card"]["content"]
         prose = values["scene_prose"]["content"]
@@ -69,7 +70,6 @@ class SceneCommitStageService:
         output_selection_id = f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"
         next_stage, next_target = self._next_work(values, volume, chapter, scene_number)
         scene_content = {
-            "schema_version": 1,
             "scene_prose_id": values["scene_prose"]["artifact_id"],
             "continuity_update_id": values["continuity_update"]["artifact_id"],
             "current_state_id": values["current_state"]["artifact_id"],
@@ -167,12 +167,18 @@ class SceneCommitStageService:
             "scene_prose": f"scene_prose.v{volume:02d}.c{chapter:02d}.s{scene:02d}",
             "scene_prose_disposition": f"scene_prose_disposition.v{volume:02d}.c{chapter:02d}.s{scene:02d}",
             "continuity_update": f"continuity_update.v{volume:02d}.c{chapter:02d}.s{scene:02d}",
+            "continuity_disposition": f"continuity_disposition.v{volume:02d}.c{chapter:02d}.s{scene:02d}",
             "current_state": "current_state",
         }
         missing = [label for label, slot in names.items() if slot not in slots]
         if missing:
             raise ContractError("scene_commit入力selectionに必須slotがありません: " + ", ".join(missing))
         return {label: slots[slot] for label, slot in names.items()}
+
+    @staticmethod
+    def _validate_quality_disposition(record: dict[str, Any]) -> None:
+        if not isinstance(record, dict) or record.get("result") not in {"accepted", "accepted_with_notice"}:
+            raise ContractError("continuity_dispositionの品質判定が不正です")
 
     @staticmethod
     def _validate_coordinate_bundle(volume: int, chapter: int, scene: int, *contents: object) -> None:

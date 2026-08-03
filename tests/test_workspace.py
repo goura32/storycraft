@@ -259,11 +259,11 @@ class WorkspaceV2Tests(unittest.TestCase):
 
             # Valid generation content per closed schema
             generation_content = {
-                "story_facts": [],
-                "character_knowledge": {},
-                "reader_disclosures": "",
+                "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
+                "character_knowledge": {"char-main": []},
+                "reader_disclosures": [],
                 "unresolved_thread_states": {},
-                "timeline_position": 0
+                "timeline_position": 0,
             }
             self._write_json(root / "generations/gen-000001/record.json", {
                 "schema_version": 1, "artifact_id": "gen-000001", "artifact_kind": "generation",

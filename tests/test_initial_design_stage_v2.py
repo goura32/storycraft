@@ -149,11 +149,15 @@ class InitialDesignStageV2Tests(unittest.TestCase):
             generation = json.loads((root / "generations/gen-000001/record.json").read_text(encoding="utf-8"))
             self.assertEqual(generation["input_selection_id"], "selection-000001")
             self.assertEqual(generation["content"], {
-                "story_facts": [],
-                "character_knowledge": {},
-                "reader_disclosures": "",
+                "story_facts": [
+                    {"fact_id": "fact-000001", "scope": "core", "value": "選択の代償"},
+                    {"fact_id": "fact-000002", "scope": "world", "value": "剣と魔法の世界"},
+                    {"fact_id": "fact-000003", "scope": "character", "subject_id": "char-000001", "value": {"name": "主人公", "role": "英雄"}},
+                ],
+                "character_knowledge": {"char-000001": []},
+                "reader_disclosures": [],
                 "unresolved_thread_states": {},
-                "timeline_position": 0
+                "timeline_position": 0,
             })
             candidate = json.loads((root / "candidates/candidate-000001/record.json").read_text(encoding="utf-8"))
             self.assertEqual(candidate["artifact_kind"], "initial-design")

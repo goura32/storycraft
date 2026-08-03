@@ -130,11 +130,11 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         
         # Valid generation content per closed schema
         generation_content = {
-            "story_facts": [],
-            "character_states": {},
-            "world_states": {},
-            "open_threads": [],
-            "last_scene_summary": ""
+            "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
+            "character_knowledge": {"char-main": []},
+            "reader_disclosures": [],
+            "unresolved_thread_states": {},
+            "timeline_position": 0,
         }
         
         records = {

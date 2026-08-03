@@ -38,6 +38,32 @@ def _validate_request_content(content: dict[str, Any], inputs: dict[str, dict[st
         raise ContractError("request content")
 
 def _validate_initial_design_content(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
+    if not isinstance(content, dict):
+        raise ContractError("initial-design content")
+    # The shipped LLM schema is the rich V1 contract.  Keep the compact
+    # fixture shape accepted by older isolated tests, but never let a rich
+    # response bypass the schema or its cross-reference rules.
+    if content.get("schema_version") == 1 and isinstance(content.get("core"), dict):
+        try:
+            jsonschema.Draft202012Validator(
+                get_template_loader().load_schema_object("generate", "initial_design")
+            ).validate(content)
+        except jsonschema.ValidationError as exc:
+            raise ContractError("initial-design content schema不正") from exc
+        cast = content["cast"]
+        cast_names = [item["name"] for item in cast]
+        thread_names = [item["name"] for item in content["unresolved_threads"]]
+        if len(cast_names) != len(set(cast_names)) or len(thread_names) != len(set(thread_names)):
+            raise ContractError("initial-design contentの名称が重複しています")
+        character_knows = content["knowledge_model"]["character_knows"]
+        if set(character_knows) != set(cast_names):
+            raise ContractError("initial-design contentの人物知識主体がcastと一致しません")
+        required_threads = {item["name"] for item in content["unresolved_threads"] if item["required_for_ending"]}
+        condition_threads = {item["thread_name"] for item in content["ending_conditions"]}
+        if condition_threads != required_threads:
+            raise ContractError("initial-design contentの結末条件が未解決事項と一致しません")
+        return
+
     required = {
         "core": str,
         "cast": list,
@@ -161,9 +187,14 @@ def _validate_scene_plan(content: dict[str, Any], inputs: dict[str, dict[str, An
 
 
 def _validate_scene_card(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    del inputs
     value = _require_object(content, "scene-card")
     _validate_schema(value, "scene-card")
+    scene_plan = inputs.get("scene_plan")
+    plan_content = scene_plan.get("content") if isinstance(scene_plan, dict) else None
+    if isinstance(plan_content, dict):
+        for field in ("pov_character_id", "participant_ids", "location_id"):
+            if value.get(field) != plan_content.get(field):
+                raise ContractError(f"scene-card {field}がscene-planと一致しません")
 
 
 def _validate_scene_prose(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
@@ -184,14 +215,25 @@ def _validate_continuity_update(content: dict[str, Any], inputs: dict[str, dict[
 def _validate_generation(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "generation")
-    if not any(key in value for key in ("story_facts", "character_states", "character_knowledge", "world_states")):
-        raise ContractError("generation content")
+    _reject_unknown(value, "generation", {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"})
+    if not isinstance(value.get("story_facts"), list) or not value["story_facts"]:
+        raise ContractError("generation story_facts")
+    if not isinstance(value.get("character_knowledge"), dict):
+        raise ContractError("generation character_knowledge")
+    if not isinstance(value.get("reader_disclosures"), list):
+        raise ContractError("generation reader_disclosures")
+    if not isinstance(value.get("unresolved_thread_states"), dict):
+        raise ContractError("generation unresolved_thread_states")
+    timeline_position = value.get("timeline_position")
+    if not isinstance(timeline_position, int) or isinstance(timeline_position, bool) or timeline_position < 0:
+        raise ContractError("generation timeline_position")
 
 
 def _validate_scene(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
     value = _require_object(content, "scene")
-    if not any(key in value for key in ("scene_prose_id", "coordinate")):
+    required = {"coordinate", "scene_prose_id", "continuity_update_id", "current_state_id", "scene_card_id", "quality_disposition_id"}
+    if set(value) != required:
         raise ContractError("scene content")
 
 

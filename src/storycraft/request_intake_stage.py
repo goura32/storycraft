@@ -14,10 +14,11 @@ from typing import Any
 from .artifact_ids import reserve_counter
 from .artifact_record import validate_record
 from .artifact_registry import artifact_directory
+from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
 from .run_state import RunStateStore
 from .selection_snapshot import validate_selection_snapshot
-from .series_contracts import ContractError
+from .series_contracts import ContractError, LLMCallError
 from .workspace import _validate_request, validate_workspace
 
 
@@ -103,10 +104,11 @@ class RequestIntakeStageService:
                     self._candidate,
                     invalid_limit,
                 )
-            except ContractError:
-                # Keep the last structurally valid candidate and accept it with
-                # the current critical review rather than blocking on a revision
-                # response that never became structurally valid.
+            except InvalidResponseLimitError:
+                if self._quality_limit(settings) != 0:
+                    raise
+                # Keep the last structurally valid candidate only for the
+                # explicitly unbounded quality policy.
                 break
             revised_id = self._reserve_directory_id("candidates", "candidate")
             revise_call = self._write_call(model, "revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
@@ -229,9 +231,11 @@ class RequestIntakeStageService:
                     begin()
             try:
                 return validator(method(*arguments))
+            except LLMCallError:
+                raise
             except ContractError as exc:
                 last_error = exc
-        raise ContractError("request_intake応答がinvalid_response_limitまで不正です") from last_error
+        raise InvalidResponseLimitError("request_intake応答がinvalid_response_limitまで不正です") from last_error
 
     def _write_call(self, model: Any, operation: str, target_candidate_id: str | None, input_refs: list[str], response: dict[str, Any], settings_id: str, updated_at: str) -> str:
         physical_id = getattr(model, "last_call_id", None)

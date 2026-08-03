@@ -44,6 +44,8 @@ publications/
 - いずれか 1 件以上で `remaining_major_issues` が非空なら `publication_notice_type = "編集"` を保存する
 - すべて空なら `publication_notice_type` キーを省略する（`null` を書かない）
 - 対象本文ごとに品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` のいずれかであることを確認する。欠落・重複・列挙外なら公開を拒否する（`publication_invalid` で `blocked`）
+- 各場面の `continuity_disposition.{coordinate}` slot にも品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` であることを確認する。継続性品質判定は本文品質判定と別に検証するが、巻全体の公開注意へ集約しない。
+- `remaining_major_issues` の非空判定は `critical` 指摘だけを対象とし、`notice` 指摘は公開注意の集約対象にしない。
 
 コードは `input_selection_id` から対象の計画・状態・場面・本文品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。公開記録には導出可能な ID 群を再保存しません。
 

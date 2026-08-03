@@ -146,6 +146,23 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
 
     slots = {"settings": "settings-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
              "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "chapter_plan.v01.c02": "chapter-plan-v01-c02-000001"}
+    # Scene records consume the selection that already contains the current
+    # generation.  The publication selection is a later child of this source
+    # selection, so publication can distinguish input state from final state.
+    generation_content = {
+        "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
+        "character_knowledge": {"char-main": []},
+        "reader_disclosures": [],
+        "unresolved_thread_states": {},
+        "timeline_position": 0,
+    }
+    write_content(root, "gen-000001", "generation", base_id, generation_content)
+    source_selection = selections.create(
+        input_selection_id=base_id,
+        slots={"settings": "settings-000001", "current_state": "gen-000001"},
+        created_at=NOW,
+    )
+    source_selection_id = source_selection["selection_id"]
     for chapter, scenes in ((1, (1, 2)), (2, (1,))):
         for scene in scenes:
             prose_id = f"scene-prose-v01-c{chapter:02d}-s{scene:02d}-000001"
@@ -153,6 +170,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
             card_id = f"scene-card-v01-c{chapter:02d}-s{scene:02d}-000001"
             continuity_id = f"continuity-v01-c{chapter:02d}-s{scene:02d}-000001"
             quality_id = f"quality-{chapter * 10 + scene:06d}"
+            continuity_quality_id = f"quality-{100 + chapter * 10 + scene:06d}"
             if not (omit_scene_source and chapter == 2 and scene == 1):
                 # Valid scene-prose content per closed schema
                 prose_content = {
@@ -168,26 +186,19 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
                 "scene_prose_id": prose_id, "scene_card_id": card_id, "continuity_update_id": continuity_id,
                 "current_state_id": "gen-000001", "quality_disposition_id": quality_id,
             }
-            write_content(root, committed_id, "scene", base_id, scene_content)
+            write_content(root, committed_id, "scene", source_selection_id, scene_content)
             prose = {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "text": f"本文 {chapter}-{scene}"}
             write_quality_audit(root, quality_id, prose, notice=(chapter == 1 and scene == 2))
+            write_quality_audit(root, continuity_quality_id, prose, notice=False)
             coordinate = f"v01.c{chapter:02d}.s{scene:02d}"
             slots[f"scene.{coordinate}"] = committed_id
             slots[f"scene_card.{coordinate}"] = card_id
             slots[f"continuity_update.{coordinate}"] = continuity_id
             slots[f"scene_prose.{coordinate}"] = prose_id
             slots[f"scene_prose_disposition.{coordinate}"] = quality_id
-    # Valid generation content per closed schema
-    generation_content = {
-        "story_facts": [],
-        "character_states": {},
-        "world_states": {},
-        "open_threads": [],
-        "last_scene_summary": ""
-    }
-    write_content(root, "gen-000001", "generation", base_id, generation_content)
+            slots[f"continuity_disposition.{coordinate}"] = continuity_quality_id
     slots["current_state"] = "gen-000001"
-    selection = selections.create(input_selection_id=base_id, slots=slots, created_at=NOW)
+    selection = selections.create(input_selection_id=source_selection_id, slots=slots, created_at=NOW)
     RunStateStore(root).save({
         "schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None,
         "current_stage": "volume_publication", "current_target": {"volume_number": 1},
@@ -198,6 +209,37 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
 
 
 class VolumePublicationServiceV2Tests(unittest.TestCase):
+    def test_publication_accepts_scene_input_state_when_current_state_has_advanced(self) -> None:
+        temporary, root = workspace()
+        self.addCleanup(temporary.cleanup)
+        state = RunStateStore(root).load()
+        current_selection_id = state["current_selection_id"]
+        current_selection = SelectionSnapshotStore(root).load(current_selection_id)
+        source_selection_id = current_selection["input_selection_id"]
+        assert isinstance(source_selection_id, str)
+        write_content(root, "gen-000002", "generation", source_selection_id, {
+            "story_facts": [{"fact_id": "fact-000001", "value": "場面後"}],
+            "character_knowledge": {"char-main": []},
+            "reader_disclosures": [],
+            "unresolved_thread_states": {},
+            "timeline_position": 1,
+        })
+        advanced = SelectionSnapshotStore(root).create(
+            input_selection_id=current_selection_id,
+            slots={**current_selection["slots"], "current_state": "gen-000002"},
+            created_at=NOW,
+        )
+        state["current_selection_id"] = advanced["selection_id"]
+        RunStateStore(root).save(state)
+
+        with patch("storycraft.volume_publication_stage.recover_pending_commit", return_value={"recovered": True}):
+            result = VolumePublicationStageService(root).run(updated_at=NOW)
+
+        self.assertEqual(result, {"recovered": True})
+        pending = RunStateStore(root).load()["pending_commit"]
+        assert isinstance(pending, dict)
+        self.assertEqual(pending["kind"], "volume_publication")
+
     def test_stages_single_publication_target_and_uses_generic_recovery(self) -> None:
         temporary, root = workspace()
         self.addCleanup(temporary.cleanup)
@@ -210,7 +252,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["kind"], "volume_publication")
         self.assertIsNone(pending["output_selection_id"])
         self.assertEqual(pending["state_update"], {
-            "current_selection_id": "selection-000002", "current_stage": "volume_plan",
+            "current_selection_id": "selection-000003", "current_stage": "volume_plan",
             "current_target": {"volume_number": 2},
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
         })
@@ -227,7 +269,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         state = VolumePublicationStageService(root).run(updated_at=NOW)
         self.assertEqual(state["current_stage"], "volume_plan")
         self.assertEqual(state["current_target"], {"volume_number": 2})
-        self.assertEqual(state["current_selection_id"], "selection-000002")
+        self.assertEqual(state["current_selection_id"], "selection-000003")
         publication = root / "publications/volume-pub-v01-000001"
         self.assertTrue(publication.is_dir())
         manuscript = (publication / "manuscript.md").read_text(encoding="utf-8")
@@ -304,7 +346,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["state_update"], {
             "status": "completed",
             "last_error": None,
-            "current_selection_id": "selection-000002",
+            "current_selection_id": "selection-000003",
             "current_stage": None,
             "current_target": None,
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],

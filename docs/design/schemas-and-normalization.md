@@ -151,14 +151,14 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 }
 ```
 
-- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（重大指摘あり、または既存の有効候補への修正中に形式不正上限到達）。初回生成・確認で有効候補がないまま形式不正上限に達したときだけ、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
+- `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（品質修正上限に達して重大指摘が残った、または `quality_revision_limit=0` の既存有効候補への修正中に形式不正上限へ達した）。正の品質修正上限で形式不正上限へ達した場合は採用せず `blocked` とする。初回生成・確認で有効候補がないまま形式不正上限に達したときも、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
+- `remaining_major_issues` は既存recordのフィールド名を維持した名称であり、意味は `ReviewResponse.issues[].severity="critical"` の残存指摘だけとする。`notice` はこの配列に入れず、`major` という第三の重要度は存在しない。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 3.4 scene ペイロード (場面確定用複合成果物)
 
 ```json
 {
-  "schema_version": 1,
   "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
   "scene_prose_id": "scene-prose-v01-c01-s01-000001",
   "continuity_update_id": "continuity-v01-c01-s01-000001",
@@ -172,7 +172,6 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 ```json
 {
-  "schema_version": 1,
   "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
   "changes": [
     {
@@ -200,13 +199,15 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
   "allowed_revelations": [],
   "required_revelations": [],
   "forbidden_revelations": [],
-  "allowed_updates": [{"target_type": "timeline_state", "target_id": "timeline", "allowed_fields": ["position"]}],
+  "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}],
   "ending_state_targets": ["変化"],
   "style_constraints": ["簡潔"]
 }
 ```
 
 `scene-card`の対象座標はpayloadに重複保持しない。対象scene slot、artifact ID、input selection、親scene-planのselection lineageで一意に束縛する。`pov_character_id`、`participant_ids`、`location_id`、`story_time`、状態、beats、開示制約、許可更新、終了状態、文体制約はすべてLLMが返し、正本JSON Schemaで検証する。
+
+`scene-plan` は場面の意図（目的、開始条件、予定する展開・開示・変化）を所有し、`scene-card` はそれを本文用の局所制約（opening state、beats、許可更新、終了状態、文体）へ具体化する。`pov_character_id`、`participant_ids`、`location_id` は計画の束縛をそのまま引き継ぐ識別項目であり、両者が異なる場合は形式不正とする。`purpose` は計画の目的をカード向けに具体化した表現で、別の物語目的を追加してはならない。両成果物は独立した正本ではなく、scene-planが意図、scene-cardが実行制約をそれぞれ一度だけ所有する。
 
 ### 3.7 call record（呼出し記録）
 

@@ -85,6 +85,31 @@ class SelectionAuthorityTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             DEFAULT_CONTENT_VALIDATORS["chapter-plan"](chapter, {})
 
+    def test_accepts_the_shipped_rich_initial_design_schema_and_cross_references(self) -> None:
+        initial_design = {
+            "schema_version": 1,
+            "core": {
+                "logline": "選択の代償",
+                "premise": "主人公が選択の結果を引き受ける",
+                "central_question": "何を守るのか",
+                "themes": ["選択"],
+                "dramatic_engine": "選択の結果が次の障害を生む",
+                "tone": ["希望"],
+                "reader_promise": "人物の選択が結末を変える",
+                "ending_direction": "責任を引き受ける",
+            },
+            "cast": [{"name": "主人公", "role": "英雄", "description": "選択を迫られる", "relationships": []}],
+            "world": {"settings": ["剣と魔法"], "constraints": ["契約を破れない"], "institutions": ["王国"]},
+            "knowledge_model": {
+                "author_knows": ["主人公の秘密"],
+                "character_knows": {"主人公": ["自分の目的"]},
+                "reader_knows": ["主人公の目的"],
+            },
+            "unresolved_threads": [{"name": "塔の試練", "type": "goal", "required_for_ending": True, "description": "塔を登頂する"}],
+            "ending_conditions": [{"thread_name": "塔の試練", "condition": "塔を登頂する"}],
+        }
+        DEFAULT_CONTENT_VALIDATORS["initial-design"](initial_design, {})
+
     def test_default_resolver_registers_every_selected_content_kind(self) -> None:
         self.assertEqual(
             set(DEFAULT_CONTENT_VALIDATORS),

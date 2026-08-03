@@ -116,7 +116,7 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     scene_card_content = {
         "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始",
         "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [],
-        "allowed_updates": [{"target_type": "timeline_state", "target_id": "timeline", "allowed_fields": ["position"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]
+        "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]
     }
     
     # Valid scene-prose content per closed schema
@@ -133,11 +133,11 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     
     # Valid generation content per closed schema
     generation_content = {
-        "story_facts": [],
-        "character_knowledge": {},
-        "reader_disclosures": {},
-        "unresolved_thread_states": [],
-        "timeline_position": 0
+        "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
+        "character_knowledge": {"char-main": []},
+        "reader_disclosures": [],
+        "unresolved_thread_states": {},
+        "timeline_position": 0,
     }
     
     records = [
@@ -161,6 +161,7 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001",
         "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
         "scene_prose_disposition.v01.c01.s01": "quality-000001", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001",
+        "continuity_disposition.v01.c01.s01": "quality-000002",
         "current_state": "gen-000001",
     })
     RunStateStore(root).save({

@@ -23,7 +23,8 @@ class PromptTemplate:
         self.env.policies["json.dumps_function"] = json.dumps
         self.env.policies["json.dumps_kwargs"] = {
             "ensure_ascii": False,
-            "indent": 2,
+            "sort_keys": True,
+            "separators": (",", ":"),
         }
         # Schemaは読み取り専用として共有する。
         # 呼び出し側で変更してはならない。

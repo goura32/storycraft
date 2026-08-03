@@ -48,11 +48,11 @@ def workspace(root: Path, *, stage: str = "series_plan") -> None:
     })
     # Valid generation content per closed schema
     generation_content = {
-        "story_facts": [],
-        "character_states": {},
-        "world_states": {},
-        "open_threads": [],
-        "last_scene_summary": ""
+        "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
+        "character_knowledge": {"char-main": []},
+        "reader_disclosures": [],
+        "unresolved_thread_states": {},
+        "timeline_position": 0,
     }
     write_json(root / "design/scene-cards/scene-card-v01-c01-s01/record.json", {
         "schema_version": 1, "artifact_id": "scene-card-v01-c01-s01", "artifact_kind": "scene-card",
@@ -186,6 +186,21 @@ class CandidateStageTests(unittest.TestCase):
             self.assertEqual(quality["result"], "accepted_with_notice")
             self.assertEqual(quality["notice_type"], "編集")
             self.assertEqual(result["current_stage"], "volume_plan")
+
+    def test_finite_quality_limit_blocks_when_revision_never_becomes_structurally_valid(self) -> None:
+        from storycraft.candidate_stage import InvalidResponseLimitError
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace(root)
+            critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volume_summaries"], "explanation": "直す"}]}
+            model = FakeModel(root, [critical])
+            with patch.object(model, "revise", return_value={}) as revise:
+                with self.assertRaises(InvalidResponseLimitError):
+                    CandidateStageRunner(root, spec()).run(model, context={}, updated_at=NOW)
+
+            self.assertEqual(revise.call_count, 5)
+            self.assertFalse((root / "runtime/adoptions/adoption-000001/record.json").exists())
 
     def test_provider_format_errors_use_invalid_response_retry_limit_not_transport_retry(self) -> None:
         from storycraft.candidate_stage import InvalidResponseLimitError

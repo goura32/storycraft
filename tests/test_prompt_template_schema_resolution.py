@@ -74,6 +74,12 @@ class PromptTemplateSchemaResolutionTests(
                 },
             )
 
+    def test_tojson_uses_one_canonical_utf8_json_form(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            loader = self.create_loader(temporary)
+            rendered = loader.env.from_string("{{ value | tojson }}").render(value={"b": 1, "a": "日本語"})
+            self.assertEqual(rendered, '{"a":"日本語","b":1}')
+
 
 if __name__ == "__main__":
     unittest.main()

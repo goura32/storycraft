@@ -3,15 +3,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from copy import deepcopy
 from typing import Any
 
 from .artifact_ids import reserve_counter
+from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
 from .llm_responses import review_response
 from .run_state import RunStateStore
 from .selection_authority import resolve_selection, _validate_initial_design_content
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
-from .series_contracts import ContractError
+from .series_contracts import ContractError, LLMCallError
 from .workspace import validate_workspace
 
 
@@ -83,9 +85,11 @@ class InitialDesignStageService:
                         begin()
                 try:
                     return validator(getattr(model, operation)(*arguments))
+                except LLMCallError:
+                    raise
                 except ContractError as exc:
                     last_error = exc
-            raise ContractError(f"initial_design {operation}がinvalid_response_limitまで不正です") from last_error
+            raise InvalidResponseLimitError(f"initial_design {operation}がinvalid_response_limitまで不正です") from last_error
 
         def bind_call(input_refs: list[str], target_candidate_id: str | None = None) -> None:
             setter = getattr(model, "set_call_context", None)
@@ -150,10 +154,11 @@ class InitialDesignStageService:
             bind_call([input_selection_id, candidate_id, review_id], candidate_id)
             try:
                 revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
-            except ContractError:
-                # The current candidate is already structurally valid.  A failed
-                # revision must not discard it; retain it with the current critical
-                # review as an accepted-with-notice result.
+            except InvalidResponseLimitError:
+                if quality_limit != 0:
+                    raise
+                # An unbounded quality loop may retain the last structurally
+                # valid candidate when a revision never becomes valid.
                 break
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call_id = self._call_id(model, "revise")
@@ -203,13 +208,7 @@ class InitialDesignStageService:
                 "schema_version": 1, "artifact_id": generation_id,
                 "artifact_kind": "generation", "input_selection_id": input_selection_id,
                 "created_at": updated_at,
-                "content": {
-                    "story_facts": [],
-                    "character_knowledge": {},
-                    "reader_disclosures": "",
-                    "unresolved_thread_states": {},
-                    "timeline_position": 0
-                },
+                "content": self._build_initial_state(content),
             },
             f"{staging_root}/{adoption_id}": {
                 "schema_version": 1, "adoption_id": adoption_id, "source_kind": "candidate",
@@ -253,6 +252,55 @@ class InitialDesignStageService:
         }
         self.state_store.save(working)
         return recover_pending_commit(self.workspace_root)
+
+    @staticmethod
+    def _build_initial_state(content: dict[str, Any]) -> dict[str, Any]:
+        """Construct the first current-state payload from adopted design intent."""
+        core = content["core"]
+        world = content["world"]
+        facts: list[dict[str, Any]] = [
+            {"fact_id": "fact-000001", "scope": "core", "value": deepcopy(core)},
+            {"fact_id": "fact-000002", "scope": "world", "value": deepcopy(world)},
+        ]
+        cast = content["cast"]
+        knowledge_model = content.get("knowledge_model")
+        character_knows = knowledge_model.get("character_knows", {}) if isinstance(knowledge_model, dict) else {}
+        character_knowledge: dict[str, Any] = {}
+        for index, person in enumerate(cast, start=1):
+            character_id = f"char-{index:06d}"
+            name = person.get("name") if isinstance(person, dict) else None
+            public_knowledge = character_knows.get(name, []) if isinstance(character_knows, dict) else []
+            if not isinstance(public_knowledge, list):
+                public_knowledge = []
+            character_knowledge[character_id] = deepcopy(public_knowledge)
+            facts.append({
+                "fact_id": f"fact-{index + 2:06d}",
+                "scope": "character",
+                "subject_id": character_id,
+                "value": deepcopy(person),
+            })
+
+        thread_states: dict[str, Any] = {}
+        for index, thread in enumerate(content["unresolved_threads"], start=1):
+            thread_id = f"thread-{index:06d}"
+            if isinstance(thread, dict):
+                description = thread.get("description", "")
+                required_for_ending = bool(thread.get("required_for_ending", False))
+            else:
+                description = str(thread)
+                required_for_ending = False
+            thread_states[thread_id] = {
+                "status": "open",
+                "description": description,
+                "required_for_ending": required_for_ending,
+            }
+        return {
+            "story_facts": facts,
+            "character_knowledge": character_knowledge,
+            "reader_disclosures": [],
+            "unresolved_thread_states": thread_states,
+            "timeline_position": 0,
+        }
 
     def _target(self, artifact_id: str, artifact_kind: str, staging_root: str) -> dict[str, str]:
         final_roots = {

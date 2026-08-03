@@ -122,12 +122,11 @@
           "target_type": {
             "type": "string",
             "enum": [
-              "character_state",
-              "relationship_state",
-              "thread_state",
-              "timeline_state",
-              "inventory_state",
-              "commitment_state"
+              "story_facts",
+              "character_knowledge",
+              "reader_disclosures",
+              "unresolved_thread_states",
+              "timeline_position"
             ]
           },
           "target_id": {

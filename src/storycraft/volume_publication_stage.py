@@ -161,10 +161,13 @@ class VolumePublicationStageService:
                 committed = self._slot(slots, f"scene.{coordinate}")
                 prose = self._slot(slots, f"scene_prose.{coordinate}")
                 quality = self._slot(slots, f"scene_prose_disposition.{coordinate}")
+                continuity_quality = self._slot(slots, f"continuity_disposition.{coordinate}")
                 scene_card = self._slot(slots, f"scene_card.{coordinate}")
                 continuity = self._slot(slots, f"continuity_update.{coordinate}")
-                current_state = self._slot(slots, "current_state")
-                self._validate_committed_source(committed, prose, quality, scene_card, continuity, current_state, volume, chapter, scene)
+                self._validate_quality_record(quality, "scene_prose_disposition")
+                self._validate_quality_record(continuity_quality, "continuity_disposition")
+                source_state_id = self._committed_input_state_id(committed)
+                self._validate_committed_source(committed, prose, quality, scene_card, continuity, source_state_id, volume, chapter, scene)
                 scene_ids.append(self._record_id(committed, "artifact_id"))
                 quality_ids.append(self._record_id(quality, "quality_id"))
                 prose_content = prose["content"]
@@ -219,10 +222,29 @@ class VolumePublicationStageService:
             raise ContractError("巻公開selectionのseries plan巻集合が不正です")
         return len(numbers)
 
+    def _committed_input_state_id(self, committed: dict[str, Any]) -> str:
+        """Return the state selected when this scene was generated."""
+        input_selection_id = committed.get("input_selection_id")
+        if not isinstance(input_selection_id, str):
+            raise ContractError("巻公開の確定場面に入力selectionがありません")
+        try:
+            snapshot = SelectionSnapshotStore(self.workspace_root).load(input_selection_id)
+        except ContractError as exc:
+            raise ContractError("巻公開の確定場面入力selectionを読めません") from exc
+        state_id = snapshot["slots"].get("current_state")
+        if not isinstance(state_id, str) or not state_id:
+            raise ContractError("巻公開の確定場面入力selectionにcurrent_stateがありません")
+        return state_id
+
+    @staticmethod
+    def _validate_quality_record(record: dict[str, Any], slot_name: str) -> None:
+        if not isinstance(record, dict) or record.get("result") not in {"accepted", "accepted_with_notice"}:
+            raise ContractError(f"{slot_name}の品質判定が不正です")
+
     @staticmethod
     def _validate_committed_source(
         committed: dict[str, Any], prose: dict[str, Any], quality: dict[str, Any],
-        scene_card: dict[str, Any], continuity: dict[str, Any], current_state: dict[str, Any],
+        scene_card: dict[str, Any], continuity: dict[str, Any], scene_input_state_id: str,
         volume: int, chapter: int, scene: int,
     ) -> None:
         coordinate = {"volume_number": volume, "chapter_number": chapter, "scene_number": scene}
@@ -235,7 +257,7 @@ class VolumePublicationStageService:
             or committed_content.get("scene_prose_id") != prose.get("artifact_id")
             or committed_content.get("scene_card_id") != scene_card.get("artifact_id")
             or committed_content.get("continuity_update_id") != continuity.get("artifact_id")
-            or committed_content.get("current_state_id") != current_state.get("artifact_id")
+            or committed_content.get("current_state_id") != scene_input_state_id
             or committed_content.get("quality_disposition_id") != quality.get("quality_id")
             or not isinstance(prose_content.get("text"), str) or not prose_content["text"].strip()
         ):

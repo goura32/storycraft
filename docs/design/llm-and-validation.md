@@ -19,7 +19,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 ### 1.3 QualityLoop.run_stage 契約（仕様レベル）
 
-生成・決定的検証・確認を行い、重大な指摘があれば修正・再確認を繰り返します。品質修正上限到達時は注意付き採用とします。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合は注意付き採用とします。実装詳細はコード側で定義し、契約には「重大/注意の二段階」「上限 0以上」「`invalid_response_limit`」を記述します。
+生成・決定的検証・確認を行い、重大な指摘があれば修正・再確認を繰り返します。品質修正上限到達時は注意付き採用とします。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、正の `quality_revision_limit` の修正中は `blocked`、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合は注意付き採用とします。`quality_revision_limit=0` はV1で意図的に無制限の品質修正を選ぶ設定であり、時間・費用・LLM呼出し数による自動停止やキャンセル状態は設けません。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
@@ -55,7 +55,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 修正 | **同じ `generation_context` + 現在の `candidate_response` + 有効な `review_response`** |
 | 再確認 | **同じ `generation_context` + 修正後 `candidate_response`** |
 
-`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約が列挙する必須入力スロットの順番で、各 slot の採用成果物を **決定的 JSON 形式（キー昇順、空白なし、ASCII エスケープ）または本文では UTF-8 文字列として連結** して作る。工程契約が明示参照を列挙する場合は、slot 名と成果物 ID をその後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。無効な根拠位置は除外して修正入力に渡します。`issues`、`explanation`、`evidence_locations` に人工的な件数・長さ上限は設けず、選択モデルの最大コンテキスト内で要求全体を送ります。
+`request_intake` だけは selection 前の例外です。`generation_context` は不変 `keywords` と不変 `settings` をこの順で用い、他の工程と同じ生成・確認・修正の入力規則を適用します。その他の工程では工程契約が列挙する必須入力スロットの順番で、各 slot の採用成果物を **canonical JSON（UTF-8、`ensure_ascii=false`、`sort_keys=true`、`separators=(",", ":")`）として**作る。工程契約が明示参照を列挙する場合は、slot 名と成果物 ID をその後に同じ形式で加える。生成・確認・修正は、その時点で必要な context、候補、確認応答、system/user 指示文、応答schema、固定メタデータを省略せず送る。2回目以降の確認は前回の修正出力 `candidate(r)` を必ず含み、2回目以降の修正は前回の修正出力 `candidate(r)` と今回の確認出力 `review(r)` を必ず含む。初回生成 `candidate(0)` や過去の確認を、直前候補・今回確認の代わりに使わない。無効な根拠位置は除外して修正入力に渡します。`issues`、`explanation`、`evidence_locations` に人工的な件数・長さ上限は設けず、選択モデルの最大コンテキスト内で要求全体を送ります。slot、candidate、reviewはテンプレートで定めた別々のJSON値として固定位置に置き、値同士を区切り文字で連結しません。system messageとuser messageの境界、各ラベル、候補・確認の配置はテンプレートを正本とし、再確認・改稿でも同じ境界を使います。
 
 ```text
 生成(generation_context) → 決定的検証 → 確認(generation_context + candidate)
