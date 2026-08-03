@@ -62,6 +62,7 @@ class CaptureClient:
         return SimpleNamespace(
             error=None,
             content='{"value": "ok"}',
+            call_id="call-test",
         )
 
     def save_raw(
@@ -91,6 +92,53 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertIn("brief-title", revise_prompt)
         self.assertIn("current-candidate", revise_prompt)
         self.assertIn("fix-this", revise_prompt)
+
+    def test_legacy_revision_alias_uses_canonical_revise_prompt(self) -> None:
+        model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+        client = CaptureClient()
+        setattr(model, "client", client)
+        model._seed_sequence = 0
+
+        actual = model.revision(
+            "initial_design",
+            {"core": {"logline": "current-candidate"}},
+            {"decision": "issues", "issues": []},
+            {"request": {"title": "brief-title"}},
+        )
+
+        self.assertEqual(actual, {"value": "ok"})
+        self.assertEqual(client.calls[0]["messages"][2]["__kind"], "revise")
+        self.assertIn("current-candidate", client.calls[0]["messages"][1]["content"])
+        self.assertIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
+        legacy_prompt = OpenAIStoryModel._render(
+            "revision",
+            "initial_design",
+            candidate={"core": {"logline": "legacy-candidate"}},
+            critique={"decision": "issues", "issues": []},
+            context={"request": {"title": "legacy-title"}},
+        )
+        self.assertNotIn("{{", legacy_prompt)
+        self.assertIn("legacy-candidate", legacy_prompt)
+        self.assertIn("candidate-response-v1", legacy_prompt)
+
+    def test_prose_revision_uses_raw_text_fix_template(self) -> None:
+        model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+        client = CaptureClient()
+        setattr(model, "client", client)
+        model._seed_sequence = 0
+
+        actual = model.revision_prose(
+            "scene_prose",
+            "本文候補",
+            {"decision": "issues", "issues": []},
+            {"scene": {"id": "scene-000001"}},
+        )
+
+        self.assertEqual(actual, '{"value": "ok"}')
+        self.assertIsNone(client.calls[0]["response_format"])
+        self.assertEqual(client.calls[0]["messages"][2]["__kind"], "revise")
+        self.assertIn("本文候補", client.calls[0]["messages"][1]["content"])
+        self.assertIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
 
     def test_every_public_llm_stage_has_all_v2_templates_and_a_candidate_schema(self) -> None:
         self.assertIn("request_intake", ACTIVE_TEMPLATE_STAGES)

@@ -54,7 +54,8 @@ class OpenAIStoryModel:
         return self._call("critique", stage, self._render("critique", stage, candidate=candidate, context=context))
 
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-        return self._call("revision", stage, self._render("revision", stage, candidate=candidate, critique=critique, context=context))
+        # Keep the legacy method name as an alias to the canonical V2 operation.
+        return self.revise(stage, context, candidate, critique)
 
     # CandidateStage is the public V2 workflow surface.  Keep the older names for
     # V1 callers, but make the V2 protocol explicit rather than asking adapters to
@@ -102,10 +103,10 @@ class OpenAIStoryModel:
         context: dict[str, Any],
     ) -> str:
         return self._call_text(
-            "revision",
+            "revise",
             stage,
             self._render(
-                "revision",
+                "revise",
                 stage,
                 candidate=candidate,
                 critique=critique,
@@ -119,9 +120,14 @@ class OpenAIStoryModel:
         if stage not in ACTIVE_TEMPLATE_STAGES:
             raise ContractError(f"未知の生成工程です: {stage}")
         loader = get_template_loader()
-        template_kind = {"review": "critique", "revise": "fix"}.get(kind, kind)
-        output_schema = json.dumps(OpenAIStoryModel._response_schema(kind, stage), ensure_ascii=False, indent=2)
-        return loader.render_user(template_kind, stage, stage=stage, output_schema=output_schema, **kwargs)
+        template_kind = {
+            "review": "critique",
+            "revise": "fix",
+            "revision": "fix",
+        }.get(kind, kind)
+        schema_kind = "revise" if kind == "revision" else kind
+        output_schema = json.dumps(OpenAIStoryModel._response_schema(schema_kind, stage), ensure_ascii=False, indent=2)
+        return loader.render_user(template_kind, stage, output_schema=output_schema, **kwargs)
 
     def render_system(self, response_mode: str = "json") -> str:
         """応答形式に対応するシステムプロンプトを描画する。"""

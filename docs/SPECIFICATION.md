@@ -132,6 +132,8 @@ flowchart TD
 
 システムプロンプトは単一の共通ファイル（`system/common.j2`）を使用します。確認用スキーマは共通（`critique.json`）を使用します。修正用スキーマは生成用スキーマと同一です（再利用）。ユーザープロンプトは各工程ごとに `generate_{stage}.j2`、`critique_{stage}.j2`、`fix_{stage}.j2` を持ちます。スキーマは `{stage}.json`（各工程分）と共通の `critique.json`、修正は生成スキーマを再利用します。
 
+各テンプレートのJinjaプレースホルダーは、対応するLLM呼出しが宣言された全root値（`context`、必要な`candidate`・`critique`、`output_schema`、system用の`response_mode`）を必ず供給します。未定義値は空文字へ補完せず、テンプレートrenderをfail-closedで失敗させます。render後にJinjaトークンを残してLLMへ送ってはなりません。構造化値はテンプレートのJSON位置へcanonical JSONとして置き、場面本文の`candidate`だけはraw text transportとして置きます。
+
 ## 7. 入力範囲と秘密
 各 LLM 操作には、必要な根拠だけを読み取り用入力として渡します。これは正本ではありません。作者用情報、人物が知る情報、読者に開示済みの情報を区別します。本文を書く LLM には、視点外の秘密や未許可の開示を渡さず、LLM 提供者へ認証情報を渡しません。
 

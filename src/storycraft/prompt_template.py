@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 
 class PromptTemplate:
@@ -16,6 +16,7 @@ class PromptTemplate:
         self.env = Environment(
             loader=FileSystemLoader(str(template_dir)),
             autoescape=False,
+            undefined=StrictUndefined,
             trim_blocks=True,
             lstrip_blocks=True,
         )
