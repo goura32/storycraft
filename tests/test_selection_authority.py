@@ -35,6 +35,12 @@ class SelectionAuthorityTests(unittest.TestCase):
         bad = json.loads(json.dumps(review).replace("prose:3", "prose:1"))
         with self.assertRaises(ContractError):
             CandidateStageRunner._review_with_evidence(bad, {"text": "本文"})
+        legacy = json.loads(json.dumps(review).replace("prose:3", "offset:0"))
+        with self.assertRaises(ContractError):
+            CandidateStageRunner._review_with_evidence(legacy, {"text": "本文"})
+        bare_field = json.loads(json.dumps(review).replace("prose:3", "text"))
+        with self.assertRaises(ContractError):
+            CandidateStageRunner._review_with_evidence(bare_field, {"text": "本文"})
         paragraph_review = {
             "schema_version": "review-response-v1", "decision": "issues",
             "issues": [{"severity": "notice", "evidence_locations": ["paragraph:1"], "explanation": "n"}],

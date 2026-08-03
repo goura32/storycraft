@@ -4112,11 +4112,16 @@ class ContractValidator:
             raise ContractError("批評の issues が配列ではありません")
         if (value["decision"] == "pass") != (not value["issues"]):
             raise ContractError("批評decisionとissuesが一致しません")
+        # Import lazily to avoid the review-contracts -> ContractError
+        # dependency becoming a module-import cycle.
+        from .review_contracts import evidence_location_kind
         for issue in value["issues"]:
             if not isinstance(issue, dict) or issue.get("severity") not in {"critical", "notice"}:
                 raise ContractError("批評 issue が不正です")
             if set(issue) != {"severity", "evidence_locations", "explanation"} or not isinstance(issue.get("evidence_locations"), list) or not issue["evidence_locations"] or not isinstance(issue.get("explanation"), str) or not issue["explanation"].strip():
                 raise ContractError("批評 issue のevidence_locations/explanationが不正です")
+            for location in issue["evidence_locations"]:
+                evidence_location_kind(location)
 
     @staticmethod
     def _require(value: Any, *fields: str) -> None:

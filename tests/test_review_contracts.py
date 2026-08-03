@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from storycraft.review_contracts import (
+    evidence_location_kind,
     field_tokens,
     validate_critique_fields,
     validate_revision_scope,
@@ -11,6 +12,22 @@ from storycraft.series_contracts import ContractError
 
 
 class ReviewContractsTest(unittest.TestCase):
+    def test_evidence_location_is_closed_to_canonical_forms(self) -> None:
+        self.assertEqual(evidence_location_kind("$.text"), "json")
+        self.assertEqual(evidence_location_kind("prose:0"), "prose")
+        self.assertEqual(evidence_location_kind("paragraph:0"), "paragraph")
+        for location in ("text", "offset:0", "$.", "$.text.", "prose:-1", "paragraph:x"):
+            with self.subTest(location=location):
+                with self.assertRaises(ContractError):
+                    evidence_location_kind(location)
+
+    def test_critique_rejects_bare_evidence_field(self) -> None:
+        with self.assertRaises(ContractError):
+            validate_critique_fields(
+                {"issues": [{"evidence_locations": ["text"]}]},
+                {"text": "本文"},
+            )
+
     def test_field_tokens_supports_index_and_quoted_key(
         self,
     ) -> None:

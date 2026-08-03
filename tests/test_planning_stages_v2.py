@@ -14,6 +14,7 @@ from storycraft.run_state import RunStateStore
 from storycraft.scene_card_stage import SceneCardStageService
 from storycraft.scene_plan_stage import ScenePlanStageService
 from storycraft.selection_snapshot import SelectionSnapshotStore
+from storycraft.series_contracts import ContractError
 from storycraft.series_plan_stage import SeriesPlanStageService
 from storycraft.volume_plan_stage import VolumePlanStageService
 from storycraft.workspace import validate_workspace
@@ -217,7 +218,6 @@ class PlanningStagesV2Tests(unittest.TestCase):
                 "current_state": "generation",
                 "initial_design_adoption": "adoption",
                 "scene_plan_adoption": "adoption",
-                "prior_volume_plan": "volume-plan",
             }
             kind = slot_to_kind.get(prefix)
             if kind is None:
@@ -269,7 +269,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
 
         slot_kinds = {
             "request": "request", "settings": "settings", "initial_design": "initial-design", "current_state": "generation",
-            "series_plan": "series-plan", "volume_plan": "volume-plan", "prior_volume_plan": "volume-plan", "chapter_plan": "chapter-plan",
+            "series_plan": "series-plan", "volume_plan": "volume-plan", "chapter_plan": "chapter-plan",
             "initial_design_adoption": "adoption",
         }
         parent_slots = {
@@ -306,7 +306,11 @@ class PlanningStagesV2Tests(unittest.TestCase):
             "current_target": target,
             "current_selection_id": selection["selection_id"],
             "pending_commit": None,
-            "published_volumes": [],
+            "published_volumes": (
+                [{"volume_number": number, "publication_id": f"volume-pub-v{number:02d}-000001"}
+                 for number in range(1, target.get("volume_number", 1))]
+                if stage == "volume_plan" else []
+            ),
             "created_at": NOW,
             "updated_at": NOW
         })
@@ -366,12 +370,67 @@ class PlanningStagesV2Tests(unittest.TestCase):
                 "settings": "settings-000001",
                 "current_state": "gen-000001",
                 "series_plan": "series-plan-000001",
-                "prior_volume_plan": "volume-plan-v02-000001"
+                "volume_plan.v02": "volume-plan-v02-000001"
             },
             expected_context_keys={"settings", "current_state", "series_plan", "prior_volume_plan", "volume_number"},
             next_stage="chapter_plan", next_target={"volume_number": 3, "chapter_number": 1},
             expected_id="volume-plan-v03-000001", staged_only=True
         )
+
+    def test_volume_plan_rejects_a_target_that_skips_unpublished_volumes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._workspace(
+                root,
+                stage="volume_plan",
+                target={"volume_number": 3},
+                slots={
+                    "settings": "settings-000001",
+                    "current_state": "gen-000001",
+                    "series_plan": "series-plan-000001",
+                    "volume_plan.v02": "volume-plan-v02-000001",
+                },
+            )
+            state = RunStateStore(root).load()
+            state["published_volumes"] = []
+            RunStateStore(root).save(state)
+            with self.assertRaisesRegex(ContractError, "公開済み巻"):
+                VolumePlanStageService(root).run(None, workspace_already_validated=True, updated_at=NOW)
+
+    def test_volume_plan_rejects_a_prior_plan_with_the_wrong_coordinate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._workspace(
+                root,
+                stage="volume_plan",
+                target={"volume_number": 3},
+                slots={
+                    "settings": "settings-000001",
+                    "current_state": "gen-000001",
+                    "series_plan": "series-plan-000001",
+                    "volume_plan.v02": "volume-plan-v03-000001",
+                },
+            )
+            with self.assertRaisesRegex(ContractError, "selection slot"):
+                VolumePlanStageService(root).run(None, workspace_already_validated=True, updated_at=NOW)
+
+    def test_volume_plan_rejects_regeneration_when_target_slot_is_already_present(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._workspace(
+                root,
+                stage="volume_plan",
+                target={"volume_number": 3},
+                slots={
+                    "settings": "settings-000001",
+                    "current_state": "gen-000001",
+                    "series_plan": "series-plan-000001",
+                    "volume_plan.v02": "volume-plan-v02-000001",
+                    "volume_plan.v03": "volume-plan-v03-000001",
+                },
+            )
+            with self.assertRaisesRegex(ContractError, "既にselection"):
+                VolumePlanStageService(root).run(None, workspace_already_validated=True, updated_at=NOW)
 
     def test_chapter_plan_uses_current_bundle_and_coordinate(self) -> None:
         self._assert_stage(

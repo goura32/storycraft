@@ -19,7 +19,7 @@ from .commit_recovery import recover_pending_commit
 from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
-from .review_contracts import field_tokens
+from .review_contracts import evidence_location_kind, field_tokens
 
 
 class InvalidResponseLimitError(ContractError):
@@ -231,9 +231,8 @@ class CandidateStageRunner:
         review = cls._review(value)
         for issue in review["issues"]:
             for location in issue["evidence_locations"]:
-                if not isinstance(location, str) or not location:
-                    raise ContractError("review evidence_locationsが不正です")
-                if location.startswith(("prose:", "offset:")):
+                kind = evidence_location_kind(location)
+                if kind == "prose":
                     try:
                         offset = int(location.split(":", 1)[1])
                     except ValueError as exc:
@@ -248,7 +247,7 @@ class CandidateStageRunner:
                         encoded[:offset].decode("utf-8")
                     except UnicodeDecodeError as exc:
                         raise ContractError("review prose offsetがUTF-8文字境界ではありません") from exc
-                elif location.startswith("paragraph:"):
+                elif kind == "paragraph":
                     try:
                         paragraph = int(location.split(":", 1)[1])
                     except ValueError as exc:

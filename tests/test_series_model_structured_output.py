@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from jsonschema import Draft202012Validator
+
 from storycraft.series_model import OpenAIStoryModel
 from storycraft.stages import ACTIVE_TEMPLATE_STAGES
 
@@ -139,24 +141,19 @@ class StructuredOutputTests(unittest.TestCase):
     def test_scene_prose_critique_uses_closed_review_wrapper(
         self,
     ) -> None:
-        with patch(
-            "storycraft.series_model."
-            "get_template_loader",
-            side_effect=AssertionError(
-                "scene_prose critiqueで"
-                "Schemaを読み込みました"
-            ),
-        ):
-            actual = (
-                OpenAIStoryModel
-                ._response_format(
-                    "critique",
-                    "scene_prose",
-                )
-            )
+        actual = OpenAIStoryModel._response_format("critique", "scene_prose")
 
         self.assertEqual(actual["type"], "json_schema")
-        self.assertEqual(actual["json_schema"]["schema"]["properties"]["schema_version"], {"const": "review-response-v1"})
+        schema = actual["json_schema"]["schema"]
+        self.assertEqual(schema["properties"]["schema_version"], {"const": "review-response-v1"})
+        validator = Draft202012Validator(schema)
+        base = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "notice", "explanation": "n", "evidence_locations": []}]}
+        for location in ("prose:0", "paragraph:0", "$.text"):
+            value = {**base, "issues": [{**base["issues"][0], "evidence_locations": [location]}]}
+            self.assertEqual(list(validator.iter_errors(value)), [], location)
+        for location in ("offset:0", "text"):
+            value = {**base, "issues": [{**base["issues"][0], "evidence_locations": [location]}]}
+            self.assertTrue(list(validator.iter_errors(value)), location)
 
     def test_call_forwards_stage_schema_to_client(
         self,

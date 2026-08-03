@@ -12,6 +12,20 @@ FieldToken = str | int
 FieldPath = tuple[FieldToken, ...]
 
 
+def evidence_location_kind(location: object) -> str:
+    """Return the closed evidence-location form used by review-response-v1."""
+    if not isinstance(location, str) or not location:
+        raise ContractError("批評 issue の evidence_locations が不正です")
+    if re.fullmatch(r"prose:[0-9]+", location):
+        return "prose"
+    if re.fullmatch(r"paragraph:[0-9]+", location):
+        return "paragraph"
+    if location.startswith("$.") and len(location) > 2:
+        field_tokens(location)
+        return "json"
+    raise ContractError("批評 issue の evidence_locations が不正です")
+
+
 def field_tokens(field: str) -> FieldPath:
     """Review fieldをCandidate内のpathへ変換する。"""
     if field.startswith("$."):
@@ -66,6 +80,10 @@ def field_tokens(field: str) -> FieldPath:
             and field[position] == "."
         ):
             position += 1
+            if position == len(field):
+                raise ContractError(
+                    "批評 issue の field パスが不正です"
+                )
         elif (
             position < len(field)
             and field[position] != "["
@@ -84,8 +102,25 @@ def validate_critique_fields(
     """JSON path evidence locationsがCandidate内を指すことを検証する。"""
     for issue in critique["issues"]:
         locations = issue.get("evidence_locations", [])
-        json_locations = [location for location in locations if isinstance(location, str) and location.startswith("$")]
-        for location in json_locations:
+        for location in locations:
+            kind = evidence_location_kind(location)
+            if kind != "json":
+                text = candidate.get("text")
+                if kind == "prose":
+                    if not isinstance(text, str):
+                        raise ContractError("批評 issue の prose evidenceが候補を指しません")
+                    offset = int(location.split(":", 1)[1])
+                    encoded = text.encode("utf-8")
+                    if not 0 <= offset < len(encoded):
+                        raise ContractError("批評 issue の prose evidenceが候補を指しません")
+                    try:
+                        encoded[:offset].decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise ContractError("批評 issue の prose evidenceが文字境界ではありません") from exc
+                else:
+                    if not isinstance(text, str) or not 0 <= int(location.split(":", 1)[1]) < len(text.split("\n\n")):
+                        raise ContractError("批評 issue の paragraph evidenceが候補を指しません")
+                continue
             value: Any = candidate
             for token in field_tokens(location):
                 if isinstance(value, dict) and isinstance(token, str) and token in value:

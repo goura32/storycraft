@@ -113,11 +113,10 @@ def validate_artifact_reference(artifact_kind: object, artifact_id: object, slot
         ) is None:
             raise ContractError("adoptionのslotが不正です")
         return
-    # Special sentinel slots that don't match the canonical pattern but are valid for this kind.
-    special_sentinels: dict[str, set[str]] = {
-        "volume-plan": {"prior_volume_plan"},
-        "generation": {"current_state"},
-    }
+    # `current_state` is the only non-canonical content slot.  Prior volume
+    # plans are addressed by their canonical `volume_plan.vNN` slot and are
+    # never duplicated under a sentinel alias.
+    special_sentinels: dict[str, set[str]] = {"generation": {"current_state"}}
     expected = spec.slot_for(artifact_id)
     if not isinstance(slot, str):
         raise ContractError("artifact_kind、artifact_id、slotが一致しません")

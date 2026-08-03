@@ -95,20 +95,12 @@ class SceneCommitStageService:
             "scene_number": scene_number,
             "created_at": timestamp,
         }
-        prior_volume_plan_id = slots.get("prior_volume_plan", {}).get("artifact_id") if isinstance(slots.get("prior_volume_plan"), dict) else None
         output_slots = dict(slots_to_ids(slots))
-        output_slots.pop("prior_volume_plan", None)
         output_slots.update({
             f"scene.v{volume:02d}.c{chapter:02d}.s{scene_number:02d}": scene_id,
             "current_state": generation_id,
             f"scene_commit.v{volume:02d}.c{chapter:02d}.s{scene_number:02d}": scene_commit_id,
         })
-        if volume > 1:
-            if not isinstance(prior_volume_plan_id, str):
-                prior_slot = f"volume_plan.v{volume - 1:02d}"
-                prior_volume_plan_id = output_slots.get(prior_slot)
-            if isinstance(prior_volume_plan_id, str):
-                output_slots["prior_volume_plan"] = prior_volume_plan_id
         selection = {
             "schema_version": 1, "selection_id": output_selection_id,
             "input_selection_id": input_selection_id, "slots": output_slots, "created_at": timestamp,

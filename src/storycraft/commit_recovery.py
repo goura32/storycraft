@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .artifact_record import validate_call_record, validate_candidate_record, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
@@ -29,24 +29,67 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
     manifest = state["pending_commit"]
     if not isinstance(manifest, dict):
         raise ContractError("pending_commitがありません")
+    input_selection_id = manifest["input_selection_id"]
+    if input_selection_id is not None and input_selection_id != state["current_selection_id"]:
+        raise ContractError("pending_commit.input_selection_idはrun-state.current_selection_idと一致しなければなりません")
     targets = manifest["targets"]
     assert isinstance(targets, list)
     _reject_unlisted_staging(root, manifest)
-    # Preflight every staged target before moving anything.  Recovery rejection
-    # must not mutate pending_commit status or partially finalize the manifest.
+    # Preflight every target before moving anything.  Recovery rejection must not
+    # mutate pending_commit status or partially finalize the manifest.  This
+    # includes final-only crash states and already-finalized targets; validating
+    # only staging directories would allow a malformed later final to fail after
+    # an earlier target had already been moved.
     for target in targets:
-        if target["status"] != "pending":
-            continue
         staging = root / target["staging_path"]
-        if staging.exists() and not (root / target["final_path"]).exists():
-            _target_validator(root, target)(staging)
+        final = root / target["final_path"]
+        _reject_symlinked_path_components(root, staging)
+        _reject_symlinked_path_components(root, final)
+        validator = _target_validator(root, target, input_selection_id)
+        _reject_ambiguous_target(staging, final)
+        if target["status"] == "finalized":
+            if not final.exists():
+                raise ContractError("finalized targetには有効なfinalが必要です")
+            validator(final)
+        elif final.exists():
+            validator(final)
+        elif staging.exists():
+            validator(staging)
+        else:
+            raise ContractError("pending targetにはstagingが必要です")
+        if target["status"] == "pending" and not final.exists():
+            _preflight_finalize_location(staging, final)
+    target_paths = _recovery_target_paths(root, targets)
+    for target in targets:
+        if target_artifact_kind(target) == "scene-commit":
+            scene_commit_path = target_paths[("scene-commit", target["artifact_id"])]
+            _validate_scene_commit_lineage(
+                root,
+                _single_record(scene_commit_path),
+                manifest["input_selection_id"],
+                manifest["output_selection_id"],
+                target_paths=target_paths,
+            )
+    if manifest["kind"] == "candidate_adoption":
+        adoption_target = next(target for target in targets if target_artifact_kind(target) == "adoption")
+        adoption_path = target_paths[("adoption", adoption_target["artifact_id"])]
+        if _single_record(adoption_path).get("source_kind") == "candidate":
+            _validate_candidate_adoption_lineage(root, manifest, target_paths=target_paths)
+    for target in targets:
+        if target_artifact_kind(target) == "selection":
+            selection_path = target_paths[("selection", target["artifact_id"])]
+            resolve_selection(
+                root,
+                _single_record(selection_path),
+                record_paths=target_paths,
+            )
     working = deepcopy(state)
     for index, target in enumerate(targets):
         staging = root / target["staging_path"]
         final = root / target["final_path"]
         _reject_symlinked_path_components(root, staging)
         _reject_symlinked_path_components(root, final)
-        validator = _target_validator(root, target)
+        validator = _target_validator(root, target, input_selection_id)
         _reject_ambiguous_target(staging, final)
         if target["status"] == "finalized":
             if not final.exists():
@@ -66,7 +109,7 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
             raise ContractError("pending_commit target statusが不正です")
         working["pending_commit"]["targets"][index]["status"] = "finalized"
     for target in targets:
-        _target_validator(root, target)(root / target["final_path"])
+        _target_validator(root, target, input_selection_id)(root / target["final_path"])
         if target_artifact_kind(target) == "scene-commit":
             _validate_scene_commit_lineage(root, _single_record(root / target["final_path"]), manifest["input_selection_id"], manifest["output_selection_id"])
     if manifest["kind"] == "candidate_adoption":
@@ -122,7 +165,46 @@ def _reject_ambiguous_target(staging: Path, final: Path) -> None:
         raise ContractError("pending_commit targetのstagingとfinalが同時にあります")
 
 
-def _target_validator(root: Path, target: dict[str, Any]):
+def _recovery_target_paths(root: Path, targets: list[dict[str, Any]]) -> dict[tuple[str, str], Path]:
+    """Resolve declared target records before any staging directory is moved."""
+    paths: dict[tuple[str, str], Path] = {}
+    for target in targets:
+        kind = target_artifact_kind(target)
+        identifier = target["artifact_id"]
+        staging = root / target["staging_path"]
+        final = root / target["final_path"]
+        paths[(kind, identifier)] = final if final.exists() else staging
+    return paths
+
+
+def _preflight_finalize_location(staging: Path, final: Path) -> None:
+    """Check rename prerequisites before any target is finalized."""
+    if staging == final:
+        raise ContractError("staging directoryとfinal directoryは異なる必要があります")
+    final_parent = final.parent
+    if final_parent.is_symlink() or not final_parent.is_dir():
+        raise ContractError(f"final directoryの親directoryが存在しません: {final_parent}")
+    try:
+        staging_device = staging.stat(follow_symlinks=False).st_dev
+        final_device = final_parent.stat(follow_symlinks=False).st_dev
+    except OSError as exc:
+        raise ContractError("immutable directoryのfilesystemを確認できません") from exc
+    if staging_device != final_device:
+        raise ContractError("stagingとfinalは同一filesystem上に存在する必要があります")
+
+
+def _target_path(
+    root: Path,
+    target_paths: Mapping[tuple[str, str], Path] | None,
+    kind: str,
+    identifier: str,
+) -> Path:
+    if target_paths is not None and (kind, identifier) in target_paths:
+        return target_paths[(kind, identifier)]
+    return root / artifact_directory(kind, identifier)
+
+
+def _target_validator(root: Path, target: dict[str, Any], input_selection_id: str | None):
     kind = target_artifact_kind(target)
     artifact_id = target["artifact_id"]
     if kind == "volume-publication":
@@ -138,6 +220,9 @@ def _target_validator(root: Path, target: dict[str, Any]):
             validate_volume_publication_files(files)
             if files["record.json"]["volume_publication_id"] != artifact_id:
                 raise ContractError("volume publication target IDが配置IDと一致しません")
+            record_selection_id = files["record.json"].get("input_selection_id")
+            if input_selection_id is None or record_selection_id != input_selection_id:
+                raise ContractError("volume publication recordのinput_selection_idがmanifestと一致しません")
             _validate_publication_source_evidence(root, files)
         return validate_publication
     # The commit record is not a content envelope, but it uses the shared
@@ -180,7 +265,14 @@ def _single_record(directory: Path) -> dict[str, Any]:
     return record
 
 
-def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_selection_id: str, output_selection_id: str) -> None:
+def _validate_scene_commit_lineage(
+    root: Path,
+    record: dict[str, Any],
+    input_selection_id: str,
+    output_selection_id: str,
+    *,
+    target_paths: Mapping[tuple[str, str], Path] | None = None,
+) -> None:
     """Require scene-commit references to resolve and remain selection-bound."""
     references = (
         ("scene", "scene_id"),
@@ -193,7 +285,7 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
     input_current_state_id: str | None = None
     for kind, field in references:
         identifier = record[field]
-        directory = root / artifact_directory(kind, identifier)
+        directory = _target_path(root, target_paths, kind, identifier)
         referenced = _single_record(directory)
         validate_record(kind, identifier, referenced)
         if kind == "scene":
@@ -201,9 +293,9 @@ def _validate_scene_commit_lineage(root: Path, record: dict[str, Any], input_sel
             if not isinstance(content, dict) or not isinstance(content.get("current_state_id"), str):
                 raise ContractError("scene-commit sceneの入力current_state参照が不正です")
             input_current_state_id = content["current_state_id"]
-    input_snapshot = _single_record(root / "runtime" / "selections" / input_selection_id)
+    input_snapshot = _single_record(_target_path(root, target_paths, "selection", input_selection_id))
     input_slots = validate_selection_snapshot(input_snapshot)["slots"]
-    output_snapshot = _single_record(root / "runtime" / "selections" / output_selection_id)
+    output_snapshot = _single_record(_target_path(root, target_paths, "selection", output_selection_id))
     output_slots = validate_selection_snapshot(output_snapshot)["slots"]
     volume, chapter, scene = (record[key] for key in ("volume_number", "chapter_number", "scene_number"))
     prefix = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
@@ -256,16 +348,21 @@ def _validate_adoption(record: dict[str, Any], artifact_id: str) -> None:
         raise ContractError("adoption recordのinput_selection_idが不正です")
 
 
-def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -> None:
+def _validate_candidate_adoption_lineage(
+    root: Path,
+    manifest: dict[str, Any],
+    *,
+    target_paths: Mapping[tuple[str, str], Path] | None = None,
+) -> None:
     """Bind a candidate adoption's audit chain and immutable selection delta."""
     targets = manifest["targets"]
     content_targets = [target for target in targets if target_artifact_kind(target) not in {"adoption", "selection"}]
     content_target = next(target for target in content_targets if target_artifact_kind(target) != "generation")
     adoption_target = next(target for target in targets if target_artifact_kind(target) == "adoption")
     selection_target = next(target for target in targets if target_artifact_kind(target) == "selection")
-    content = _single_record(root / content_target["final_path"])
-    adoption = _single_record(root / adoption_target["final_path"])
-    selection = _single_record(root / selection_target["final_path"])
+    content = _single_record(_target_path(root, target_paths, target_artifact_kind(content_target), content_target["artifact_id"]))
+    adoption = _single_record(_target_path(root, target_paths, "adoption", adoption_target["artifact_id"]))
+    selection = _single_record(_target_path(root, target_paths, "selection", selection_target["artifact_id"]))
     _validate_adoption(adoption, adoption_target["artifact_id"])
     if adoption["source_kind"] != "candidate" or adoption["output_content_artifact_ids"] != [target["artifact_id"] for target in content_targets]:
         raise ContractError("candidate adoptionのoutput content参照が不正です")

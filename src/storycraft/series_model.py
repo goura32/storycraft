@@ -146,22 +146,7 @@ class OpenAIStoryModel:
                 },
             }
         if kind in {"review", "critique"}:
-            return {
-                "type": "object", "additionalProperties": False,
-                "required": ["schema_version", "decision", "issues"],
-                "properties": {
-                    "schema_version": {"const": "review-response-v1"},
-                    "decision": {"enum": ["pass", "issues"]},
-                    "issues": {
-                        "type": "array",
-                        "items": {"type": "object", "additionalProperties": False,
-                                  "required": ["severity", "evidence_locations", "explanation"],
-                                  "properties": {"severity": {"enum": ["critical", "notice"]},
-                                                 "evidence_locations": {"type": "array", "items": {"type": "string"}},
-                                                 "explanation": {"type": "string", "minLength": 1}}},
-                    },
-                },
-            }
+            return get_template_loader().load_schema_object("critique", stage)
         return get_template_loader().load_schema_object(kind, stage)
 
     @staticmethod

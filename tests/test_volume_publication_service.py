@@ -14,6 +14,7 @@ from storycraft.run_state import RunStateStore
 from storycraft.selection_snapshot import SelectionSnapshotStore
 from storycraft.series_contracts import ContractError
 from storycraft.volume_publication_stage import VolumePublicationStageService
+from storycraft.volume_plan_stage import VolumePlanStageService
 
 NOW = "2026-07-31T00:00:00Z"
 
@@ -316,8 +317,35 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         record["input_selection_id"] = "selection-999999"
         record_path.write_text(json.dumps(record), encoding="utf-8")
 
-        with self.assertRaisesRegex(ContractError, "immutable target"):
+        with self.assertRaisesRegex(ContractError, "manifestと一致"):
             recover_pending_commit(root)
+
+    def test_recovery_rejects_a_publication_record_bound_to_another_valid_selection(self) -> None:
+        temporary, root = workspace()
+        self.addCleanup(temporary.cleanup)
+        with patch("storycraft.volume_publication_stage.recover_pending_commit", side_effect=RuntimeError("staged")):
+            with self.assertRaisesRegex(RuntimeError, "staged"):
+                VolumePublicationStageService(root).run(updated_at=NOW)
+        state = RunStateStore(root).load()
+        current_selection_id = state["current_selection_id"]
+        current_selection = SelectionSnapshotStore(root).load(current_selection_id)
+        alternate = SelectionSnapshotStore(root).create(
+            input_selection_id=current_selection_id,
+            slots=current_selection["slots"],
+            created_at=NOW,
+        )
+        pending = state["pending_commit"]
+        assert isinstance(pending, dict)
+        record_path = root / pending["targets"][0]["staging_path"] / "record.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["input_selection_id"] = alternate["selection_id"]
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+
+        with self.assertRaisesRegex(ContractError, "manifestと一致"):
+            recover_pending_commit(root)
+
+        self.assertIsNotNone(RunStateStore(root).load()["pending_commit"])
+        self.assertFalse((root / "publications/volume-pub-v01-000001").exists())
 
     def test_public_recovery_converges_a_staged_publication_on_disk(self) -> None:
         temporary, root = workspace()
@@ -349,6 +377,25 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(state["current_target"], {"volume_number": 2})
         self.assertIsNone(state["pending_commit"])
         self.assertEqual(state["published_volumes"], [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}])
+
+    def test_published_volume_one_can_start_volume_two_plan_from_canonical_prior_slot(self) -> None:
+        temporary, root = workspace(volume_count=4)
+        self.addCleanup(temporary.cleanup)
+
+        state = VolumePublicationStageService(root).run(updated_at=NOW)
+        self.assertEqual(state["current_stage"], "volume_plan")
+        self.assertEqual(state["current_target"], {"volume_number": 2})
+        selection = SelectionSnapshotStore(root).load(state["current_selection_id"])
+        self.assertEqual(selection["slots"]["volume_plan.v01"], "volume-plan-v01-000001")
+        self.assertNotIn("prior_volume_plan", selection["slots"])
+
+        with patch("storycraft.volume_plan_stage.CandidateStageRunner.run", return_value={"started": True}) as run:
+            result = VolumePlanStageService(root).run(None, updated_at=NOW)
+
+        self.assertEqual(result, {"started": True})
+        context = run.call_args.kwargs["context"]
+        self.assertEqual(context["prior_volume_plan"]["title"], "第一巻")
+        self.assertEqual(context["volume_number"], 2)
 
     def test_final_volume_stages_completed_state_in_its_manifest_before_generic_recovery(self) -> None:
         temporary, root = workspace(volume_count=1)

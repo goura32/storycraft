@@ -129,6 +129,83 @@ def populate_scene_commit_staging(root: Path) -> None:
 
 
 class CommitRecoveryTests(unittest.TestCase):
+    def test_recovery_rejects_manifest_input_selection_different_from_run_state_without_moving_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = candidate_adoption_state()
+            state["current_selection_id"] = "selection-000009"
+            state_path = root / "runtime/run-state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            populate_candidate_adoption_staging(root)
+
+            with self.assertRaisesRegex(ContractError, "current_selection_id"):
+                recover_pending_commit(root)
+
+            self.assertFalse((root / "design/series-plans/series-plan-000001").exists())
+            self.assertTrue((root / "runtime/staging/candidate-adoption/series-plan-000001").exists())
+
+    def test_recovery_preflights_a_later_invalid_final_before_moving_an_earlier_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = candidate_adoption_state()
+            state_path = root / "runtime/run-state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            populate_candidate_adoption_staging(root)
+            (root / "design/series-plans").mkdir(parents=True)
+            (root / "runtime/adoptions").mkdir(parents=True)
+            final_selection = root / "runtime/selections/selection-000002"
+            final_selection.mkdir(parents=True)
+            (final_selection / "record.json").write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(ContractError, "stagingとfinal"):
+                recover_pending_commit(root)
+
+            self.assertFalse((root / "design/series-plans/series-plan-000001").exists())
+            self.assertTrue((root / "runtime/staging/candidate-adoption/series-plan-000001").exists())
+
+    def test_recovery_preflights_candidate_lineage_before_moving_any_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = candidate_adoption_state()
+            state_path = root / "runtime/run-state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            populate_candidate_adoption_staging(root)
+            (root / "design/series-plans").mkdir(parents=True)
+            (root / "runtime/adoptions").mkdir(parents=True)
+            quality_path = root / "quality/quality-000001/record.json"
+            quality = json.loads(quality_path.read_text(encoding="utf-8"))
+            quality["candidate_id"] = "candidate-999999"
+            quality_path.write_text(json.dumps(quality), encoding="utf-8")
+
+            with self.assertRaisesRegex(ContractError, "quality candidate"):
+                recover_pending_commit(root)
+
+            self.assertIsNotNone(RunStateStore(root).load()["pending_commit"])
+            self.assertTrue((root / "runtime/staging/candidate-adoption/series-plan-000001").exists())
+            self.assertFalse((root / "design/series-plans/series-plan-000001").exists())
+            self.assertFalse((root / "runtime/adoptions/adoption-000001").exists())
+            self.assertFalse((root / "runtime/selections/selection-000002").exists())
+
+    def test_recovery_preflights_all_final_parents_before_moving_any_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = candidate_adoption_state()
+            state_path = root / "runtime/run-state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            populate_candidate_adoption_staging(root)
+            (root / "design/series-plans").mkdir(parents=True)
+
+            with self.assertRaisesRegex(ContractError, "final directoryの親directory"):
+                recover_pending_commit(root)
+
+            self.assertTrue((root / "runtime/staging/candidate-adoption/series-plan-000001").exists())
+            self.assertFalse((root / "design/series-plans/series-plan-000001").exists())
+            self.assertTrue((root / "runtime/staging/candidate-adoption/adoption-000001").exists())
+
     def test_recovery_target_status_location_matrix_uses_real_filesystem(self) -> None:
         """Each target's declared status and on-disk location converges or blocks.
 

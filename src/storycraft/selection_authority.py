@@ -332,6 +332,7 @@ def resolve_selection(
     snapshot: object,
     *,
     content_validators: Mapping[str, ContentValidator] | None = None,
+    record_paths: Mapping[tuple[str, str], Path] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Resolve slots and reapply each available kind validator to its input bundle.
 
@@ -343,7 +344,7 @@ def resolve_selection(
     validators: dict[str, ContentValidator] = dict(DEFAULT_CONTENT_VALIDATORS)
     if content_validators is not None:
         validators.update(content_validators)
-    return _resolve_snapshot(workspace_root.expanduser(), snapshot, validators, set())
+    return _resolve_snapshot(workspace_root.expanduser(), snapshot, validators, set(), record_paths)
 
 
 def _resolve_snapshot(
@@ -351,6 +352,7 @@ def _resolve_snapshot(
     snapshot: object,
     validators: Mapping[str, ContentValidator],
     resolving: set[str],
+    record_paths: Mapping[tuple[str, str], Path] | None = None,
 ) -> dict[str, dict[str, Any]]:
     value = validate_selection_snapshot(snapshot)
     selection_id = value["selection_id"]
@@ -362,10 +364,10 @@ def _resolve_snapshot(
         for slot, artifact_id in value["slots"].items():
             kind = _kind_for(slot, artifact_id)
             validate_artifact_reference(kind, artifact_id, slot)
-            record = _read_record(workspace_root, kind, artifact_id)
+            record = _read_record(workspace_root, kind, artifact_id, record_paths)
             record = validate_record(kind, artifact_id, record)
             if "content" in record:
-                inputs = _input_bundle(workspace_root, record, validators, resolving)
+                inputs = _input_bundle(workspace_root, record, validators, resolving, record_paths)
                 validation_inputs: dict[str, Any] = dict(inputs)
                 validation_inputs["__current_slot__"] = slot
                 validator = validators.get(kind)
@@ -382,12 +384,17 @@ def _input_bundle(
     record: dict[str, Any],
     validators: Mapping[str, ContentValidator],
     resolving: set[str],
+    record_paths: Mapping[tuple[str, str], Path] | None = None,
 ) -> dict[str, dict[str, Any]]:
     input_selection_id = record["input_selection_id"]
     if input_selection_id is None:
         return {}
     assert isinstance(input_selection_id, str)
-    snapshot_path = workspace_root / "runtime" / "selections" / input_selection_id / "record.json"
+    if record_paths is not None and ("selection", input_selection_id) in record_paths:
+        snapshot_path = record_paths[("selection", input_selection_id)]
+    else:
+        snapshot_path = workspace_root / "runtime" / "selections" / input_selection_id
+    snapshot_path = snapshot_path / "record.json"
     if snapshot_path.is_symlink() or not snapshot_path.is_file():
         raise ContractError("artifact input_selection_idのselectionがありません")
     try:
@@ -396,11 +403,20 @@ def _input_bundle(
         raise ContractError("artifact input selectionを読み込めません") from exc
     if input_snapshot.get("selection_id") != input_selection_id if isinstance(input_snapshot, dict) else True:
         raise ContractError("artifact input selectionのIDが保存先と一致しません")
-    return _resolve_snapshot(workspace_root, input_snapshot, validators, resolving)
+    return _resolve_snapshot(workspace_root, input_snapshot, validators, resolving, record_paths)
 
 
-def _read_record(workspace_root: Path, kind: str, artifact_id: str) -> dict[str, Any]:
-    directory = workspace_root / artifact_directory(kind, artifact_id)
+def _read_record(
+    workspace_root: Path,
+    kind: str,
+    artifact_id: str,
+    record_paths: Mapping[tuple[str, str], Path] | None = None,
+) -> dict[str, Any]:
+    directory = (
+        record_paths[(kind, artifact_id)]
+        if record_paths is not None and (kind, artifact_id) in record_paths
+        else workspace_root / artifact_directory(kind, artifact_id)
+    )
     if directory.is_symlink() or not directory.is_dir():
         raise ContractError(f"selectionのrecord directoryが通常directoryではありません: {directory}")
     record_path = directory / "record.json"
@@ -419,9 +435,6 @@ def _kind_for(slot: str, artifact_id: str) -> str:
     if slot.startswith("scene_prose_disposition.") or slot.startswith("continuity_disposition."):
         validate_artifact_reference("quality-disposition", artifact_id, slot)
         return "quality-disposition"
-    if slot == "prior_volume_plan":
-        # Prior volume plan is always an adoption of a volume-plan artifact
-        return "volume-plan"
     matches: list[str] = []
     for kind, spec in ARTIFACT_SPECS.items():
         if kind == "quality-disposition":
