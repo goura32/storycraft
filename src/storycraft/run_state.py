@@ -5,10 +5,12 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 from typing import Any
 
 from .artifact_registry import artifact_directory, artifact_spec
 from .series_contracts import ContractError
+from .time_contract import parse_utc_timestamp
 
 
 RUNNING_STAGES = frozenset({
@@ -319,7 +321,12 @@ def _validate_published_volumes(value: object) -> None:
             raise ContractError("published_volumesの要素が不正です")
         if entry["volume_number"] != expected:
             raise ContractError("published_volumesは第一巻から欠番なく並ぶ必要があります")
-        _require_id(entry["publication_id"], f"volume-pub-v{expected:02d}-", "published_volumes.publication_id")
+        try:
+            match = artifact_spec("volume-publication").match_id(entry["publication_id"])
+        except ContractError as exc:
+            raise ContractError("published_volumes.publication_idが正規IDではありません") from exc
+        if int(match.group("volume")) != expected:
+            raise ContractError("published_volumes.publication_idの巻番号が不正です")
 
 
 def _validate_timestamps(state: dict[str, Any]) -> None:
@@ -330,12 +337,7 @@ def _validate_timestamps(state: dict[str, Any]) -> None:
 
 
 def _parse_timestamp(value: object, field: str) -> datetime:
-    if not isinstance(value, str):
-        raise ContractError(f"{field}はISO 8601文字列でなければなりません")
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ContractError(f"{field}がISO 8601形式ではありません") from exc
+    return parse_utc_timestamp(value, field)
 
 
 def _require_exact_fields(value: dict[str, Any], fields: set[str] | frozenset[str], label: str) -> None:
@@ -344,7 +346,17 @@ def _require_exact_fields(value: dict[str, Any], fields: set[str] | frozenset[st
 
 
 def _require_id(value: object, prefix: str, label: str) -> None:
-    if not isinstance(value, str) or not value.startswith(prefix) or len(value) == len(prefix):
+    if prefix == "selection-":
+        try:
+            artifact_spec("selection").match_id(value)
+        except ContractError as exc:
+            raise ContractError(f"{label}が不正です") from exc
+        return
+    if prefix == "ws-":
+        if not isinstance(value, str) or re.fullmatch(r"ws-[A-Za-z0-9_-]+", value) is None:
+            raise ContractError(f"{label}が不正です")
+        return
+    if not isinstance(value, str) or not value.startswith(prefix) or len(value) == len(prefix) or "/" in value or "\\" in value:
         raise ContractError(f"{label}が不正です")
 
 

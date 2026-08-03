@@ -27,7 +27,11 @@
 - `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`を使用する。構造化工程では`response_format: json_schema`を付け、scene-proseの生成・修正では付けずraw textを運ぶ。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
 - 巻公開recordは `input_selection_id` を正本参照として持ち、公開時のsource evidenceはrecoveryでselectionから再導出する。内部検証用の入力ID群は公開recordへ保存しない。
 - 次巻計画は直前公開巻のcanonicalな `volume_plan.vNN` slotを直接解決する。`prior_volume_plan` のselection aliasは生成・受理せず、巻引継ぎ要約も保存しない。
+- CLI入力JSONはUTF-8・末尾改行を要求し、request/settingsの文字列をNFC・trim・制御文字拒否で正規化する。保存済みrecordはUTC RFC3339とcanonical artifact IDを検証し、publication/selection path traversalを拒否する。
+- direct requestは`direct_request` adoption recordを初期selectionと同一atomic workspace creationで保存する。request-intakeのcandidate/review/adoption/revision採番は全て`counters.json`を進め、後続工程との衝突を起こさない。
+- scene-proseの再生成は同一座標のcontinuity slotsだけを無効化し、確定済み過去sceneのcontinuity lineageを保持する。scene commit recoveryはinput selectionにsceneを要求せず、output scene contentの全参照・座標・selection lineageを移動前に検証する。
+- quality dispositionはclosed issue object（code/message/evidence_locations）とreview/candidate payloadの証拠到達性を再検証し、selection authorityは祖先selectionの解決結果を1回のresolve処理内でmemoizeする。
 
-**確認時点で177テスト、84 subtestsが通過しています。**
+**確認時点で183テスト、84 subtestsが通過しています。**
 
 これらは実装修正が完了した時点の記録です。実装の公開判断は、現在の仕様、実装、試験、配布物を確認して行います。

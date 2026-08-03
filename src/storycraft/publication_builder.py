@@ -1,11 +1,12 @@
 """巻単位 v2 公開の決定的組立・検証。"""
 from __future__ import annotations
 
-from datetime import datetime
 import re
 from typing import Any
 
+from .artifact_registry import artifact_spec
 from .series_contracts import ContractError
+from .time_contract import parse_utc_timestamp
 
 _PUBLICATION_ID = re.compile(r"^volume-pub-v[0-9]{2}-[0-9]{6}$")
 
@@ -21,12 +22,39 @@ def build_volume_publication_files(
     if not isinstance(volume_number, int) or isinstance(volume_number, bool) or volume_number < 1:
         raise ContractError("volume_numberは1以上の整数でなければなりません")
     _identifier(publication_id, rf"^volume-pub-v{volume_number:02d}-[0-9]{{6}}$", "volume_publication_id")
-    for value, prefix, label in ((input_selection_id, "selection-", "input_selection_id"), (settings_id, "settings-", "settings_id"), (series_plan_id, "series-plan-", "series_plan_id"), (volume_plan_id, f"volume-plan-v{volume_number:02d}-", "volume_plan_id"), (current_state_id, "gen-", "current_state_id")):
-        if not isinstance(value, str) or not value.startswith(prefix): raise ContractError(f"{label}が不正です")
+    for kind, value, label in (("selection", input_selection_id, "input_selection_id"), ("settings", settings_id, "settings_id"), ("series-plan", series_plan_id, "series_plan_id"), ("volume-plan", volume_plan_id, "volume_plan_id"), ("generation", current_state_id, "current_state_id")):
+        try:
+            match = artifact_spec(kind).match_id(value)
+        except ContractError as exc:
+            raise ContractError(f"{label}が不正です") from exc
+        if kind == "volume-plan" and int(match.group("volume")) != volume_number:
+            raise ContractError(f"{label}の巻番号が不正です")
     _timestamp(created_at)
-    if not chapter_plan_ids or not all(isinstance(item, str) and item for item in chapter_plan_ids): raise ContractError("chapter_plan_idsが不正です")
-    if not scene_ids or len(scene_ids) != len(set(scene_ids)) or not all(isinstance(item, str) and item for item in scene_ids): raise ContractError("scene_idsが不正です")
-    if len(quality_disposition_refs) != len(scene_ids) or not all(isinstance(item, str) and item.startswith("quality-") for item in quality_disposition_refs): raise ContractError("quality_disposition_refsがscene_idsと一致しません")
+    if not chapter_plan_ids or len(chapter_plan_ids) != len(set(chapter_plan_ids)):
+        raise ContractError("chapter_plan_idsが不正です")
+    for item in chapter_plan_ids:
+        try:
+            match = artifact_spec("chapter-plan").match_id(item)
+        except ContractError as exc:
+            raise ContractError("chapter_plan_idsが不正です") from exc
+        if int(match.group("volume")) != volume_number:
+            raise ContractError("chapter_plan_idsの巻番号が不正です")
+    if not scene_ids or len(scene_ids) != len(set(scene_ids)):
+        raise ContractError("scene_idsが不正です")
+    for item in scene_ids:
+        try:
+            match = artifact_spec("scene").match_id(item)
+        except ContractError as exc:
+            raise ContractError("scene_idsが不正です") from exc
+        if int(match.group("volume")) != volume_number:
+            raise ContractError("scene_idsの巻番号が不正です")
+    if len(quality_disposition_refs) != len(scene_ids):
+        raise ContractError("quality_disposition_refsがscene_idsと一致しません")
+    for item in quality_disposition_refs:
+        try:
+            artifact_spec("quality-disposition").match_id(item)
+        except ContractError as exc:
+            raise ContractError("quality_disposition_refsがscene_idsと一致しません") from exc
     if len(scenes) != len(scene_ids): raise ContractError("scenesがscene_idsと一致しません")
     prose: list[str] = []
     for expected, scene in zip(scene_ids, scenes, strict=True):
@@ -52,7 +80,10 @@ def validate_volume_publication_files(files: object) -> None:
     number = record["volume_number"]
     if not isinstance(number, int) or isinstance(number, bool) or number < 1: raise ContractError("巻公開record.json.volume_numberが不正です")
     _identifier(record["volume_publication_id"], rf"^volume-pub-v{number:02d}-[0-9]{{6}}$", "volume_publication_id")
-    if not isinstance(record["input_selection_id"], str) or not record["input_selection_id"].startswith("selection-"): raise ContractError("巻公開record.json.input_selection_idが不正です")
+    try:
+        artifact_spec("selection").match_id(record["input_selection_id"])
+    except ContractError as exc:
+        raise ContractError("巻公開record.json.input_selection_idが不正です") from exc
 
     _timestamp(record["created_at"])
     notice = record.get("publication_notice_type")
@@ -66,6 +97,4 @@ def _identifier(value: object, pattern: str, label: str) -> None:
 
 
 def _timestamp(value: object) -> None:
-    if not isinstance(value, str): raise ContractError("created_atが不正です")
-    try: datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc: raise ContractError("created_atが不正です") from exc
+    parse_utc_timestamp(value, "created_at")

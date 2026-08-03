@@ -8,7 +8,7 @@ def candidate_response(value: object, expected_kind: str) -> dict[str, Any]:
     artifact_spec(expected_kind)
     if not isinstance(value, dict) or set(value) != {"schema_version", "artifact_kind", "payload"}:
         raise ContractError("CandidateResponseのfield構成が不正です")
-    if value["schema_version"] != 1 or value["artifact_kind"] != expected_kind or not isinstance(value["payload"], dict):
+    if value["schema_version"] != "candidate-response-v1" or value["artifact_kind"] != expected_kind or not isinstance(value["payload"], dict):
         raise ContractError("CandidateResponseが期待種別と一致しません")
     return value
 

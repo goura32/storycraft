@@ -76,6 +76,10 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                 self.assertIsNotNone(post)
                 assert post is not None
                 self.assertNotIn("response_format", post)
+                self.assertEqual(
+                    [path for path, _body in handler.requests if path.startswith("/v1/models")],
+                    ["/v1/models/fake-model"],
+                )
         finally:
             server.shutdown()
             server.server_close()

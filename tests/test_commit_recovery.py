@@ -97,21 +97,43 @@ def scene_commit_state() -> dict:
 def populate_scene_commit_staging(root: Path) -> None:
     # Write the request record (required for selection-000001)
     write_record(root, "inputs/request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
+    write_record(root, "runtime/selections/selection-666666", {"schema_version": 1, "selection_id": "selection-666666", "input_selection_id": None, "slots": {"request": "request-000001", "settings": "settings-000001"}, "created_at": NOW})
+    write_record(root, "design/initial/initial-design-000001", {"schema_version": 1, "artifact_id": "initial-design-000001", "artifact_kind": "initial-design", "input_selection_id": "selection-666666", "created_at": NOW, "content": {"schema_version": 1, "core": {"logline": "英雄の旅", "premise": "選択の物語", "central_question": "何を守るのか", "themes": ["選択"], "dramatic_engine": "選択が障害を生む", "tone": ["希望"], "reader_promise": "人物の選択が結末を変える", "ending_direction": "責任を引き受ける"}, "cast": [{"name": "主人公", "role": "英雄", "description": "選択を迫られる", "relationships": []}], "world": {"settings": ["剣と魔法"], "constraints": ["契約を破れない"], "institutions": ["王国"]}, "knowledge_model": {"author_knows": ["秘密"], "character_knows": {"主人公": ["目的"]}, "reader_knows": ["目的"]}, "unresolved_threads": [{"name": "塔の試練", "type": "goal", "required_for_ending": True, "description": "塔を登頂する"}], "ending_conditions": [{"thread_name": "塔の試練", "condition": "塔を登頂する"}]}})
+    write_record(root, "generations/gen-000001", {"schema_version": 1, "artifact_id": "gen-000001", "artifact_kind": "generation", "input_selection_id": "selection-666666", "created_at": NOW, "content": {"story_facts": [{"fact_id": "fact-000001", "value": "開始"}], "character_knowledge": {"char-main": []}, "reader_disclosures": [], "unresolved_thread_states": {}, "timeline_position": 0}})
+    write_record(root, "design/series-plans/series-plan-000001", {"schema_version": 1, "artifact_id": "series-plan-000001", "artifact_kind": "series-plan", "input_selection_id": "selection-666666", "created_at": NOW, "content": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}})
+    write_record(root, "design/volume-plans/volume-plan-v01-000001", {"schema_version": 1, "artifact_id": "volume-plan-v01-000001", "artifact_kind": "volume-plan", "input_selection_id": "selection-777777", "created_at": NOW, "content": {"title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ", "handoff_expectations": []}})
+    write_record(root, "design/chapter-plans/chapter-plan-v01-c01-000001", {"schema_version": 1, "artifact_id": "chapter-plan-v01-c01-000001", "artifact_kind": "chapter-plan", "input_selection_id": "selection-888888", "created_at": NOW, "content": {"title": "第一章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"], "scene_summaries": [{"scene_number": 1, "purpose": "場面1"}], "required_revelations": [], "constraints": []}})
+    write_record(root, "design/scene-plans/scene-plan-v01-c01-s01-000001", {"schema_version": 1, "artifact_id": "scene-plan-v01-c01-s01-000001", "artifact_kind": "scene-plan", "input_selection_id": "selection-999999", "created_at": NOW, "content": {"purpose": "場面1", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []}})
+    write_record(root, "runtime/selections/selection-777777", {"schema_version": 1, "selection_id": "selection-777777", "input_selection_id": "selection-666666", "slots": {"request": "request-000001", "settings": "settings-000001", "series_plan": "series-plan-000001"}, "created_at": NOW})
+    write_record(root, "runtime/selections/selection-888888", {"schema_version": 1, "selection_id": "selection-888888", "input_selection_id": "selection-777777", "slots": {"request": "request-000001", "settings": "settings-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001"}, "created_at": NOW})
+    write_record(root, "runtime/selections/selection-888886", {"schema_version": 1, "selection_id": "selection-888886", "input_selection_id": "selection-999999", "slots": {"request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001", "current_state": "gen-000001"}, "created_at": NOW})
+    write_record(root, "runtime/selections/selection-888885", {"schema_version": 1, "selection_id": "selection-888885", "input_selection_id": "selection-888886", "slots": {"request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001", "current_state": "gen-000001", "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001"}, "created_at": NOW})
+    write_record(root, "runtime/selections/selection-999999", {"schema_version": 1, "selection_id": "selection-999999", "input_selection_id": "selection-888888", "slots": {"request": "request-000001", "settings": "settings-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001"}, "created_at": NOW})
     # Write the selection-000001 record (which depends on the request and settings)
-    write_record(root, "runtime/selections/selection-000001", {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"request": "request-000001", "settings": "settings-000001", "scene.v01.c01.s01": "scene-v01-c01-s01-000002", "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001", "scene_prose_disposition.v01.c01.s01": "quality-000001", "current_state": "gen-000001"}, "created_at": NOW})
+    input_slots = {"request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001", "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001", "scene_prose_adoption.v01.c01.s01": "adoption-000001", "continuity_adoption.v01.c01.s01": "adoption-000002", "scene_prose_disposition.v01.c01.s01": "quality-000001", "continuity_disposition.v01.c01.s01": "quality-000001", "current_state": "gen-000001"}
+    write_record(root, "runtime/selections/selection-000001", {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": input_slots, "created_at": NOW})
     staging = "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001"
-    write_record(root, f"{staging}/scene-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-000001", "created_at": NOW, "content": {"current_state_id": "gen-000001"}})
-    write_record(root, f"{staging}/gen-000002", {"schema_version": 1, "artifact_id": "gen-000002", "artifact_kind": "generation", "input_selection_id": "selection-000001", "created_at": NOW, "content": {}})
+    write_record(root, f"{staging}/scene-v01-c01-s01-000002", {"schema_version": 1, "artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "input_selection_id": "selection-999999", "created_at": NOW, "content": {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "scene_prose_id": "scene-prose-v01-c01-s01-000001", "continuity_update_id": "continuity-v01-c01-s01-000001", "current_state_id": "gen-000001", "scene_card_id": "scene-card-v01-c01-s01-000001", "quality_disposition_id": "quality-000001"}})
+    write_record(root, f"{staging}/gen-000002", {"schema_version": 1, "artifact_id": "gen-000002", "artifact_kind": "generation", "input_selection_id": "selection-999999", "created_at": NOW, "content": {"story_facts": [{"fact_id": "fact-000001", "value": "更新"}], "character_knowledge": {"char-main": []}, "reader_disclosures": [], "unresolved_thread_states": {}, "timeline_position": 1}})
     for directory, artifact_kind, identifier in (
         ("design/scene-cards", "scene-card", "scene-card-v01-c01-s01-000001"),
         ("scenes", "scene-prose", "scene-prose-v01-c01-s01-000001"),
         ("scenes", "continuity-update", "continuity-v01-c01-s01-000001"),
         ("quality", "quality-disposition", "quality-000001"),
     ):
-        record = {"schema_version": 1, "artifact_id": identifier, "artifact_kind": artifact_kind, "input_selection_id": "selection-000001", "created_at": NOW, "content": {}}
+        input_selection_id = "selection-888886" if artifact_kind in {"scene-card", "scene-prose"} else "selection-888885" if artifact_kind == "continuity-update" else None
+        record = {"schema_version": 1, "artifact_id": identifier, "artifact_kind": artifact_kind, "input_selection_id": input_selection_id, "created_at": NOW, "content": {}}
+        if artifact_kind == "scene-prose":
+            record["content"] = {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "text": "本文"}
+        elif artifact_kind == "continuity-update":
+            record["content"] = {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "changes": []}
+        elif artifact_kind == "scene-card":
+            record["content"] = {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "場面1", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]}
         if artifact_kind == "quality-disposition":
             record = {"schema_version": 1, "quality_id": identifier, "candidate_id": "candidate-000001", "review_record_ids": ["review-000001"], "revision_count": 0, "result": "accepted", "remaining_major_issues": [], "created_at": NOW}
         write_record(root, f"{directory}/{identifier}", record)
+    for adoption_id, content_id in (("adoption-000001", "scene-prose-v01-c01-s01-000001"), ("adoption-000002", "continuity-v01-c01-s01-000001")):
+        write_record(root, f"runtime/adoptions/{adoption_id}", {"schema_version": 1, "adoption_id": adoption_id, "source_kind": "candidate", "candidate_id": "candidate-000001", "quality_id": "quality-000001", "output_content_artifact_ids": [content_id], "output_selection_id": "selection-000001", "input_selection_id": "selection-999999", "created_at": NOW})
     write_record(root, f"{staging}/scene-commit-v01-c01-s01-000001", {"schema_version": 1,
         "scene_commit_id": "scene-commit-v01-c01-s01-000001",
         "scene_id": "scene-v01-c01-s01-000002",
@@ -125,7 +147,7 @@ def populate_scene_commit_staging(root: Path) -> None:
         "scene_number": 1,
         "created_at": NOW,
     })
-    write_record(root, f"{staging}/selection-000002", {"schema_version": 1, "selection_id": "selection-000002", "input_selection_id": "selection-000001", "slots": {"settings": "settings-000001", "scene_commit.v01.c01.s01": "scene-commit-v01-c01-s01-000001"}, "created_at": NOW})
+    write_record(root, f"{staging}/selection-000002", {"schema_version": 1, "selection_id": "selection-000002", "input_selection_id": "selection-000001", "slots": {**input_slots, "scene.v01.c01.s01": "scene-v01-c01-s01-000002", "current_state": "gen-000002", "scene_commit.v01.c01.s01": "scene-commit-v01-c01-s01-000001"}, "created_at": NOW})
 
 
 class CommitRecoveryTests(unittest.TestCase):
@@ -383,7 +405,7 @@ class CommitRecoveryTests(unittest.TestCase):
             selection.write_text(json.dumps(value), encoding="utf-8")
             RunStateStore(root).save(candidate_adoption_state())
 
-            with self.assertRaisesRegex(ContractError, "output selection delta"):
+            with self.assertRaisesRegex(ContractError, "slots"):
                 recover_pending_commit(root)
 
     def test_recovers_a_real_closed_scene_commit_manifest_without_mocks(self) -> None:
@@ -400,6 +422,24 @@ class CommitRecoveryTests(unittest.TestCase):
             self.assertIsNone(recovered["pending_commit"])
             self.assertEqual(recovered["current_stage"], "scene_plan")
             self.assertTrue((root / "scenes/scene-commit-v01-c01-s01-000001/record.json").is_file())
+
+    def test_scene_commit_recovery_rejects_output_selection_slot_deletion_before_move(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for parent in ("scenes", "generations", "runtime/selections"):
+                (root / parent).mkdir(parents=True)
+            write_record(root, "runtime/settings/settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected"}, "created_at": NOW})
+            populate_scene_commit_staging(root)
+            RunStateStore(root).save(scene_commit_state())
+            selection_path = root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/selection-000002/record.json"
+            selection = json.loads(selection_path.read_text(encoding="utf-8"))
+            del selection["slots"]["scene_card.v01.c01.s01"]
+            selection_path.write_text(json.dumps(selection) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ContractError, "slot delta"):
+                recover_pending_commit(root)
+            self.assertFalse((root / "scenes/scene-v01-c01-s01-000002").exists())
+            self.assertTrue(selection_path.is_file())
 
     def test_scene_commit_recovery_rejects_missing_referenced_artifact_before_state_update(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

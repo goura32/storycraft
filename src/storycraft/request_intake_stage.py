@@ -16,10 +16,11 @@ from .artifact_record import validate_record
 from .artifact_registry import artifact_directory
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
+from .input_normalization import normalize_request
 from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
-from .workspace import _validate_request, validate_workspace
+from .workspace import validate_workspace
 
 
 def create_request_intake_stage_service(workspace_root: Path) -> "RequestIntakeStageService":
@@ -66,7 +67,7 @@ class RequestIntakeStageService:
 
         bind_call([keywords_id, settings_id])
         candidate = self._call_valid(model.generate, ("request_intake", deepcopy(context)), self._candidate, invalid_limit)
-        candidate_id = self._reserve_directory_id("candidates", "candidate")
+        candidate_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
         generate_call = self._write_call(model, "generate", None, [keywords_id, settings_id], candidate, settings_id, updated_at)
         self._write_audit("candidates", candidate_id, {
             "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": "request",
@@ -84,7 +85,7 @@ class RequestIntakeStageService:
                 model.review, ("request_intake", deepcopy(context), deepcopy(candidate)),
                 lambda value: CandidateStageRunner._review_with_evidence(value, candidate["payload"]), invalid_limit,
             )
-            review_id = self._reserve_directory_id("reviews", "review")
+            review_id = f"review-{reserve_counter(self.workspace_root, 'next_review'):06d}"
             review_call = self._write_call(model, "review", candidate_id, [keywords_id, settings_id, candidate_id], review, settings_id, updated_at)
             self._write_audit("reviews", review_id, {
                 "schema_version": 1, "review_id": review_id, "candidate_id": candidate_id,
@@ -110,7 +111,7 @@ class RequestIntakeStageService:
                 # Keep the last structurally valid candidate only for the
                 # explicitly unbounded quality policy.
                 break
-            revised_id = self._reserve_directory_id("candidates", "candidate")
+            revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call = self._write_call(model, "revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
             self._write_audit("candidates", revised_id, {
                 "schema_version": 1, "candidate_id": revised_id, "artifact_kind": "request",
@@ -142,7 +143,7 @@ class RequestIntakeStageService:
         quality_id: str, settings_id: str, updated_at: str,
     ) -> dict[str, Any]:
         request_id = f"request-{reserve_counter(self.workspace_root, 'next_request'):06d}"
-        adoption_id = self._reserve_directory_id("runtime/adoptions", "adoption")
+        adoption_id = f"adoption-{reserve_counter(self.workspace_root, 'next_adoption'):06d}"
         selection_id = f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"
         staging_root = f"runtime/staging/{adoption_id}"
         selection = {
@@ -194,7 +195,8 @@ class RequestIntakeStageService:
     def _candidate(value: object) -> dict[str, Any]:
         if not isinstance(value, dict) or set(value) != {"schema_version", "artifact_kind", "payload"} or value.get("schema_version") != "candidate-response-v1" or value.get("artifact_kind") != "request" or not isinstance(value.get("payload"), dict):
             raise ContractError("request_intake candidate responseが不正です")
-        _validate_request(value["payload"])
+        value = dict(value)
+        value["payload"] = normalize_request(value["payload"])
         return value
 
     @staticmethod
@@ -260,17 +262,6 @@ class RequestIntakeStageService:
             })
             return call_id
         return physical_id
-
-    def _reserve_directory_id(self, relative_root: str, prefix: str) -> str:
-        directory = self.workspace_root / relative_root
-        highest = 0
-        for entry in directory.iterdir():
-            if entry.is_dir() and entry.name.startswith(prefix + "-"):
-                try:
-                    highest = max(highest, int(entry.name.rsplit("-", 1)[1]))
-                except ValueError:
-                    continue
-        return f"{prefix}-{highest + 1:06d}"
 
     def _write_audit(self, relative_root: str, artifact_id: str, record: dict[str, Any]) -> None:
         self._write_staged(f"{relative_root}/{artifact_id}", record)

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from storycraft.artifact_ids import initial_counters
 from storycraft.run_state import RunStateStore
-from storycraft.scene_commit_stage import SceneCommitStageService
+from storycraft.scene_commit_stage import SceneCommitStageService, slots_to_ids
 from storycraft.selection_snapshot import SelectionSnapshotStore
 from storycraft.series_contracts import ContractError
 
@@ -184,9 +184,17 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
         "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001",
         "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
-        "scene_prose_disposition.v01.c01.s01": "quality-000001", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001",
-        "continuity_disposition.v01.c01.s01": "quality-000002",
+        "scene_prose_disposition.v01.c01.s01": "quality-000001", "scene_prose_adoption.v01.c01.s01": "adoption-000001", "continuity_update.v01.c01.s01": "continuity-v01-c01-s01-000001",
+        "continuity_disposition.v01.c01.s01": "quality-000002", "continuity_adoption.v01.c01.s01": "adoption-000002",
         "current_state": "gen-000001",
+    })
+    write_json(root / "runtime/adoptions/adoption-000001/record.json", {
+        "schema_version": 1, "adoption_id": "adoption-000001", "source_kind": "candidate", "candidate_id": "candidate-000001", "quality_id": "quality-000001",
+        "output_content_artifact_ids": ["scene-prose-v01-c01-s01-000001"], "output_selection_id": current["selection_id"], "input_selection_id": scene_inputs["selection_id"], "created_at": NOW,
+    })
+    write_json(root / "runtime/adoptions/adoption-000002/record.json", {
+        "schema_version": 1, "adoption_id": "adoption-000002", "source_kind": "candidate", "candidate_id": "candidate-000002", "quality_id": "quality-000002",
+        "output_content_artifact_ids": ["continuity-v01-c01-s01-000001"], "output_selection_id": current["selection_id"], "input_selection_id": scene_inputs["selection_id"], "created_at": NOW,
     })
     for artifact_id in ("scene-card-v01-c01-s01-000001", "scene-prose-v01-c01-s01-000001", "continuity-v01-c01-s01-000001"):
         directory = "design/scene-cards" if artifact_id.startswith("scene-card") else "scenes"
@@ -214,6 +222,16 @@ class SceneCommitStageV2Tests(unittest.TestCase):
             SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]})
         with self.assertRaisesRegex(ContractError, "timeline_position"):
             SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "add", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]})
+
+    def test_slots_to_ids_preserves_canonical_record_ids(self) -> None:
+        self.assertEqual(
+            slots_to_ids({"initial_design_adoption": {"adoption_id": "adoption-000002", "quality_id": "quality-000002"}}),
+            {"initial_design_adoption": "adoption-000002"},
+        )
+        self.assertEqual(
+            slots_to_ids({"scene_commit.v01.c01.s01": {"scene_commit_id": "scene-commit-v01-c01-s01-000001"}}),
+            {"scene_commit.v01.c01.s01": "scene-commit-v01-c01-s01-000001"},
+        )
 
     def test_commits_selected_scene_once_with_prose_disposition_and_advances_to_next_scene(self) -> None:
         temporary, root = workspace()

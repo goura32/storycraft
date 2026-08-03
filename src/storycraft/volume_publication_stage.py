@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .artifact_record import validate_record
 from .artifact_ids import reserve_counter
 from .commit_recovery import recover_pending_commit
 from .publication_builder import build_volume_publication_files, validate_volume_publication_files
@@ -155,6 +156,7 @@ class VolumePublicationStageService:
             for scene in self._ordered_numbers(chapter_content, "scenes", "scene_number"):
                 coordinate = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
                 committed = self._slot(slots, f"scene.{coordinate}")
+                commit_record = self._slot(slots, f"scene_commit.{coordinate}")
                 prose = self._slot(slots, f"scene_prose.{coordinate}")
                 quality = self._slot(slots, f"scene_prose_disposition.{coordinate}")
                 continuity_quality = self._slot(slots, f"continuity_disposition.{coordinate}")
@@ -162,6 +164,16 @@ class VolumePublicationStageService:
                 continuity = self._slot(slots, f"continuity_update.{coordinate}")
                 self._validate_quality_record(quality, "scene_prose_disposition")
                 self._validate_quality_record(continuity_quality, "continuity_disposition")
+                commit_id = self._record_id(commit_record, "scene_commit_id")
+                validate_record("scene-commit", commit_id, commit_record)
+                if (
+                    commit_record.get("scene_id") != committed.get("artifact_id")
+                    or commit_record.get("scene_prose_id") != prose.get("artifact_id")
+                    or commit_record.get("scene_card_id") != scene_card.get("artifact_id")
+                    or commit_record.get("continuity_update_id") != continuity.get("artifact_id")
+                    or commit_record.get("quality_disposition_id") != quality.get("quality_id")
+                ):
+                    raise ContractError("巻公開のscene_commit recordがselection sourceと一致しません")
                 source_state_id = self._committed_input_state_id(committed)
                 self._validate_committed_source(committed, prose, quality, scene_card, continuity, source_state_id, volume, chapter, scene)
                 scene_ids.append(self._record_id(committed, "artifact_id"))

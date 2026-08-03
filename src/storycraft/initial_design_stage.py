@@ -287,19 +287,10 @@ class InitialDesignStageService:
             })
 
         thread_states: dict[str, Any] = {}
-        for index, thread in enumerate(content["unresolved_threads"], start=1):
-            thread_id = f"thread-{index:06d}"
-            if isinstance(thread, dict):
-                description = thread.get("description", "")
-                required_for_ending = bool(thread.get("required_for_ending", False))
-            else:
-                description = str(thread)
-                required_for_ending = False
-            thread_states[thread_id] = {
-                "status": "open",
-                "description": description,
-                "required_for_ending": required_for_ending,
-            }
+        for thread in content["unresolved_threads"]:
+            if not isinstance(thread, dict) or not isinstance(thread.get("name"), str):
+                raise ContractError("unresolved_threadのnameが不正です")
+            thread_states[thread["name"]] = {"status": "open"}
         return {
             "story_facts": facts,
             "character_knowledge": character_knowledge,

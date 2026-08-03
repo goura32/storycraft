@@ -269,7 +269,8 @@ def slots_to_ids(slots: dict[str, dict[str, Any]]) -> dict[str, str]:
     """Recover the ID field from resolved immutable records without path lookup."""
     result: dict[str, str] = {}
     for slot, record in slots.items():
-        artifact_id = record.get("artifact_id") or record.get("settings_id") or record.get("quality_id")
+        fields = ("artifact_id", "settings_id", "adoption_id", "quality_id", "scene_commit_id", "selection_id", "publication_id", "call_id")
+        artifact_id = next((record.get(field) for field in fields if isinstance(record.get(field), str)), None)
         if not isinstance(artifact_id, str):
             raise ContractError("selection入力recordのIDが不正です")
         result[slot] = artifact_id

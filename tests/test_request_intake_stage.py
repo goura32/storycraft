@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,10 @@ class RequestIntakeStageTests(unittest.TestCase):
             }))
             self.assertTrue((root / "inputs/request-000001/record.json").is_file())
             self.assertTrue((root / "runtime/adoptions/adoption-000001/record.json").is_file())
+            counters = json.loads((root / "runtime/counters.json").read_text(encoding="utf-8"))
+            self.assertEqual(counters["next_candidate"], 2)
+            self.assertEqual(counters["next_review"], 2)
+            self.assertEqual(counters["next_adoption"], 2)
             self.assertEqual(
                 RunStateStore(root).load()["current_selection_id"], "selection-000001",
             )

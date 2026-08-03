@@ -136,6 +136,13 @@ class LLMClient:
         self.raw_dir = raw_dir
 
         llm = settings.llm
+        # V2 Ollama uses the urllib boundary in storycraft.ollama, which performs
+        # the documented per-model capability call and persists its own audit
+        # record.  Do not initialize the retired OpenAI SDK health probe here:
+        # it would issue an unrecorded GET /v1/models before the V2 boundary.
+        if llm.get("v2_openai_ollama", False):
+            self.client: Any = None
+            return
         base_url = llm["base_url"]
 
         first_event_timeout = _positive_seconds(

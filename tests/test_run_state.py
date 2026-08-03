@@ -175,3 +175,15 @@ class RunStateV2Tests(unittest.TestCase):
             "evidence_refs": ["validation-000001"], "occurred_at": "2026-07-28T00:00:01Z",
         })
         self.assertIs(validate_run_state(state), state)
+
+    def test_published_volume_id_is_canonical_and_timestamp_is_utc(self) -> None:
+        state = copy.deepcopy(BASE_STATE)
+        state["published_volumes"] = [{"volume_number": 1, "publication_id": "volume-pub-v01-../../escape"}]
+        with self.assertRaises(ContractError):
+            validate_run_state(state)
+
+        state = copy.deepcopy(BASE_STATE)
+        state["created_at"] = "2026-07-28T00:00:00"
+        state["updated_at"] = "2026-07-28T00:00:00+00:00"
+        with self.assertRaises(ContractError):
+            validate_run_state(state)

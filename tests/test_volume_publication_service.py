@@ -47,26 +47,26 @@ def quality_record(quality_id: str, candidate_id: str, review_id: str, *, notice
         "schema_version": 1, "quality_id": quality_id, "candidate_id": candidate_id,
         "review_record_ids": [review_id], "revision_count": 0,
         "result": "accepted_with_notice" if notice else "accepted",
-        "remaining_major_issues": ["remaining"] if notice else [],
+        "remaining_major_issues": [{"code": "quality.critical", "message": "編集上の注意", "evidence_locations": ["$.text"]}] if notice else [],
         **({"notice_type": "編集"} if notice else {}), "created_at": NOW,
     }
 
 
-def write_quality_audit(root: Path, quality_id: str, prose: dict, *, notice: bool) -> None:
+def write_quality_audit(root: Path, quality_id: str, payload: dict, *, notice: bool, artifact_kind: str = "scene-prose", input_selection_id: str = "selection-000001") -> None:
     suffix = quality_id.rsplit("-", 1)[1]
     candidate_id, review_id = f"candidate-{suffix}", f"review-{suffix}"
     generate_call_id, review_call_id = f"call-{suffix}", f"call-{900000 + int(suffix):06d}"
     write_json(root / "runtime/calls" / generate_call_id / "record.json", {
-        "schema_version": 1, "call_id": generate_call_id, "operation": "generate", "role": "scene_prose",
-        "target_candidate_id": None, "input_refs": ["selection-000001"], "technical_attempt": 1, "format_attempt": 1,
+        "schema_version": 1, "call_id": generate_call_id, "operation": "generate", "role": artifact_kind,
+        "target_candidate_id": None, "input_refs": [input_selection_id], "technical_attempt": 1, "format_attempt": 1,
         "seed": 1, "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
         "request": "{}", "response": "{}", "transport": "success",
         "validation": {"result": "valid", "checks": [], "failure_code": None},
     })
     write_json(root / "candidates" / candidate_id / "record.json", {
-        "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": "scene-prose",
-        "input_selection_id": "selection-000001", "keywords_id": None, "settings_id": "settings-000001",
-        "payload": prose, "parent_candidate_id": None, "review_record_id": None,
+        "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": artifact_kind,
+        "input_selection_id": input_selection_id, "keywords_id": None, "settings_id": "settings-000001",
+        "payload": payload, "parent_candidate_id": None, "review_record_id": None,
         "call_id": generate_call_id, "created_at": NOW,
     })
     response = (
@@ -78,7 +78,7 @@ def write_quality_audit(root: Path, quality_id: str, prose: dict, *, notice: boo
         "response": response, "call_id": review_call_id, "created_at": NOW,
     })
     write_json(root / "runtime/calls" / review_call_id / "record.json", {
-        "schema_version": 1, "call_id": review_call_id, "operation": "review", "role": "scene_prose",
+        "schema_version": 1, "call_id": review_call_id, "operation": "review", "role": artifact_kind,
         "target_candidate_id": candidate_id, "input_refs": [candidate_id], "technical_attempt": 1, "format_attempt": 1,
         "seed": 1, "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
         "request": "{}", "response": "{}", "transport": "success",
@@ -94,7 +94,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
         "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
         "runtime/staging", "runtime/selections", "runtime/calls",
         "runtime/adoptions", "design", "design/initial", "design/series-plans",
-        "design/volume-plans", "design/chapter-plans", "design/scene-plans", "generations",
+        "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations",
         "scenes", "publications",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
@@ -228,7 +228,89 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
                 else scene_inputs["selection_id"]
             )
             write_json(record_path, record)
-    selection = selections.create(input_selection_id=scene_inputs["selection_id"], slots=slots, created_at=NOW)
+    current_selection_id = scene_inputs["selection_id"]
+    current_slots = dict(scene_inputs["slots"])
+    adoption_number = 1
+    scene_order = [(chapter, scene) for chapter, scenes in ((1, (1, 2)), (2, (1,))) for scene in scenes]
+    for chapter, scene in scene_order:
+        coordinate = f"v01.c{chapter:02d}.s{scene:02d}"
+        prose_id = slots[f"scene_prose.{coordinate}"]
+        prose_quality_id = slots[f"scene_prose_disposition.{coordinate}"]
+        prose_suffix = prose_quality_id.rsplit("-", 1)[1]
+        prose_candidate_id = f"candidate-{prose_suffix}"
+        prose_candidate_path = root / "candidates" / prose_candidate_id / "record.json"
+        prose_candidate = json.loads(prose_candidate_path.read_text(encoding="utf-8"))
+        prose_candidate["input_selection_id"] = current_selection_id
+        write_json(prose_candidate_path, prose_candidate)
+        prose_call_path = root / "runtime/calls" / prose_candidate["call_id"] / "record.json"
+        prose_call = json.loads(prose_call_path.read_text(encoding="utf-8"))
+        prose_call["input_refs"] = [current_selection_id]
+        write_json(prose_call_path, prose_call)
+        prose_adoption_id = f"adoption-{adoption_number:06d}"
+        adoption_number += 1
+        prose_slots = dict(current_slots)
+        prose_slots[f"scene_prose_adoption.{coordinate}"] = prose_adoption_id
+        prose_slots[f"scene_prose_disposition.{coordinate}"] = prose_quality_id
+        prose_selection = selections.create(input_selection_id=current_selection_id, slots=prose_slots, created_at=NOW)
+        write_json(root / "runtime/adoptions" / prose_adoption_id / "record.json", {
+            "schema_version": 1, "adoption_id": prose_adoption_id, "source_kind": "candidate",
+            "input_selection_id": current_selection_id, "output_selection_id": prose_selection["selection_id"],
+            "candidate_id": prose_candidate_id, "quality_id": prose_quality_id,
+            "output_content_artifact_ids": [prose_id], "created_at": NOW,
+        })
+        current_selection_id, current_slots = prose_selection["selection_id"], prose_selection["slots"]
+
+        continuity_id = slots[f"continuity_update.{coordinate}"]
+        continuity_quality_id = slots[f"continuity_disposition.{coordinate}"]
+        continuity_suffix = continuity_quality_id.rsplit("-", 1)[1]
+        continuity_candidate_id = f"candidate-{continuity_suffix}"
+        continuity_candidate_path = root / "candidates" / continuity_candidate_id / "record.json"
+        continuity_candidate = json.loads(continuity_candidate_path.read_text(encoding="utf-8"))
+        continuity_candidate["artifact_kind"] = "continuity-update"
+        continuity_candidate["input_selection_id"] = current_selection_id
+        continuity_candidate["payload"] = json.loads((root / "scenes" / continuity_id / "record.json").read_text(encoding="utf-8"))["content"]
+        write_json(continuity_candidate_path, continuity_candidate)
+        continuity_call_path = root / "runtime/calls" / continuity_candidate["call_id"] / "record.json"
+        continuity_call = json.loads(continuity_call_path.read_text(encoding="utf-8"))
+        continuity_call["role"] = "continuity-update"
+        continuity_call["input_refs"] = [current_selection_id]
+        write_json(continuity_call_path, continuity_call)
+        continuity_adoption_id = f"adoption-{adoption_number:06d}"
+        adoption_number += 1
+        continuity_slots = dict(current_slots)
+        continuity_slots[f"continuity_update.{coordinate}"] = continuity_id
+        continuity_slots[f"continuity_adoption.{coordinate}"] = continuity_adoption_id
+        continuity_slots[f"continuity_disposition.{coordinate}"] = continuity_quality_id
+        continuity_selection = selections.create(input_selection_id=current_selection_id, slots=continuity_slots, created_at=NOW)
+        write_json(root / "runtime/adoptions" / continuity_adoption_id / "record.json", {
+            "schema_version": 1, "adoption_id": continuity_adoption_id, "source_kind": "candidate",
+            "input_selection_id": current_selection_id, "output_selection_id": continuity_selection["selection_id"],
+            "candidate_id": continuity_candidate_id, "quality_id": continuity_quality_id,
+            "output_content_artifact_ids": [continuity_id], "created_at": NOW,
+        })
+        current_selection_id, current_slots = continuity_selection["selection_id"], continuity_selection["slots"]
+
+    final_slots = dict(current_slots)
+    for slot, artifact_id in slots.items():
+        if slot.startswith("scene.") or slot.startswith("scene_commit.") or slot.startswith("continuity_update."):
+            final_slots[slot] = artifact_id
+    for chapter, scene in scene_order:
+        coordinate = f"v01.c{chapter:02d}.s{scene:02d}"
+        committed_id = slots[f"scene.{coordinate}"]
+        scene_path = root / "scenes" / committed_id / "record.json"
+        scene_record = json.loads(scene_path.read_text(encoding="utf-8"))
+        scene_record["input_selection_id"] = current_selection_id
+        write_json(scene_path, scene_record)
+        commit_id = f"scene-commit-v01-c{chapter:02d}-s{scene:02d}-000001"
+        write_json(root / "scenes" / commit_id / "record.json", {
+            "schema_version": 1, "scene_commit_id": commit_id, "scene_id": committed_id,
+            "scene_card_id": slots[f"scene_card.{coordinate}"], "scene_prose_id": slots[f"scene_prose.{coordinate}"],
+            "continuity_update_id": slots[f"continuity_update.{coordinate}"], "current_state_id": "gen-000001",
+            "quality_disposition_id": slots[f"scene_prose_disposition.{coordinate}"],
+            "volume_number": 1, "chapter_number": chapter, "scene_number": scene, "created_at": NOW,
+        })
+        final_slots[f"scene_commit.{coordinate}"] = commit_id
+    selection = selections.create(input_selection_id=current_selection_id, slots=final_slots, created_at=NOW)
     RunStateStore(root).save({
         "schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None,
         "current_stage": "volume_publication", "current_target": {"volume_number": 1},
@@ -282,7 +364,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["kind"], "volume_publication")
         self.assertIsNone(pending["output_selection_id"])
         self.assertEqual(pending["state_update"], {
-            "current_selection_id": "selection-000005", "current_stage": "volume_plan",
+            "current_selection_id": "selection-000011", "current_stage": "volume_plan",
             "current_target": {"volume_number": 2},
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
         })
@@ -298,7 +380,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         state = VolumePublicationStageService(root).run(updated_at=NOW)
         self.assertEqual(state["current_stage"], "volume_plan")
         self.assertEqual(state["current_target"], {"volume_number": 2})
-        self.assertEqual(state["current_selection_id"], "selection-000005")
+        self.assertEqual(state["current_selection_id"], "selection-000011")
         publication = root / "publications/volume-pub-v01-000001"
         self.assertTrue(publication.is_dir())
         manuscript = (publication / "manuscript.md").read_text(encoding="utf-8")
@@ -421,7 +503,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["state_update"], {
             "status": "completed",
             "last_error": None,
-            "current_selection_id": "selection-000005",
+            "current_selection_id": "selection-000011",
             "current_stage": None,
             "current_target": None,
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],

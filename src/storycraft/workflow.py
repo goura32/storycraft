@@ -77,7 +77,7 @@ def _model_settings_from_payload(payload: dict[str, Any]) -> Any:
                 "base_url": payload["endpoint"],
                 "model": payload["model"],
                 "thinking": True,
-                "stream": True,
+                "stream": False,
                 "first_event_timeout_seconds": 3600,
                 "idle_timeout_seconds": 600,
                 "stream_progress_log_interval_seconds": 60,

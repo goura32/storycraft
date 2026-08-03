@@ -95,7 +95,7 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections",
         "runtime/staging", "runtime/calls", "runtime/adoptions",
         "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans",
-        "design/scene-plans", "generations", "scenes", "publications",
+        "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications",
     ):
         (root / relative).mkdir(parents=True)
     _write_json(root / "runtime/counters.json", initial_counters())
@@ -234,6 +234,9 @@ class InitialDesignStageV2Tests(unittest.TestCase):
             }
             create_workspace(root, workspace_id="ws-000001", request=request, settings=settings, created_at=TIMESTAMP)
             input_selection_id = RunStateStore(root).load()["current_selection_id"]
+            direct_adoption = root / "runtime/adoptions/adoption-000001/record.json"
+            self.assertTrue(direct_adoption.is_file())
+            self.assertEqual(json.loads(direct_adoption.read_text(encoding="utf-8"))["source_kind"], "direct_request")
 
             # DO NOT pre-write initial-design or generation records - they will be created by the stage
             # and placed in staging. Pre-writing them causes staging/final conflict.

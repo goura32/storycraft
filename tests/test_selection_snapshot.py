@@ -36,6 +36,11 @@ class SelectionSnapshotTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             validate_selection_snapshot(snapshot)
 
+    def test_rejects_unknown_coordinate_slot_name(self) -> None:
+        snapshot = {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"unknown.v01": "request-000001"}, "created_at": "2026-07-29T00:00:00Z"}
+        with self.assertRaises(ContractError):
+            validate_selection_snapshot(snapshot)
+
     def test_creates_immutable_snapshot_with_parent_reference(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             store = self._store(Path(temporary))

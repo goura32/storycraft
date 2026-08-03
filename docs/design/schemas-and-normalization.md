@@ -144,7 +144,7 @@
   "revision_count": 2,
   "result": "accepted_with_notice",
   "remaining_major_issues": [
-    {"code": "quality.contradiction", "message": "string", "evidence_locations": []}
+    {"code": "quality.contradiction", "message": "string", "evidence_locations": ["$.path"]}
   ],
   "notice_type": "編集",
   "created_at": "RFC3339"

@@ -147,11 +147,17 @@ class CandidateStageRunner:
             revision_count += 1
 
     def updated_slots(self, input_slots: dict[str, str], content_id: str, adoption_id: str, quality_id: str) -> dict[str, str]:
-        """Return next immutable selection slots, invalidating continuity after prose changes."""
+        """Return next immutable selection slots, invalidating same-scene continuity after prose changes."""
         slots = dict(input_slots)
-        if self.spec.artifact_kind == "scene-prose":
-            slots = {key: value for key, value in slots.items() if not key.startswith("continuity_")}
         slot = canonical_slot(self.spec.artifact_kind, content_id)
+        if self.spec.artifact_kind == "scene-prose":
+            coordinate = slot.split(".", 1)[1]
+            stale = {
+                f"continuity_update.{coordinate}",
+                f"continuity_adoption.{coordinate}",
+                f"continuity_disposition.{coordinate}",
+            }
+            slots = {key: value for key, value in slots.items() if key not in stale}
         slots[slot] = content_id
         if self.spec.artifact_kind == "initial-design":
             slots["initial_design_adoption"] = adoption_id

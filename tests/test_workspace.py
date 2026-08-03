@@ -47,6 +47,24 @@ class WorkspaceV2Tests(unittest.TestCase):
             self.assertEqual(set(snapshot["slots"]), {"request", "settings"})
             validate_workspace(root)
 
+    def test_init_normalizes_request_and_settings_strings_before_persisting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "novel"
+            create_workspace(
+                root,
+                workspace_id="ws-test",
+                request={"title": " A\u0301 ", "genre": [" 幻想 "], "premise": " 前提 ", "required_elements": [" 灯台 "], "avoid": [], "ending_preference": " 希望 ", "volume_count": 4, "language": "ja"},
+                settings={"provider": "ollama", "endpoint": " http://127.0.0.1:11434 ", "model": " test-model ", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
+                created_at="2026-07-28T00:00:00Z",
+            )
+            request = json.loads((root / "inputs/request-000001/record.json").read_text(encoding="utf-8"))["content"]
+            settings = json.loads((root / "runtime/settings/settings-000001/record.json").read_text(encoding="utf-8"))["payload"]
+            self.assertEqual(request["title"], "Á")
+            self.assertEqual(request["genre"], ["幻想"])
+            self.assertEqual(request["required_elements"], ["灯台"])
+            self.assertEqual(settings["endpoint"], "http://127.0.0.1:11434")
+            self.assertEqual(settings["model"], "test-model")
+
     def test_refuses_existing_workspace_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "novel"
@@ -149,7 +167,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             (root / "design/scene-cards").rmdir()
             (root / "design/scene-cards").symlink_to(external, target_is_directory=True)
 
-            with self.assertRaisesRegex(Exception, "artifact record"):
+            with self.assertRaisesRegex(Exception, "scene-cards"):
                 validate_workspace(root)
 
     def test_completed_workspace_requires_exact_published_records_and_manuscripts(self) -> None:
@@ -387,7 +405,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             slots = SelectionSnapshotStore(root).load(initial["current_selection_id"])["slots"]
             completed_snapshot = {
                 "schema_version": 1, "selection_id": completed_selection,
-                "input_selection_id": scene_inputs["selection_id"],
+                "input_selection_id": "selection-999998",
                 "slots": {**slots, "series_plan": series_id, "volume_plan.v01": "volume-plan-v01-000001",
                           "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001",
                           "scene_plan.v01.c01.s01": scene_plan_id,
@@ -400,6 +418,31 @@ class WorkspaceV2Tests(unittest.TestCase):
             }
             selection_path = root / "runtime/selections" / completed_selection / "record.json"
             selection_path.parent.mkdir()
+            selection_path.write_text(json.dumps(completed_snapshot), encoding="utf-8")
+            candidate_path = root / "candidates/candidate-000001/record.json"
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["input_selection_id"] = scene_inputs["selection_id"]
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            call_path = root / "runtime/calls/call-000001/record.json"
+            call = json.loads(call_path.read_text(encoding="utf-8"))
+            call["input_refs"] = [scene_inputs["selection_id"]]
+            call_path.write_text(json.dumps(call), encoding="utf-8")
+            self._write_json(root / "runtime/adoptions/adoption-000001/record.json", {
+                "schema_version": 1, "adoption_id": "adoption-000001", "source_kind": "candidate",
+                "candidate_id": "candidate-000001", "quality_id": "quality-000001",
+                "output_content_artifact_ids": ["scene-prose-v01-c01-s01-000001"],
+                "output_selection_id": "selection-999998", "input_selection_id": scene_inputs["selection_id"],
+                "created_at": "2026-07-28T00:00:00Z",
+            })
+            self._write_json(root / "runtime/selections/selection-999998/record.json", {
+                "schema_version": 1, "selection_id": "selection-999998",
+                "input_selection_id": scene_inputs["selection_id"],
+                "slots": {**scene_inputs["slots"],
+                          "scene_prose_adoption.v01.c01.s01": "adoption-000001",
+                          "scene_prose_disposition.v01.c01.s01": "quality-000001"},
+                "created_at": "2026-07-28T00:00:00Z",
+            })
+            completed_snapshot["slots"]["scene_prose_adoption.v01.c01.s01"] = "adoption-000001"
             selection_path.write_text(json.dumps(completed_snapshot), encoding="utf-8")
             publication_id = "volume-pub-v01-000001"
             files = build_volume_publication_files(

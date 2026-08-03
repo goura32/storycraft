@@ -4,16 +4,19 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
-from .artifact_record import validate_call_record, validate_candidate_record, validate_record, validate_review_record
+from .artifact_record import validate_call_record, validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
 from .immutable_directory import finalize_immutable_directory
 from .publication_builder import validate_volume_publication_files
+from .review_contracts import validate_critique_fields
 from .run_state import RunStateStore, target_artifact_kind
 from .selection_authority import resolve_selection
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError
+from .time_contract import parse_utc_timestamp
 
 
 def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
@@ -292,29 +295,55 @@ def _validate_scene_commit_lineage(
             content = referenced.get("content")
             if not isinstance(content, dict) or not isinstance(content.get("current_state_id"), str):
                 raise ContractError("scene-commit sceneの入力current_state参照が不正です")
+            expected_scene = {
+                "scene_prose_id": record["scene_prose_id"],
+                "continuity_update_id": record["continuity_update_id"],
+                "scene_card_id": record["scene_card_id"],
+                "quality_disposition_id": record["quality_disposition_id"],
+                "coordinate": {
+                    "volume_number": record["volume_number"],
+                    "chapter_number": record["chapter_number"],
+                    "scene_number": record["scene_number"],
+                },
+            }
+            if any(content.get(field) != expected for field, expected in expected_scene.items()):
+                raise ContractError("scene-commit scene contentとrecordの参照束が一致しません")
             input_current_state_id = content["current_state_id"]
     input_snapshot = _single_record(_target_path(root, target_paths, "selection", input_selection_id))
     input_slots = validate_selection_snapshot(input_snapshot)["slots"]
     output_snapshot = _single_record(_target_path(root, target_paths, "selection", output_selection_id))
+    if output_snapshot["input_selection_id"] != input_selection_id:
+        raise ContractError("scene-commit output selectionの親selectionがinput selectionと一致しません")
     output_slots = validate_selection_snapshot(output_snapshot)["slots"]
     volume, chapter, scene = (record[key] for key in ("volume_number", "chapter_number", "scene_number"))
     prefix = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
     if input_current_state_id is None:
         raise ContractError("scene-commit sceneの入力current_state参照がありません")
-    expected_slots = {
-        f"scene.{prefix}": record["scene_id"],
+    expected_input_slots = {
         f"scene_card.{prefix}": record["scene_card_id"],
         f"scene_prose.{prefix}": record["scene_prose_id"],
         f"continuity_update.{prefix}": record["continuity_update_id"],
         f"scene_prose_disposition.{prefix}": record["quality_disposition_id"],
+        f"continuity_disposition.{prefix}": input_slots.get(f"continuity_disposition.{prefix}"),
         "current_state": input_current_state_id,
     }
-    for slot, identifier in expected_slots.items():
+    for slot, identifier in expected_input_slots.items():
         if slot not in input_slots:
             raise ContractError(f"scene-commit input selectionに必須slotがありません: {slot}")
         if input_slots[slot] != identifier:
             raise ContractError(f"scene-commit input selectionの{slot}が参照と一致しません")
+    scene_slot = f"scene.{prefix}"
     output_slot = f"scene_commit.{prefix}"
+    if output_slots.get(f"scene.{prefix}") != record["scene_id"]:
+        raise ContractError("scene-commit output selectionのscene座標slotが参照と一致しません")
+    if output_slots.get("current_state") != record["current_state_id"]:
+        raise ContractError("scene-commit output selectionのcurrent_stateが参照と一致しません")
+    expected_output_slots = dict(input_slots)
+    expected_output_slots[scene_slot] = record["scene_id"]
+    expected_output_slots["current_state"] = record["current_state_id"]
+    expected_output_slots[output_slot] = record["scene_commit_id"]
+    if output_slots != expected_output_slots:
+        raise ContractError("scene-commit output selectionのslot deltaが不正です")
     if output_slots.get(output_slot) != record["scene_commit_id"]:
         raise ContractError("scene-commit output selectionの座標slotが参照と一致しません")
 
@@ -342,10 +371,25 @@ def _validate_adoption(record: dict[str, Any], artifact_id: str) -> None:
         raise ContractError("adoption recordが不正です")
     if record["source_kind"] not in {"candidate", "direct_request"} or not isinstance(record["output_content_artifact_ids"], list) or not record["output_content_artifact_ids"]:
         raise ContractError("adoption recordが不正です")
-    if not isinstance(record["output_selection_id"], str) or not record["output_selection_id"].startswith("selection-"):
-        raise ContractError("adoption recordのoutput_selection_idが不正です")
-    if record["input_selection_id"] is not None and (not isinstance(record["input_selection_id"], str) or not record["input_selection_id"].startswith("selection-")):
-        raise ContractError("adoption recordのinput_selection_idが不正です")
+    try:
+        artifact_spec("selection").match_id(record["output_selection_id"])
+    except ContractError as exc:
+        raise ContractError("adoption recordのoutput_selection_idが不正です") from exc
+    if record["input_selection_id"] is not None:
+        try:
+            artifact_spec("selection").match_id(record["input_selection_id"])
+        except ContractError as exc:
+            raise ContractError("adoption recordのinput_selection_idが不正です") from exc
+    if record["source_kind"] == "candidate":
+        try:
+            artifact_spec("quality-disposition").match_id(record["quality_id"])
+        except ContractError as exc:
+            raise ContractError("adoption recordのquality_idが不正です") from exc
+        if not isinstance(record["candidate_id"], str) or re.fullmatch(r"candidate-[0-9]{6}", record["candidate_id"]) is None:
+            raise ContractError("adoption recordのcandidate_idが不正です")
+    elif record["candidate_id"] is not None or record["quality_id"] is not None:
+        raise ContractError("direct_request adoptionのcandidate/quality参照が不正です")
+    parse_utc_timestamp(record["created_at"], "adoption recordのcreated_at")
 
 
 def _validate_candidate_adoption_lineage(
@@ -400,18 +444,26 @@ def _validate_candidate_adoption_lineage(
     lineage = _candidate_lineage(root, candidate_id)
     if candidate not in lineage:
         raise ContractError("candidate adoptionのcandidate lineageが不正です")
+    review_records: dict[str, dict[str, Any]] = {}
     for review_id in quality["review_record_ids"]:
         review = _audit_record(root, "reviews", review_id)
+        review_records[review_id] = review
         validate_review_record(review_id, review)
+        review_candidate = _audit_record(root, "candidates", review["candidate_id"])
+        validate_candidate_record(review["candidate_id"], review_candidate)
+        validate_critique_fields(review["response"], review_candidate["payload"])
         review_call_id = review["call_id"]
         review_call = _audit_record(root, "runtime/calls", review_call_id)
         validate_call_record(review_call_id, review_call)
-        if review.get("review_id") != review_id or review.get("candidate_id") not in {item["candidate_id"] for item in lineage} or review_call.get("operation") != "review" or review_call.get("target_candidate_id") != review.get("candidate_id") or review_call.get("settings_id") != candidate.get("settings_id"):
+        if review.get("review_id") != review_id or review.get("candidate_id") != candidate_id or review_call.get("operation") != "review" or review_call.get("target_candidate_id") != review.get("candidate_id") or review_call.get("settings_id") != candidate.get("settings_id"):
             raise ContractError("quality dispositionのreview/call参照が不正です")
+    validate_quality_evidence(quality, candidate["payload"], review_records)
     _validate_candidate_selection_delta(root, manifest, content_targets, adoption_target, quality_id, selection)
 
 
 def _audit_record(root: Path, directory: str, identifier: str) -> dict[str, Any]:
+    if not isinstance(identifier, str) or Path(identifier).name != identifier or "/" in identifier or "\\" in identifier:
+        raise ContractError("audit record IDが不正です")
     return _single_record(root / directory / identifier)
 
 
@@ -454,9 +506,15 @@ def _validate_candidate_selection_delta(root: Path, manifest: dict[str, Any], co
     expected = dict(input_selection["slots"])
     content_target = next(target for target in content_targets if target_artifact_kind(target) != "generation")
     kind, content_id = target_artifact_kind(content_target), content_target["artifact_id"]
-    if kind == "scene-prose":
-        expected = {slot: artifact_id for slot, artifact_id in expected.items() if not slot.startswith("continuity_")}
     content_slot = artifact_spec(kind).slot_for(content_id)
+    if kind == "scene-prose":
+        coordinate = content_slot.split(".", 1)[1]
+        stale = {
+            f"continuity_update.{coordinate}",
+            f"continuity_adoption.{coordinate}",
+            f"continuity_disposition.{coordinate}",
+        }
+        expected = {slot: artifact_id for slot, artifact_id in expected.items() if slot not in stale}
     expected[content_slot] = content_id
     adoption_id = adoption_target["artifact_id"]
     if kind == "initial-design":
@@ -494,8 +552,4 @@ def _validate_scene_commit_record(record: dict[str, Any], artifact_id: str) -> N
             raise ContractError("scene_commit recordの参照座標が一致しません")
     artifact_spec("generation").match_id(record["current_state_id"])
     artifact_spec("quality-disposition").match_id(record["quality_disposition_id"])
-    try:
-        from datetime import datetime
-        datetime.fromisoformat(record["created_at"].replace("Z", "+00:00"))
-    except (AttributeError, ValueError) as exc:
-        raise ContractError("scene_commit recordのcreated_atが不正です") from exc
+    parse_utc_timestamp(record["created_at"], "scene_commit recordのcreated_at")

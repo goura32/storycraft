@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sys
@@ -29,7 +30,10 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _load_object(path: str) -> dict[str, Any]:
     try:
-        value = json.loads(Path(path).read_text(encoding="utf-8"))
+        text = Path(path).read_text(encoding="utf-8")
+        if not text.endswith("\n"):
+            raise ContractError("入力JSONはUTF-8・末尾改行必須です")
+        value = json.loads(text)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ContractError("入力JSONを読めません") from exc
     if not isinstance(value, dict):
@@ -76,7 +80,7 @@ def cmd_init(args: argparse.Namespace) -> dict[str, object]:
         request=request,
         keywords=keywords,
         settings=settings,
-        created_at="2026-07-29T00:00:00Z",
+        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
     state = RunStateStore(root).load()
     # V1 spec: init returns workspace_id, status=created, current_selection_id (no run_id)

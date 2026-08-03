@@ -6,6 +6,7 @@ import ipaddress
 import math
 import os
 from pathlib import Path
+import re
 import socket
 import tempfile
 import unicodedata
@@ -13,9 +14,11 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 from .artifact_ids import initial_counters
-from .artifact_record import validate_call_record, validate_candidate_record, validate_record, validate_review_record
+from .artifact_record import validate_call_record, validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS
+from .input_normalization import normalize_request, normalize_settings
 from .publication_builder import validate_volume_publication_files
+from .review_contracts import validate_critique_fields
 from .run_state import RunStateStore
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
@@ -26,7 +29,7 @@ _V2_DIRECTORIES = (
     "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
     "runtime/staging", "runtime/selections", "runtime/calls",
     "runtime/adoptions", "design", "design/initial", "design/series-plans",
-    "design/volume-plans", "design/chapter-plans", "design/scene-plans", "generations",
+    "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations",
     "scenes", "publications",
 )
 
@@ -51,9 +54,10 @@ def create_workspace(
     if keywords is not None and not isinstance(keywords, dict):
         raise ContractError("keywordsはobjectでなければなりません")
     if request is not None:
-        _validate_request(request)
+        request = normalize_request(request)
     if keywords is not None:
         keywords = _normalize_keywords(keywords)
+    settings = normalize_settings(settings)
     _validate_settings(settings)
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
@@ -62,7 +66,6 @@ def create_workspace(
     try:
         for relative in _V2_DIRECTORIES:
             (staging / relative).mkdir(parents=True, exist_ok=True)
-        (staging / "design/scene-cards").mkdir(parents=True, exist_ok=True)
         settings_id = "settings-000001"
         _write_json(staging / "runtime/settings" / settings_id / "record.json", {
             "schema_version": 1,
@@ -83,6 +86,20 @@ def create_workspace(
                 "created_at": created_at,
             })
             counters["next_request"] = 2
+            adoption_id = "adoption-000001"
+            selection_id = "selection-000001"
+            _write_json(staging / "runtime/adoptions" / adoption_id / "record.json", {
+                "schema_version": 1,
+                "adoption_id": adoption_id,
+                "source_kind": "direct_request",
+                "candidate_id": None,
+                "quality_id": None,
+                "output_content_artifact_ids": [request_id],
+                "output_selection_id": selection_id,
+                "input_selection_id": None,
+                "created_at": created_at,
+            })
+            counters["next_adoption"] = 2
             _write_json(staging / "runtime/counters.json", counters)
             selection = SelectionSnapshotStore(staging).create(slots={
                 "request": request_id,
@@ -137,6 +154,7 @@ def validate_workspace(workspace_root: Path) -> None:
             raise ContractError(f"v2 workspace必須directoryがありません: {relative}")
     state = RunStateStore(root).load()
     selection_id = state["current_selection_id"]
+    resolution_cache: dict[str, dict[str, dict[str, Any]]] = {}
     if selection_id is None:
         if state["current_stage"] != "request_intake":
             raise ContractError("selectionなしのstageが不正です")
@@ -144,14 +162,14 @@ def validate_workspace(workspace_root: Path) -> None:
     else:
         assert isinstance(selection_id, str)
         snapshot = SelectionSnapshotStore(root).load(selection_id)
-        resolved = resolve_selection(root, snapshot)
-    _validate_persisted_records(root)
+        resolved = resolve_selection(root, snapshot, resolution_cache=resolution_cache)
+    _validate_persisted_records(root, resolution_cache)
     if selection_id is not None:
-        _validate_selection_ancestry(root, selection_id)
+        _validate_selection_ancestry(root, selection_id, resolution_cache)
     _validate_published_publications(root, state, resolved)
 
 
-def _validate_selection_ancestry(root: Path, selection_id: str) -> None:
+def _validate_selection_ancestry(root: Path, selection_id: str, resolution_cache: dict[str, dict[str, dict[str, Any]]]) -> None:
     """Validate the current selection and every immutable parent snapshot."""
     store = SelectionSnapshotStore(root)
     seen: set[str] = set()
@@ -162,13 +180,72 @@ def _validate_selection_ancestry(root: Path, selection_id: str) -> None:
         seen.add(current_id)
         try:
             snapshot = store.load(current_id)
-            resolve_selection(root, snapshot)
+            resolve_selection(root, snapshot, resolution_cache=resolution_cache)
         except ContractError as exc:
             raise ContractError("ancestor selectionが不正です") from exc
         current_id = snapshot["input_selection_id"]
 
 
-def _validate_persisted_records(root: Path) -> None:
+def _validate_selection_scene_commit_lineage(root: Path, snapshot: dict[str, Any], resolved: dict[str, dict[str, Any]]) -> None:
+    for slot, commit in resolved.items():
+        match = re.fullmatch(r"scene_commit\.(v\d{2}\.c\d{2}\.s\d{2})", slot)
+        if match is None:
+            continue
+        coordinate = match.group(1)
+        references = {
+            "scene": resolved.get(f"scene.{coordinate}"),
+            "scene_card": resolved.get(f"scene_card.{coordinate}"),
+            "scene_prose": resolved.get(f"scene_prose.{coordinate}"),
+            "continuity_update": resolved.get(f"continuity_update.{coordinate}"),
+            "scene_prose_disposition": resolved.get(f"scene_prose_disposition.{coordinate}"),
+            "continuity_disposition": resolved.get(f"continuity_disposition.{coordinate}"),
+            "current_state": resolved.get("current_state"),
+        }
+        if any(not isinstance(value, dict) for value in references.values()):
+            raise ContractError(f"{slot}のselection lineageが不完全です")
+        typed_references = {key: value for key, value in references.items() if isinstance(value, dict)}
+        if len(typed_references) != len(references):
+            raise ContractError(f"{slot}のselection lineageが不完全です")
+        if (
+            commit.get("scene_id") != typed_references["scene"].get("artifact_id")
+            or commit.get("scene_card_id") != typed_references["scene_card"].get("artifact_id")
+            or commit.get("scene_prose_id") != typed_references["scene_prose"].get("artifact_id")
+            or commit.get("continuity_update_id") != typed_references["continuity_update"].get("artifact_id")
+            or commit.get("quality_disposition_id") != typed_references["scene_prose_disposition"].get("quality_id")
+            or not _state_is_current_or_ancestor(
+                root,
+                snapshot,
+                commit.get("current_state_id"),
+                typed_references["current_state"].get("artifact_id"),
+            )
+        ):
+            raise ContractError(f"{slot}のscene参照束がselectionと一致しません")
+
+
+def _state_is_current_or_ancestor(root: Path, snapshot: dict[str, Any], commit_state_id: object, current_state_id: object) -> bool:
+    if not isinstance(commit_state_id, str) or not isinstance(current_state_id, str):
+        return False
+    if commit_state_id == current_state_id:
+        return True
+    current: dict[str, Any] = snapshot
+    seen: set[str] = set()
+    while True:
+        selection_id = current.get("selection_id")
+        if not isinstance(selection_id, str) or selection_id in seen:
+            return False
+        seen.add(selection_id)
+        if current.get("slots", {}).get("current_state") == commit_state_id:
+            return True
+        parent_id = current.get("input_selection_id")
+        if parent_id is None:
+            return False
+        try:
+            current = SelectionSnapshotStore(root).load(parent_id)
+        except ContractError:
+            return False
+
+
+def _validate_persisted_records(root: Path, resolution_cache: dict[str, dict[str, dict[str, Any]]] | None = None) -> None:
     """Validate every immutable/audit record, then bind its references by ID."""
     records: dict[str, dict[str, Any]] = {}
     special = {"adoption", "selection", "volume-publication", "quality-disposition"}
@@ -194,15 +271,22 @@ def _validate_persisted_records(root: Path) -> None:
     for identifier, record in selections.items():
         if validate_selection_snapshot(record)["selection_id"] != identifier:
             raise ContractError("selection recordのIDが配置IDと一致しません")
-        resolve_selection(root, record)
+        _validate_selection_scene_commit_lineage(root, record, resolve_selection(root, record, resolution_cache=resolution_cache))
     candidates = dict(_records(root / "candidates", "candidate record"))
     reviews = dict(_records(root / "reviews", "review record"))
     qualities = dict(_records(root / "quality", "quality record"))
     adoptions = dict(_records(root / "runtime/adoptions", "adoption record"))
     calls = dict(_records(root / "runtime/calls", "call record"))
     for identifier, record in candidates.items(): validate_candidate_record(identifier, record)
-    for identifier, record in reviews.items(): validate_review_record(identifier, record)
-    for identifier, record in qualities.items(): validate_record("quality-disposition", identifier, record)
+    for identifier, record in reviews.items():
+        validate_review_record(identifier, record)
+        candidate = _reference(record["candidate_id"], candidates, f"review {identifier} candidate_id")
+        validate_critique_fields(record["response"], candidate["payload"])
+    for identifier, record in qualities.items():
+        validate_record("quality-disposition", identifier, record)
+        candidate = _reference(record["candidate_id"], candidates, f"quality {identifier} candidate_id")
+        review_records = {review_id: _reference(review_id, reviews, f"quality {identifier} review_record_ids") for review_id in record["review_record_ids"]}
+        validate_quality_evidence(record, candidate["payload"], review_records)
     for identifier, record in adoptions.items(): validate_record("adoption", identifier, record)
     for identifier, record in calls.items(): validate_call_record(identifier, record)
     known = set(records) | set(selections) | set(candidates) | set(reviews) | set(qualities) | set(adoptions) | set(calls)
@@ -306,6 +390,18 @@ def _validate_persisted_records(root: Path) -> None:
                 _require_reference(ref, qualities, f"scene-commit {identifier} {field}")
             else:
                 _require_reference(ref, records, f"scene-commit {identifier} {field}")
+        scene = records[record["scene_id"]]
+        scene_content = scene.get("content")
+        coordinate = {"volume_number": record["volume_number"], "chapter_number": record["chapter_number"], "scene_number": record["scene_number"]}
+        if (
+            scene.get("artifact_kind") != "scene" or not isinstance(scene_content, dict)
+            or scene_content.get("coordinate") != coordinate
+            or scene_content.get("scene_prose_id") != record["scene_prose_id"]
+            or scene_content.get("continuity_update_id") != record["continuity_update_id"]
+            or scene_content.get("scene_card_id") != record["scene_card_id"]
+            or scene_content.get("quality_disposition_id") != record["quality_disposition_id"]
+        ):
+            raise ContractError(f"scene-commit {identifier}のscene参照束が一致しません")
 
 
 
@@ -379,25 +475,10 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
 
 
 def _validate_request(value: Optional[dict[str, Any]]) -> None:
-    if value is None:
-        return
-    fields = {"title", "genre", "premise", "required_elements", "avoid", "ending_preference", "volume_count", "language"}
-    if set(value) != fields or value.get("language") != "ja":
-        raise ContractError("request schemaが不正です")
-    for key in ("title", "premise", "ending_preference"):
-        if not isinstance(value.get(key), str) or not value[key].strip():
-            raise ContractError(f"request {key}が不正です")
-    # genre: array of strings
-    genre = value.get("genre")
-    if not isinstance(genre, list) or not genre or any(not isinstance(x, str) or not x.strip() for x in genre) or len(genre) != len(set(genre)):
-        raise ContractError("request genreが不正です")
-    for key in ("required_elements", "avoid"):
-        item = value.get(key)
-        if not isinstance(item, list) or any(not isinstance(x, str) or not x.strip() for x in item) or len(item) != len(set(item)):
-            raise ContractError(f"request {key}が不正です")
-    count = value.get("volume_count")
-    if not isinstance(count, int) or isinstance(count, bool) or not 4 <= count <= 10:
-        raise ContractError("request volume_countが不正です")
+    if value is not None:
+        normalized = normalize_request(value)
+        if normalized != value:
+            raise ContractError("requestはNFC正規化・前後空白除去済みでなければなりません")
 
 
 def _validate_keywords(value: Optional[dict[str, Any]]) -> None:
@@ -429,6 +510,8 @@ def _validate_settings(value: object) -> None:
     optional_fields = {"request_options"}
     if not isinstance(value, dict):
         raise ContractError("settings schemaが不正です")
+    if normalize_settings(value) != value:
+        raise ContractError("settingsの文字列はNFC正規化・前後空白除去済みでなければなりません")
     missing = required_fields - set(value.keys())
     if missing:
         raise ContractError(f"#/config/{sorted(missing)[0]}: 必須フィールドがありません")

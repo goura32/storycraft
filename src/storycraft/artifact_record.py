@@ -1,12 +1,12 @@
 """Deterministic V2 artifact record-envelope validation."""
 from __future__ import annotations
 
-from datetime import datetime
 import re
 from typing import Any
 
 from .artifact_registry import artifact_spec
 from .series_contracts import ContractError
+from .time_contract import parse_utc_timestamp
 
 
 _CONTENT_KINDS = frozenset({
@@ -37,6 +37,7 @@ def validate_record(artifact_kind: str, artifact_id: str, record: object) -> dic
             raise ContractError("record.jsonのinput_selection_idが不正です")
         if not isinstance(record["content"], dict):
             raise ContractError("record.jsonのcontentはobjectでなければなりません")
+        _validate_content_shape(artifact_kind, record["content"])
     elif artifact_kind == "settings":
         _require(record, {"schema_version", "settings_id", "payload", "created_at"})
         _equal(record, "settings_id", artifact_id)
@@ -141,9 +142,45 @@ def validate_call_record(call_id: str, record: object) -> dict[str, Any]:
 def _validate_review_response(value: object) -> None:
     if not isinstance(value, dict) or set(value) != {"schema_version", "decision", "issues"} or value.get("schema_version") != "review-response-v1" or value.get("decision") not in {"pass", "issues"} or not isinstance(value.get("issues"), list) or (value["decision"] == "pass") != (not value["issues"]):
         raise ContractError("review responseが不正です")
+    from .review_contracts import evidence_location_kind
     for issue in value["issues"]:
         if not isinstance(issue, dict) or set(issue) != {"severity", "evidence_locations", "explanation"} or issue.get("severity") not in {"critical", "notice"} or not isinstance(issue.get("evidence_locations"), list) or not issue["evidence_locations"] or not isinstance(issue.get("explanation"), str) or not issue["explanation"]:
             raise ContractError("review responseのissueが不正です")
+        for location in issue["evidence_locations"]:
+            evidence_location_kind(location)
+
+
+def _validate_content_shape(artifact_kind: str, content: dict[str, Any]) -> None:
+    """Validate deterministic content structure even when the artifact is unselected."""
+    if artifact_kind == "scene-prose":
+        coordinate = content.get("coordinate")
+        if set(content) != {"coordinate", "text"} or not isinstance(coordinate, dict) or set(coordinate) != {"volume_number", "chapter_number", "scene_number"} or any(not isinstance(item, int) or isinstance(item, bool) or item < 1 for item in coordinate.values()) or not isinstance(content.get("text"), str) or not content["text"].strip():
+            raise ContractError("scene-prose contentが不正です")
+    elif artifact_kind == "generation":
+        required = {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"}
+        if set(content) != required or not isinstance(content["story_facts"], list) or not isinstance(content["character_knowledge"], dict) or not isinstance(content["reader_disclosures"], list) or not isinstance(content["unresolved_thread_states"], dict) or not isinstance(content["timeline_position"], int) or isinstance(content["timeline_position"], bool) or content["timeline_position"] < 0:
+            raise ContractError("generation contentが不正です")
+        for name, state in content["unresolved_thread_states"].items():
+            if not isinstance(name, str) or not name or not isinstance(state, dict) or set(state) != {"status"} or state["status"] not in {"open", "progressed", "resolved"}:
+                raise ContractError("generation unresolved_thread_statesが不正です")
+    elif artifact_kind == "scene":
+        required = {"coordinate", "scene_prose_id", "continuity_update_id", "current_state_id", "scene_card_id", "quality_disposition_id"}
+        coordinate = content.get("coordinate")
+        if set(content) != required or not isinstance(coordinate, dict) or set(coordinate) != {"volume_number", "chapter_number", "scene_number"} or any(not isinstance(item, int) or isinstance(item, bool) or item < 1 for item in coordinate.values()):
+            raise ContractError("scene contentが不正です")
+        for kind, field in (("scene-prose", "scene_prose_id"), ("continuity-update", "continuity_update_id"), ("scene-card", "scene_card_id")):
+            try:
+                match = artifact_spec(kind).match_id(content[field])
+            except ContractError as exc:
+                raise ContractError("scene content参照IDが不正です") from exc
+            actual = {"volume_number": int(match.group("volume")), "chapter_number": int(match.group("chapter")), "scene_number": int(match.group("scene"))}
+            if actual != coordinate:
+                raise ContractError("scene content参照座標が不正です")
+        try:
+            artifact_spec("generation").match_id(content["current_state_id"])
+            artifact_spec("quality-disposition").match_id(content["quality_disposition_id"])
+        except ContractError as exc:
+            raise ContractError("scene content参照IDが不正です") from exc
 
 
 def _require(record: dict[str, Any], keys: set[str]) -> None:
@@ -175,6 +212,12 @@ def _validate_quality_disposition(record: dict[str, Any], artifact_id: str) -> N
     issues = record["remaining_major_issues"]
     if not isinstance(issues, list):
         raise ContractError("quality-dispositionのremaining_major_issuesが不正です")
+    from .review_contracts import evidence_location_kind
+    for issue in issues:
+        if not isinstance(issue, dict) or set(issue) != {"code", "message", "evidence_locations"} or not isinstance(issue["code"], str) or not issue["code"] or not isinstance(issue["message"], str) or not issue["message"] or not isinstance(issue["evidence_locations"], list) or not issue["evidence_locations"]:
+            raise ContractError("quality-dispositionのremaining_major_issues要素が不正です")
+        for location in issue["evidence_locations"]:
+            evidence_location_kind(location)
     if record["result"] == "accepted":
         if issues or "notice_type" in record:
             raise ContractError("quality-dispositionのnotice_typeが不正です")
@@ -182,8 +225,48 @@ def _validate_quality_disposition(record: dict[str, Any], artifact_id: str) -> N
         raise ContractError("quality-dispositionのremaining_major_issuesまたはnotice_typeが不正です")
 
 
+def validate_quality_evidence(
+    record: dict[str, Any],
+    candidate_payload: dict[str, Any],
+    review_records: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    """Bind remaining quality issues to valid candidate evidence and reviews."""
+    if record["result"] != "accepted_with_notice":
+        return
+    from .review_contracts import validate_critique_fields
+    critical_signatures: set[tuple[str, tuple[object, ...]]] | None = None
+    if review_records is not None:
+        critical_signatures = set()
+        for review in review_records.values():
+            for issue in review["response"]["issues"]:
+                if issue["severity"] == "critical":
+                    critical_signatures.add((issue["explanation"], tuple(issue["evidence_locations"])))
+    for issue in record["remaining_major_issues"]:
+        response = {
+            "schema_version": "review-response-v1",
+            "decision": "issues",
+            "issues": [{
+                "severity": "critical",
+                "evidence_locations": issue["evidence_locations"],
+                "explanation": issue["message"],
+            }],
+        }
+        validate_critique_fields(response, candidate_payload)
+        if critical_signatures is not None and (issue["message"], tuple(issue["evidence_locations"])) not in critical_signatures:
+            raise ContractError("quality-dispositionの重大指摘がreview記録に存在しません")
+
+
 def _prefixed_id(value: object, prefix: str) -> bool:
-    return isinstance(value, str) and value.startswith(prefix) and len(value) > len(prefix)
+    patterns = {
+        "candidate-": r"candidate-[0-9]{6}",
+        "review-": r"review-[0-9]{6}",
+        "call-": r"call-[0-9]{6}",
+        "settings-": r"settings-[0-9]{6}",
+        "keywords-": r"keywords-[0-9]{6}",
+        "quality-": r"quality-[0-9]{6}",
+    }
+    pattern = patterns.get(prefix)
+    return isinstance(value, str) and pattern is not None and re.fullmatch(pattern, value) is not None
 
 
 def _canonical_audit_id(kind: str, value: object) -> bool:
@@ -247,13 +330,12 @@ def _validate_adoption(record: dict[str, Any], artifact_id: str) -> None:
 
 
 def _selection_id(value: object) -> bool:
-    return isinstance(value, str) and value.startswith("selection-") and len(value) > len("selection-")
+    try:
+        artifact_spec("selection").match_id(value)
+    except ContractError:
+        return False
+    return True
 
 
 def _timestamp(value: object) -> None:
-    if not isinstance(value, str):
-        raise ContractError("record.jsonのcreated_atが不正です")
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ContractError("record.jsonのcreated_atが不正です") from exc
+    parse_utc_timestamp(value, "record.jsonのcreated_at")

@@ -117,3 +117,19 @@ class ArtifactRecordTests(unittest.TestCase):
                 validator(identifier, record)
         with self.assertRaises(ContractError):
             validate_selection_snapshot({**selection, "selection_id": "selection-1"})
+
+    def test_persisted_review_rejects_legacy_evidence_locations(self) -> None:
+        review = {
+            "schema_version": 1,
+            "review_id": "review-000001",
+            "candidate_id": "candidate-000001",
+            "response": {
+                "schema_version": "review-response-v1",
+                "decision": "issues",
+                "issues": [{"severity": "critical", "evidence_locations": ["offset:0"], "explanation": "x"}],
+            },
+            "call_id": "call-000001",
+            "created_at": NOW,
+        }
+        with self.assertRaises(ContractError):
+            validate_review_record("review-000001", review)

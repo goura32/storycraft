@@ -1,7 +1,6 @@
 """不変 selection snapshot の保存と検証。"""
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Any
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_spec
 from .series_contracts import ContractError
+from .time_contract import parse_utc_timestamp
 
 
 _REQUIRED_FIELDS = frozenset({
@@ -104,11 +104,14 @@ class SelectionSnapshotStore:
 
 
 def _is_valid_slot(slot: str) -> bool:
-    return bool(
-        re.fullmatch(r"[a-z_]+", slot)
-        or re.fullmatch(r"[a-z_]+\.v[0-9]{2}(\.c[0-9]{2})?(\.s[0-9]{2})?", slot)
-        or re.fullmatch(r"scene_prose_disposition\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}", slot)
+    if slot in {"request", "settings", "initial_design", "initial_design_adoption", "current_state", "series_plan", "series_plan_adoption"}:
+        return True
+    patterns = (
+        r"(?:volume_plan|volume_plan_adoption)\.v[0-9]{2}",
+        r"(?:chapter_plan|chapter_plan_adoption)\.v[0-9]{2}\.c[0-9]{2}",
+        r"(?:scene_plan|scene_plan_adoption|scene_card|scene_card_adoption|scene_prose|scene_prose_adoption|scene_prose_disposition|continuity_update|continuity_adoption|continuity_disposition|scene|scene_commit)\.v[0-9]{2}\.c[0-9]{2}\.s[0-9]{2}",
     )
+    return any(re.fullmatch(pattern, slot) is not None for pattern in patterns)
 
 
 def _require_id(value: object, prefix: str, label: str) -> None:
@@ -119,9 +122,4 @@ def _require_id(value: object, prefix: str, label: str) -> None:
 
 
 def _parse_timestamp(value: object) -> None:
-    if not isinstance(value, str):
-        raise ContractError("created_atはISO 8601文字列でなければなりません")
-    try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ContractError("created_atがISO 8601形式ではありません") from exc
+    parse_utc_timestamp(value, "created_at")

@@ -11,7 +11,8 @@ from typing import Any, Callable, Mapping
 import jsonschema
 
 from .artifact_record import validate_record
-from .artifact_registry import ARTIFACT_SPECS, artifact_directory, validate_artifact_reference
+from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec, validate_artifact_reference
+from .input_normalization import normalize_request
 from .prompt_template import get_template_loader
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError
@@ -20,23 +21,13 @@ from .series_contracts import ContractError
 ContentValidator = Callable[[dict[str, Any], dict[str, Any]], None]
 
 def _validate_request_content(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    fields = {"title", "genre", "premise", "required_elements", "avoid", "ending_preference", "volume_count", "language"}
-    if set(content) != fields or content.get("language") != "ja":
-        raise ContractError("request content")
-    for key in ("title", "premise", "ending_preference"):
-        if not isinstance(content.get(key), str) or not content[key].strip():
-            raise ContractError("request content")
-    # genre: array of strings
-    genre = content.get("genre")
-    if not isinstance(genre, list) or not genre or any(not isinstance(x, str) or not x.strip() for x in genre) or len(genre) != len(set(genre)):
-        raise ContractError("request content")
-    for key in ("required_elements", "avoid"):
-        item = content.get(key)
-        if not isinstance(item, list) or any(not isinstance(x, str) or not x.strip() for x in item) or len(item) != len(set(item)):
-            raise ContractError("request content")
-    count = content.get("volume_count")
-    if not isinstance(count, int) or isinstance(count, bool) or not 4 <= count <= 10:
-        raise ContractError("request content")
+    del inputs
+    try:
+        normalized = normalize_request(content)
+    except ContractError as exc:
+        raise ContractError("request content") from exc
+    if normalized != content:
+        raise ContractError("request contentはNFC正規化・前後空白除去済みでなければなりません")
 
 def _validate_initial_design_content(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     del inputs
@@ -270,9 +261,16 @@ def _validate_scene_card(content: dict[str, Any], inputs: dict[str, Any]) -> Non
 
 
 def _validate_scene_prose(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    del inputs
     value = _require_object(content, "scene-prose")
-    _reject_unknown(value, "scene-prose", {"text", "coordinate", "scene_id", "word_count", "language"})
+    if set(value) != {"text", "coordinate"}:
+        raise ContractError("scene-prose contentに未知または不足する項目があります")
+    slot = _current_slot(inputs)
+    match = re.fullmatch(r"scene_prose\.v(\d+)\.c(\d+)\.s(\d+)", slot)
+    if match is None:
+        raise ContractError("scene-proseのselection slot座標が不正です")
+    expected = {"volume_number": int(match.group(1)), "chapter_number": int(match.group(2)), "scene_number": int(match.group(3))}
+    if value.get("coordinate") != expected:
+        raise ContractError("scene-proseの座標がselection slotと一致しません")
     if not isinstance(value.get("text"), str) or not value["text"].strip():
         raise ContractError("scene-prose content")
 
@@ -297,19 +295,37 @@ def _validate_generation(content: dict[str, Any], inputs: dict[str, dict[str, An
         raise ContractError("generation character_knowledge")
     if not isinstance(value.get("reader_disclosures"), list):
         raise ContractError("generation reader_disclosures")
-    if not isinstance(value.get("unresolved_thread_states"), dict):
+    thread_states = value.get("unresolved_thread_states")
+    if not isinstance(thread_states, dict):
         raise ContractError("generation unresolved_thread_states")
+    for thread_name, thread_state in thread_states.items():
+        if not isinstance(thread_name, str) or not thread_name or not isinstance(thread_state, dict) or set(thread_state) != {"status"} or thread_state.get("status") not in {"open", "progressed", "resolved"}:
+            raise ContractError("generation unresolved_thread_statesの状態が不正です")
     timeline_position = value.get("timeline_position")
     if not isinstance(timeline_position, int) or isinstance(timeline_position, bool) or timeline_position < 0:
         raise ContractError("generation timeline_position")
 
 
 def _validate_scene(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    del inputs
     value = _require_object(content, "scene")
     required = {"coordinate", "scene_prose_id", "continuity_update_id", "current_state_id", "scene_card_id", "quality_disposition_id"}
     if set(value) != required:
         raise ContractError("scene content")
+    coordinate = value["coordinate"]
+    if not isinstance(coordinate, dict) or set(coordinate) != {"volume_number", "chapter_number", "scene_number"} or any(not isinstance(item, int) or isinstance(item, bool) or item < 1 for item in coordinate.values()):
+        raise ContractError("scene coordinate")
+    for kind, field in (("scene-prose", "scene_prose_id"), ("continuity-update", "continuity_update_id"), ("scene-card", "scene_card_id")):
+        try:
+            match = artifact_spec(kind).match_id(value[field])
+        except ContractError as exc:
+            raise ContractError("scene参照ID") from exc
+        if {"volume_number": int(match.group("volume")), "chapter_number": int(match.group("chapter")), "scene_number": int(match.group("scene"))} != coordinate:
+            raise ContractError("scene参照座標")
+    try:
+        artifact_spec("generation").match_id(value["current_state_id"])
+        artifact_spec("quality-disposition").match_id(value["quality_disposition_id"])
+    except ContractError as exc:
+        raise ContractError("scene参照ID") from exc
 
 
 DEFAULT_CONTENT_VALIDATORS: dict[str, ContentValidator] = {
@@ -333,6 +349,7 @@ def resolve_selection(
     *,
     content_validators: Mapping[str, ContentValidator] | None = None,
     record_paths: Mapping[tuple[str, str], Path] | None = None,
+    resolution_cache: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Resolve slots and reapply each available kind validator to its input bundle.
 
@@ -344,7 +361,67 @@ def resolve_selection(
     validators: dict[str, ContentValidator] = dict(DEFAULT_CONTENT_VALIDATORS)
     if content_validators is not None:
         validators.update(content_validators)
-    return _resolve_snapshot(workspace_root.expanduser(), snapshot, validators, set(), record_paths)
+    root = workspace_root.expanduser()
+    cache = resolution_cache if resolution_cache is not None else {}
+    resolved = _resolve_snapshot(root, snapshot, validators, set(), record_paths, cache)
+    _validate_quality_slot_lineage(root, value, resolved, record_paths)
+    return resolved
+
+
+def _validate_quality_slot_lineage(
+    workspace_root: Path,
+    snapshot: dict[str, Any],
+    resolved: dict[str, dict[str, Any]],
+    record_paths: Mapping[tuple[str, str], Path] | None,
+) -> None:
+    """Bind prose/continuity quality slots to their adoption and content IDs."""
+    selection_id = snapshot["selection_id"]
+    for quality_slot, quality in resolved.items():
+        match = re.fullmatch(r"(scene_prose|continuity)_disposition\.(v\d{2}\.c\d{2}\.s\d{2})", quality_slot)
+        if match is None:
+            continue
+        stem, coordinate = match.groups()
+        adoption_slot = f"{stem}_adoption.{coordinate}"
+        content_slot = f"{stem if stem == 'scene_prose' else 'continuity_update'}.{coordinate}"
+        adoption = resolved.get(adoption_slot)
+        content = resolved.get(content_slot)
+        if not isinstance(adoption, dict) or not isinstance(content, dict):
+            raise ContractError(f"{quality_slot}のadoption/content lineageがありません")
+        if adoption.get("source_kind") != "candidate" or not _selection_is_ancestor(
+            workspace_root, snapshot, adoption.get("output_selection_id"), record_paths
+        ):
+            raise ContractError(f"{quality_slot}のadoption selection lineageが不正です")
+        if adoption.get("quality_id") != quality.get("quality_id"):
+            raise ContractError(f"{quality_slot}のquality IDがadoptionと一致しません")
+        content_id = content.get("artifact_id")
+        output_ids = adoption.get("output_content_artifact_ids")
+        if not isinstance(content_id, str) or not isinstance(output_ids, list) or output_ids != [content_id]:
+            raise ContractError(f"{quality_slot}のadoption content lineageが不正です")
+
+
+def _selection_is_ancestor(
+    workspace_root: Path,
+    snapshot: dict[str, Any],
+    ancestor_id: object,
+    record_paths: Mapping[tuple[str, str], Path] | None,
+) -> bool:
+    if not isinstance(ancestor_id, str):
+        return False
+    current: object = snapshot
+    seen: set[str] = set()
+    while isinstance(current, dict):
+        value = validate_selection_snapshot(current)
+        selection_id = value["selection_id"]
+        if selection_id == ancestor_id:
+            return True
+        if selection_id in seen:
+            return False
+        seen.add(selection_id)
+        parent_id = value["input_selection_id"]
+        if parent_id is None:
+            return False
+        current = _read_record(workspace_root, "selection", parent_id, record_paths)
+    return False
 
 
 def _resolve_snapshot(
@@ -353,9 +430,12 @@ def _resolve_snapshot(
     validators: Mapping[str, ContentValidator],
     resolving: set[str],
     record_paths: Mapping[tuple[str, str], Path] | None = None,
+    cache: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     value = validate_selection_snapshot(snapshot)
     selection_id = value["selection_id"]
+    if cache is not None and selection_id in cache:
+        return cache[selection_id]
     if selection_id in resolving:
         raise ContractError("selection input chainが循環しています")
     resolving.add(selection_id)
@@ -367,13 +447,15 @@ def _resolve_snapshot(
             record = _read_record(workspace_root, kind, artifact_id, record_paths)
             record = validate_record(kind, artifact_id, record)
             if "content" in record:
-                inputs = _input_bundle(workspace_root, record, validators, resolving, record_paths)
+                inputs = _input_bundle(workspace_root, record, validators, resolving, record_paths, cache)
                 validation_inputs: dict[str, Any] = dict(inputs)
                 validation_inputs["__current_slot__"] = slot
                 validator = validators.get(kind)
                 if validator is not None:
                     validator(record["content"], validation_inputs)
             resolved[slot] = record
+        if cache is not None:
+            cache[selection_id] = resolved
         return resolved
     finally:
         resolving.remove(selection_id)
@@ -385,6 +467,7 @@ def _input_bundle(
     validators: Mapping[str, ContentValidator],
     resolving: set[str],
     record_paths: Mapping[tuple[str, str], Path] | None = None,
+    cache: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     input_selection_id = record["input_selection_id"]
     if input_selection_id is None:
@@ -403,7 +486,7 @@ def _input_bundle(
         raise ContractError("artifact input selectionを読み込めません") from exc
     if input_snapshot.get("selection_id") != input_selection_id if isinstance(input_snapshot, dict) else True:
         raise ContractError("artifact input selectionのIDが保存先と一致しません")
-    return _resolve_snapshot(workspace_root, input_snapshot, validators, resolving, record_paths)
+    return _resolve_snapshot(workspace_root, input_snapshot, validators, resolving, record_paths, cache)
 
 
 def _read_record(
