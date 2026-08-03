@@ -168,7 +168,7 @@ src/storycraft/           # 実装コード
 templates/prompts/
 ├── system/                      # システムプロンプト
 ├── schemas/                     # JSONスキーマ
-└── user/                        # ユーザープロンプト (generate/critique/revision × 9 LLM工程)
+└── user/                        # ユーザープロンプト (generate/critique/revision × 9 LLM工程。scene_commit と volume_publication はコード処理)
 
 docs/
 ├── SPECIFICATION.md             # 仕様正本
