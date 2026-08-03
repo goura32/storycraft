@@ -70,6 +70,21 @@ class EnvelopeInitialDesignModel(FakeInitialDesignModel):
         }
 
 
+class RevisingInitialDesignModel(EnvelopeInitialDesignModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.review_count = 0
+
+    def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+        self.review_count += 1
+        if self.review_count == 1:
+            return {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.core.logline"], "explanation": "改善"}]}
+        return {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
+
+    def revise(self, stage: str, context: dict[str, Any], candidate: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+        return {"schema_version": "candidate-response-v1", "artifact_kind": "initial-design", "payload": RICH_INITIAL_DESIGN}
+
+
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -189,6 +204,18 @@ class InitialDesignStageV2Tests(unittest.TestCase):
             })
             self.assertTrue((root / "input/brief.json").read_text(encoding="utf-8"))
             self.assertTrue((root / "runtime/config.json").read_text(encoding="utf-8"))
+
+    def test_initial_design_quality_reviews_only_the_final_revision_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _workspace(root)
+            InitialDesignStageService(root).run(RevisingInitialDesignModel(), updated_at=TIMESTAMP)
+            validate_workspace(root)
+            quality = json.loads((root / "quality/quality-000001/record.json").read_text(encoding="utf-8"))
+            review = json.loads((root / "reviews/review-000002/record.json").read_text(encoding="utf-8"))
+            self.assertEqual(quality["candidate_id"], "candidate-000002")
+            self.assertEqual(quality["review_record_ids"], ["review-000002"])
+            self.assertEqual(review["candidate_id"], "candidate-000002")
 
     def test_fresh_direct_request_workspace_initial_design_allocates_a_new_output_selection(self) -> None:
         """The initializer must retain its reserved input selection counter."""

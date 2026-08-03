@@ -185,6 +185,7 @@ class InitialDesignStageService:
                 "created_at": updated_at,
             })
             content, candidate_id = revised, revised_id
+            review_ids = []
             revision_count += 1
         quality_id = f"quality-{reserve_counter(self.workspace_root, 'next_quality'):06d}"
         staging_root = f"runtime/staging/{adoption_id}"

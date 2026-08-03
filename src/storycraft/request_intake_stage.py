@@ -119,6 +119,7 @@ class RequestIntakeStageService:
                 "review_record_id": review_id, "call_id": revise_call, "created_at": updated_at,
             })
             candidate, candidate_id = revised, revised_id
+            review_ids = []
             revision_count += 1
 
         quality_id = f"quality-{reserve_counter(self.workspace_root, 'next_quality'):06d}"

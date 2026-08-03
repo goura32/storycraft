@@ -28,6 +28,6 @@
 - 今回の文書監査で、巻公開記録は `input_selection_id` だけを正本参照として対象 ID 群を複写しない契約へ整理した。一方、現行の公開処理・テストは旧来の `settings_id`、計画 ID、状態 ID、場面 ID、品質判定 ID 群をまだ生成・検証するため、実装未反映差分として残る。
 - 同じく、文書上は `prior_volume_plan` の別名 slot、`starting_state_summary`、`handoff_expectations` を廃止した。一方、現行の planning/runtime と volume-plan スキーマには旧フィールドが残るため、これも実装未反映差分として扱う。
 
-**確認時点で159テスト、78 subtestsが通過しています。**
+**確認時点で160テスト、78 subtestsが通過しています。**
 
 これらは実装修正が完了した時点の記録です。実装の公開判断は、現在の仕様、実装、試験、配布物を確認して行います。
