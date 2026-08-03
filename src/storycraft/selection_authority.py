@@ -145,7 +145,13 @@ def _validate_scene_card(content: dict[str, Any], inputs: dict[str, dict[str, An
     if isinstance(plan_content, dict):
         for field in ("pov_character_id", "participant_ids", "location_id"):
             if value.get(field) != plan_content.get(field):
-                raise ContractError(f"scene-card {field}がscene-planと一致しません")
+                raise ContractError(f"scene-cardの{field}がscene-planと一致しません")
+        plan_beats = set(plan_content.get("intended_beats", []))
+        plan_changes = set(plan_content.get("intended_changes", []))
+        if any(not isinstance(beat, dict) or beat.get("description") not in plan_beats for beat in value.get("required_beats", [])):
+            raise ContractError("scene-cardのrequired_beatsがscene-planのintended_beats外です")
+        if any(target not in plan_changes for target in value.get("ending_state_targets", [])):
+            raise ContractError("scene-cardのending_state_targetsがscene-planのintended_changes外です")
 
 
 def _validate_scene_prose(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:

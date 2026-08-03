@@ -76,6 +76,20 @@ class CaptureClient:
 
 
 class StructuredOutputTests(unittest.TestCase):
+    def test_initial_design_review_and_revision_prompts_include_live_inputs(self) -> None:
+        context = {"request": {"title": "brief-title"}, "settings": {"model": "local"}}
+        candidate = {"core": {"logline": "current-candidate"}}
+        critique = {"decision": "issues", "issues": [{"severity": "critical", "explanation": "fix-this"}]}
+
+        review_prompt = OpenAIStoryModel._render("review", "initial_design", context=context, candidate=candidate)
+        revise_prompt = OpenAIStoryModel._render("revise", "initial_design", context=context, candidate=candidate, critique=critique)
+
+        self.assertIn("brief-title", review_prompt)
+        self.assertIn("current-candidate", review_prompt)
+        self.assertIn("brief-title", revise_prompt)
+        self.assertIn("current-candidate", revise_prompt)
+        self.assertIn("fix-this", revise_prompt)
+
     def test_every_public_llm_stage_has_all_v2_templates_and_a_candidate_schema(self) -> None:
         self.assertIn("request_intake", ACTIVE_TEMPLATE_STAGES)
         for stage in ACTIVE_TEMPLATE_STAGES:

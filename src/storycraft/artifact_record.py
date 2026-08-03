@@ -178,8 +178,8 @@ def _validate_quality_disposition(record: dict[str, Any], artifact_id: str) -> N
     if record["result"] == "accepted":
         if issues or "notice_type" in record:
             raise ContractError("quality-dispositionのnotice_typeが不正です")
-    elif notice != "編集":
-        raise ContractError("quality-dispositionのnotice_typeが不正です")
+    elif notice != "編集" or not issues:
+        raise ContractError("quality-dispositionのremaining_major_issuesまたはnotice_typeが不正です")
 
 
 def _prefixed_id(value: object, prefix: str) -> bool:

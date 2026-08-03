@@ -91,9 +91,9 @@
 
 `--request FILE`、`--keywords FILE`、`--config FILE` は UTF-8・末尾改行ありの JSON object だけを受け付け、未知項目を拒否します。文字列は前後空白を除去し Unicode NFC に正規化します。正規化後に空なら拒否し、エラーは JSON pointer を `message` に含めます。
 
-- `request`: `title`、`genre`、`premise`、`required_elements`、`avoid`、`ending_preference`、`volume_count`、`language`。文字列と配列要素は正規化後に空でない文字列、配列は空でない配列とする。内容制約は依頼入口の契約に従う。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
+- `request`: `title`、`genre`、`premise`、`required_elements`、`avoid`、`ending_preference`、`volume_count`、`language`。`genre` は正規化後に空でない文字列を1個以上持つ配列、`required_elements` と `avoid` は空配列を許可する文字列配列とする。要素が存在する場合は空文字・制御文字・重複を拒否する。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
 - `keywords`: `{ "keywords": ["空でない文字列を1個以上"], "language": "ja" }`。正規化後の重複、空文字、制御文字を拒否する。文字数・件数の固定上限は設けない。この受理条件は LLM 処理の完走を保証せず、実際のコンテキスト超過は技術的失敗として扱う。
-- `config`: `{ "provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
+- `config`: `{ "provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "空でない文字列", "technical_retry_limit": 3, "quality_revision_limit": 0, "invalid_response_limit": 3, "chapter_per_volume_range": [1, 20], "chapter_scene_range": [1, 20], "scene_text_char_range": [1000, 12000] }`。`quality_revision_limit`、`technical_retry_limit`、`invalid_response_limit` は JSON integer（booleanを除く）で、前者は0以上、後二者は1以上とする。負値、小数、文字列、booleanは不正で、JSON pointer `#/config/<field>` を含む `invalid_argument` としてworkspace未作成のまま終了コード2にする。各 range は**1以上の整数**の昇順ペア。`scene_text_char_range` は本文 `text` の Unicode コードポイント数を採用前と修正後に検証する。`endpoint` は userinfo、query、fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。`technical_retry_limit` と `invalid_response_limit` は1以上の整数。`request_options` は任意の object だが、許可キーは `temperature`（0以上2以下の有限数）、`top_p`（0より大きく1以下の有限数）、`top_k`（1以上の整数）、`repeat_penalty`（0より大きい有限数）だけとする。未知キー、`think`、`num_ctx` は拒否する。省略時は request にこれらのキーを送らない。許可キーだけを `options` に追加し、`think` と `num_ctx` はLLM境界の契約に従いシステムが固定する。
 
 ## 3. LLM 応答
 
@@ -152,7 +152,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 ```
 
 - `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（品質修正上限に達して重大指摘が残った、または `quality_revision_limit=0` の既存有効候補への修正中に形式不正上限へ達した）。正の品質修正上限で形式不正上限へ達した場合は採用せず `blocked` とする。初回生成・確認で有効候補がないまま形式不正上限に達したときも、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
-- `remaining_major_issues` は既存recordのフィールド名を維持した名称であり、意味は `ReviewResponse.issues[].severity="critical"` の残存指摘だけとする。`notice` はこの配列に入れず、`major` という第三の重要度は存在しない。
+- `remaining_major_issues` は既存recordのフィールド名を維持した名称であり、意味は `ReviewResponse.issues[].severity="critical"` の残存指摘だけとする。`notice` はこの配列に入れず、`major` という第三の重要度は存在しない。相関制約は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ remaining_major_issues` が1件以上、`notice_type="編集"` とする。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 3.4 scene ペイロード (場面確定用複合成果物)
@@ -184,6 +184,9 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
   ]
 }
 ```
+
+`timeline_position` は正本作品状態の非負整数です。`scene_continuity` の変更でこのtargetを指定する場合、`op="set"`、`path="$.timeline_position"`、`value` はbooleanでない非負整数とし、適用後の値は適用前以上でなければなりません。`add`、`remove`、任意の深いpath、後退値は形式不正です。物語上の回想・フラッシュバックは本文の `story_time` と根拠で表し、正本の現在時系列値を後退させません。
+
 ### 3.6 scene-card ペイロード
 
 ```json
@@ -207,7 +210,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 `scene-card`の対象座標はpayloadに重複保持しない。対象scene slot、artifact ID、input selection、親scene-planのselection lineageで一意に束縛する。`pov_character_id`、`participant_ids`、`location_id`、`story_time`、状態、beats、開示制約、許可更新、終了状態、文体制約はすべてLLMが返し、正本JSON Schemaで検証する。
 
-`scene-plan` は場面の意図（目的、開始条件、予定する展開・開示・変化）を所有し、`scene-card` はそれを本文用の局所制約（opening state、beats、許可更新、終了状態、文体）へ具体化する。`pov_character_id`、`participant_ids`、`location_id` は計画の束縛をそのまま引き継ぐ識別項目であり、両者が異なる場合は形式不正とする。`purpose` は計画の目的をカード向けに具体化した表現で、別の物語目的を追加してはならない。両成果物は独立した正本ではなく、scene-planが意図、scene-cardが実行制約をそれぞれ一度だけ所有する。
+`scene-plan` は場面の意図（目的、開始条件、予定する展開・開示・変化）を所有し、`scene-card` はそれを本文用の局所制約（opening state、beats、許可更新、終了状態、文体）へ具体化する。`required_beats` と `ending_state_targets` は親 `scene-plan` の達成条件・予定変化を局所的に表現する派生値であり、カードが新しい `ending_condition_id`、計画にない物語目的、計画にない解決条件を追加することはできない。`pov_character_id`、`participant_ids`、`location_id` は計画の束縛をそのまま引き継ぐ識別項目であり、両者が異なる場合は形式不正とする。`purpose` は計画の目的をカード向けに具体化した表現で、別の物語目的を追加してはならない。両成果物は独立した正本ではなく、scene-planが意図、scene-cardが実行制約をそれぞれ一度だけ所有する。
 
 ### 3.7 call record（呼出し記録）
 

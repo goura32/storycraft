@@ -20,9 +20,17 @@
 
 ## 入力
 
-- 採用済みBrief
-- 現在の Candidate 全体
-- 有効な確認記録 全体
+### 採用済みBriefと設定
+
+{{ context | tojson }}
+
+### 現在の Candidate 全体
+
+{{ candidate | tojson }}
+
+### 有効な確認記録 全体
+
+{{ critique | tojson }}
 
 ## 出力スキーマ
 

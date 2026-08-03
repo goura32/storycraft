@@ -47,13 +47,13 @@
 | `unresolved_thread_states` | 未解決事項 ID ごとの現在状態 |
 | `timeline_position` | 現在の時系列位置 |
 
-`generation` は initial-design の人物、世界、関係、知識構造、未解決事項 ID と矛盾してはなりません。
+`generation` は initial-design の人物、世界、関係、知識構造、未解決事項 ID と矛盾してはなりません。`initial_design` のLLM応答は `CandidateResponse` envelope（`schema_version="candidate-response-v1"`、`artifact_kind="initial-design"`、`payload`）で返し、コードが envelope を検証してから payload を候補記録に保存します。確認・修正promptは正式依頼、現候補、確認応答をそれぞれ固定ラベル下のcanonical JSONとして受け取ります。
 
 ### 3.3 確認・修正・採用
 
 - 確認記録: 対象候補 ID、判定、指摘 ID、重要度、根拠位置、説明
 - 修正候補: `initial-design` と同一の完全スキーマ。元候補 ID と確認記録 ID は、システム側の候補記録だけが持つ。
-- 採用選択: 採用候補 ID、`initial_design_id`、`generation_id`、品質上限到達時の残存重大指摘と注意根拠
+- 採用選択: 採用候補 ID、`initial_design_id`、`generation_id`、品質上限到達時の残存重大指摘と注意根拠。`initial_design_adoption` の一つのmanifestが initial-design と最初の generation を同時に確定し、生成recordの `input_selection_id` は確定前selection、出力selectionが両slotを束縛する。payloadへ相互参照IDを重複保存しない。
 
 確認記録、修正候補、採用選択は初期設計・作品状態の内容を複写しません。
 

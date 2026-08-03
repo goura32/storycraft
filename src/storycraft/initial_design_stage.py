@@ -68,10 +68,15 @@ class InitialDesignStageService:
             raise ContractError("initial_designのquality_revision_limitが不正です")
 
         def valid_candidate(value: object) -> dict[str, Any]:
-            if not isinstance(value, dict):
-                raise ContractError("initial_designモデル出力はobjectでなければなりません")
-            _validate_initial_design_content(value, inputs)
-            return value
+            if not isinstance(value, dict) or set(value) != {"schema_version", "artifact_kind", "payload"}:
+                raise ContractError("initial_designのCandidateResponse envelopeが不正です")
+            if value.get("schema_version") != "candidate-response-v1" or value.get("artifact_kind") != "initial-design":
+                raise ContractError("initial_designのCandidateResponse種別が不正です")
+            payload = value.get("payload")
+            if not isinstance(payload, dict):
+                raise ContractError("initial_designのCandidateResponse payloadが不正です")
+            _validate_initial_design_content(payload, inputs)
+            return payload
 
         def valid_review(value: object) -> dict[str, Any]:
             return review_response(value)

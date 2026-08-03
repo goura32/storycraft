@@ -80,6 +80,9 @@ class ArtifactRecordTests(unittest.TestCase):
         invalid_clean_notice = dict(clean, notice_type="編集")
         with self.assertRaisesRegex(ContractError, "notice_type"):
             validate_record("quality-disposition", "quality-000001", invalid_clean_notice)
+        invalid_notice_result = dict(clean, result="accepted_with_notice", notice_type="編集")
+        with self.assertRaisesRegex(ContractError, "remaining_major_issues"):
+            validate_record("quality-disposition", "quality-000001", invalid_notice_result)
 
     def test_scene_commit_has_a_closed_record_envelope(self) -> None:
         record = {

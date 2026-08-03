@@ -201,6 +201,10 @@ class SceneCommitStageService:
             target, path, operation = change["target"], change["path"], change["op"]
             if target not in required or not isinstance(path, str) or not path.startswith(f"$.{target}") or operation not in {"set", "add", "remove"}:
                 raise ContractError("continuity_update changeが不正です")
+            if target == "timeline_position":
+                value = change["value"]
+                if operation != "set" or path != "$.timeline_position" or not isinstance(value, int) or isinstance(value, bool) or value < result["timeline_position"]:
+                    raise ContractError("timeline_positionは非負整数のsetによる単調増加だけを許可します")
             keys = path[2:].split(".")
             if any(not key for key in keys):
                 raise ContractError("continuity_update pathが不正です")

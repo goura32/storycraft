@@ -142,7 +142,7 @@ def generate(
     endpoint: str,
     model: str,
     prompt: str,
-    schema: dict[str, Any],
+    schema: dict[str, Any] | None,
     *,
     request_options: Optional[dict[str, Any]] = None,
     messages: Optional[list[dict[str, str]]] = None,
@@ -155,8 +155,8 @@ def generate(
     settings_id: str | None = None,
     input_refs: list[str] | None = None,
     target_candidate_id: str | None = None,
-) -> dict[str, Any]:
-    """Invoke the required non-streaming OpenAI-compatible structured endpoint."""
+) -> dict[str, Any] | str:
+    """Invoke the non-streaming OpenAI-compatible structured or prose endpoint."""
     base_url = normalized_v1_base_url(endpoint)
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
                                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
@@ -172,11 +172,12 @@ def generate(
     body_value = {
         "model": model,
         "messages": messages if messages is not None else [{"role": "user", "content": prompt}],
-        "response_format": {"type": "json_schema", "json_schema": {"name": "storycraft_response", "strict": True, "schema": schema}},
         "think": True,
         "stream": False,
         "options": options,
     }
+    if schema is not None:
+        body_value["response_format"] = {"type": "json_schema", "json_schema": {"name": "storycraft_response", "strict": True, "schema": schema}}
     body = _canonical_json(body_value)
     raw = ""
     try:
@@ -185,10 +186,15 @@ def generate(
             raw = response.read().decode("utf-8")
             envelope = json.loads(raw)
         content = envelope["choices"][0]["message"]["content"]
-        value = json.loads(content)
-        if not isinstance(value, dict):
-            raise TypeError("structured content is not an object")
-        Draft202012Validator(schema).validate(value)
+        if schema is None:
+            if not isinstance(content, str) or not content.strip():
+                raise TypeError("prose content is empty")
+            value = content
+        else:
+            value = json.loads(content)
+            if not isinstance(value, dict):
+                raise TypeError("structured content is not an object")
+            Draft202012Validator(schema).validate(value)
     except (HTTPError, URLError, OSError) as exc:
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=None, transport="failure",

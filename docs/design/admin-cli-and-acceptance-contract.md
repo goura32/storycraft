@@ -48,7 +48,7 @@ storycraft validate --workspace PATH [--json]
 
 **模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、モデル最大コンテキスト長を返す OpenAI 互換のモデル情報応答も提供する。`messages`、`think: true`、シード、`options.num_ctx`、JSON Schema の `response_format` を検査し、`choices[0].message.content` に応答を返す。温度等は設定で指定された場合だけ検査する。実装クラス・メソッドシグネチャはコード側で定義。
 
-**設定検証契約**: `init --config FILE` は JSON がスキーマ（§2.2）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。`request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#22-init-入力) に従う。
+**設定検証契約**: `init --config FILE` は JSON がスキーマ（§2.2）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。`quality_revision_limit` は JSON integer（booleanを除く）かつ0以上、負値・小数・文字列・booleanは `#/config/quality_revision_limit` を含む `invalid_argument` とし、workspaceを作成しない。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数）。`request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#22-init-入力) に従う。
 
 **受入試験シナリオ（10件、仕様レベル）**:
 

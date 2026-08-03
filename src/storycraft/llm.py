@@ -531,9 +531,9 @@ class LLMClient:
             ref=meta.get("__ref", ""), attempt=meta.get("__attempt", 1), seed=seed,
             retry_total=meta.get("__retry_total", 1), quality_pass=meta.get("__quality_pass", ""),
         )
-        schema = {"type": "object"}
+        schema: dict[str, Any] | None = None
         if isinstance(response_format, dict):
-            schema = response_format.get("json_schema", {}).get("schema", schema)
+            schema = response_format.get("json_schema", {}).get("schema", {"type": "object"})
         try:
             value = ollama_generate(
                 self.settings.llm["base_url"], self.settings.llm["model"],
@@ -545,7 +545,7 @@ class LLMClient:
                 settings_id=meta.get("settings_id"), input_refs=meta.get("input_refs", []),
                 target_candidate_id=meta.get("target_candidate_id"),
             )
-            rec.content = json.dumps(value, ensure_ascii=False)
+            rec.content = value if schema is None and isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         except OllamaResponseFormatError:
             rec.finished_at = time.time()
             raise

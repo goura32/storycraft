@@ -13,6 +13,46 @@ from storycraft.series_model import OpenAIStoryModel
 
 
 class V2ModelPlumbingTests(unittest.TestCase):
+    def test_prose_format_failures_consume_invalid_response_limit(self) -> None:
+        client = LLMClient.__new__(LLMClient)
+        with tempfile.TemporaryDirectory() as temporary:
+            client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
+            client.settings = SimpleNamespace(llm={
+                "v2_openai_ollama": True,
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": "m",
+                "invalid_response_limit": 2,
+            }, retry={"max_attempts": 1})
+            model = OpenAIStoryModel.__new__(OpenAIStoryModel)
+            model.client = client
+            model._seed_sequence = 0
+            model._format_attempt = 1
+            with patch("storycraft.llm.ollama_generate", side_effect=OllamaResponseFormatError("empty")) as generate:
+                with self.assertRaises(OllamaResponseFormatError):
+                    model._call_text("generate", "scene_prose", "prompt")
+
+        self.assertEqual(generate.call_count, 2)
+
+    def test_call_once_keeps_v2_prose_as_raw_text_when_response_format_is_none(self) -> None:
+        client = LLMClient.__new__(LLMClient)
+        with tempfile.TemporaryDirectory() as temporary:
+            client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
+            client.settings = SimpleNamespace(llm={
+                "v2_openai_ollama": True,
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": "m",
+            })
+            with patch("storycraft.llm.ollama_generate", return_value="本文") as generate:
+                result = client.call_once(
+                    [{"role": "user", "content": "user"}],
+                    None,
+                    17,
+                )
+
+        self.assertIsNone(result.error)
+        self.assertEqual(result.content, "本文")
+        self.assertIsNone(generate.call_args.args[3])
+
     def test_public_model_implements_candidate_model_surface(self) -> None:
         self.assertTrue(callable(getattr(OpenAIStoryModel, "generate", None)))
         self.assertTrue(callable(getattr(OpenAIStoryModel, "review", None)))

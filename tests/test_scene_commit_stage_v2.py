@@ -10,6 +10,7 @@ from storycraft.artifact_ids import initial_counters
 from storycraft.run_state import RunStateStore
 from storycraft.scene_commit_stage import SceneCommitStageService
 from storycraft.selection_snapshot import SelectionSnapshotStore
+from storycraft.series_contracts import ContractError
 
 NOW = "2026-07-31T00:00:00Z"
 
@@ -175,6 +176,13 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
 
 
 class SceneCommitStageV2Tests(unittest.TestCase):
+    def test_timeline_position_is_monotonic_integer_set_only(self) -> None:
+        old_state = {"story_facts": [], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {}, "timeline_position": 2}
+        with self.assertRaisesRegex(ContractError, "timeline_position"):
+            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]})
+        with self.assertRaisesRegex(ContractError, "timeline_position"):
+            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "add", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]})
+
     def test_commits_selected_scene_once_with_prose_disposition_and_advances_to_next_scene(self) -> None:
         temporary, root = workspace()
         self.addCleanup(temporary.cleanup)

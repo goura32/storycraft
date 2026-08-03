@@ -49,11 +49,25 @@ class FakeInitialDesignModel:
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         self.calls.append((stage, context))
-        return RICH_INITIAL_DESIGN
+        return {
+            "schema_version": "candidate-response-v1",
+            "artifact_kind": "initial-design",
+            "payload": RICH_INITIAL_DESIGN,
+        }
 
     def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(("review", {"stage": stage, "context": context, "candidate": candidate}))
         return {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
+
+
+class EnvelopeInitialDesignModel(FakeInitialDesignModel):
+    def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append((stage, context))
+        return {
+            "schema_version": "candidate-response-v1",
+            "artifact_kind": "initial-design",
+            "payload": RICH_INITIAL_DESIGN,
+        }
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -100,6 +114,16 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 class InitialDesignStageV2Tests(unittest.TestCase):
+    def test_initial_design_unwraps_the_live_candidate_response_envelope(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _workspace(root)
+            result = InitialDesignStageService(root).run(EnvelopeInitialDesignModel(), updated_at=TIMESTAMP)
+
+            self.assertEqual(result["current_stage"], "series_plan")
+            candidate = json.loads((root / "candidates/candidate-000001/record.json").read_text(encoding="utf-8"))
+            self.assertEqual(candidate["payload"], RICH_INITIAL_DESIGN)
+
     def test_initial_design_uses_only_current_selection_inputs_and_finalizes_via_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -22,10 +22,12 @@
 - 初期設計のrich JSON Schema（`schema_version`、作品核、人物関係、世界、知識、未解決事項、結末条件）は実装validatorと初期作品状態生成で検証する。後続作品状態は空の旧形式を受け付けない。
 - `scene` の基準状態は場面生成時の入力selectionから検証し、場面後に進んだ最終`current_state`と誤比較しない。場面確定と巻公開では継続性品質判定slotも必須にした。
 - `scene-plan` と `scene-card` の視点人物・参加者・場所はコードで一致を検証し、`scene-card` と継続性更新の状態更新列挙をcanonicalな作品状態項目へ統一した。
+- 初期設計の実LLM応答は `candidate-response-v1` envelope を検証して payload をunwrapする。review/revise prompt は正式依頼・候補・確認を固定ラベル付きJSONで渡す。本文のraw text境界はstructured JSONと分離し、空本文・形式不正は `invalid_response_limit` を消費する。
+- `timeline_position` は非負整数の単調値で、scene commitは `set $.timeline_position` 以外を拒否する。品質判定は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ 非空 + notice_type="編集"` を検証する。request intakeの `required_elements` と `avoid` は空配列を許可する。
 - `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`、`response_format: json_schema`を使用。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
 - 今回の文書監査で、巻公開記録は `input_selection_id` だけを正本参照として対象 ID 群を複写しない契約へ整理した。一方、現行の公開処理・テストは旧来の `settings_id`、計画 ID、状態 ID、場面 ID、品質判定 ID 群をまだ生成・検証するため、実装未反映差分として残る。
 - 同じく、文書上は `prior_volume_plan` の別名 slot、`starting_state_summary`、`handoff_expectations` を廃止した。一方、現行の planning/runtime と volume-plan スキーマには旧フィールドが残るため、これも実装未反映差分として扱う。
 
-**確認時点で154テスト、78 subtestsが通過しています。**
+**確認時点で159テスト、78 subtestsが通過しています。**
 
 これらは実装修正が完了した時点の記録です。実装の公開判断は、現在の仕様、実装、試験、配布物を確認して行います。

@@ -240,6 +240,13 @@ class VolumePublicationStageService:
     def _validate_quality_record(record: dict[str, Any], slot_name: str) -> None:
         if not isinstance(record, dict) or record.get("result") not in {"accepted", "accepted_with_notice"}:
             raise ContractError(f"{slot_name}の品質判定が不正です")
+        issues = record.get("remaining_major_issues")
+        if not isinstance(issues, list):
+            raise ContractError(f"{slot_name}のremaining_major_issuesが不正です")
+        if record["result"] == "accepted" and (issues or "notice_type" in record):
+            raise ContractError(f"{slot_name}のaccepted判定が不正です")
+        if record["result"] == "accepted_with_notice" and (not issues or record.get("notice_type") != "編集"):
+            raise ContractError(f"{slot_name}のaccepted_with_notice判定が不正です")
 
     @staticmethod
     def _validate_committed_source(

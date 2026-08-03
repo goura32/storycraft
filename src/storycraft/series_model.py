@@ -6,6 +6,7 @@ from typing import Any
 
 from .log import logger
 from .llm import LLMClient
+from .ollama import OllamaResponseFormatError
 from .series_contracts import ContractError, LLMCallError
 from .prompt_template import get_template_loader
 from .stages import ACTIVE_TEMPLATE_STAGES
@@ -247,82 +248,55 @@ class OpenAIStoryModel:
         stage: str,
         user_prompt: str,
     ) -> str:
-        failure_reason = "unknown"
-        attempts = max(
-            int(
-                self.client.settings.retry.get(
-                    "max_attempts",
-                    1,
-                )
-            ),
-            1,
-        )
+        attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
+        invalid_limit = max(int(self.client.settings.llm.get("invalid_response_limit", 5)), 1)
         ref = getattr(self, "_log_ref", stage)
-        format_attempt = getattr(self, "_format_attempt", 1)
-        for retry_attempt in range(1, attempts + 1):
-            self._seed_sequence = (
-                getattr(self, "_seed_sequence", 0) + 1
-            )
-            seed = self._seed_sequence
-            messages = [
-                {
-                    "role": "system",
-                    "content": self.render_system("prose"),
-                },
-                {"role": "user", "content": user_prompt},
-                {
-                    "__kind": kind,
-                    "__phase": stage,
-                    "__ref": ref,
-                    "__attempt": retry_attempt,
-                    "__retry_total": attempts,
-                    "__format_attempt": format_attempt,
-                    "__quality_pass": getattr(
-                        self,
-                        "_log_quality_pass",
-                        "",
-                    ),
-                    **getattr(self, "_call_context", {}),
-                },
-            ]
-            record = self.client.call_once(
-                messages,
-                None,
-                seed,
-            )
-            self.last_call_id = record.call_id
-            self.client.save_raw(record, messages)
-            if record.error:
-                failure_reason = (
-                    "transport:"
-                    f"{self._safe_error_type(record.error)}"
-                )
+        for format_attempt in range(1, invalid_limit + 1):
+            if format_attempt > 1:
+                self.begin_format_attempt()
+            format_failed = False
+            for retry_attempt in range(1, attempts + 1):
+                self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1
+                seed = self._seed_sequence
+                messages = [
+                    {"role": "system", "content": self.render_system("prose")},
+                    {"role": "user", "content": user_prompt},
+                    {
+                        "__kind": kind,
+                        "__phase": stage,
+                        "__ref": ref,
+                        "__attempt": retry_attempt,
+                        "__retry_total": attempts,
+                        "__format_attempt": format_attempt,
+                        "__quality_pass": getattr(self, "_log_quality_pass", ""),
+                        **getattr(self, "_call_context", {}),
+                    },
+                ]
+                try:
+                    record = self.client.call_once(messages, None, seed)
+                except OllamaResponseFormatError:
+                    format_failed = True
+                    break
+                self.last_call_id = record.call_id
+                self.client.save_raw(record, messages)
+                if record.error:
+                    logger.error(
+                        "LLM通信エラー: stage=%s kind=%s attempt=%s/%s error_type=%s",
+                        stage, kind, retry_attempt, attempts, self._safe_error_type(record.error),
+                    )
+                    continue
+                value = record.content.strip()
+                if value:
+                    return value
+                format_failed = True
                 logger.error(
-                    "LLM通信エラー: stage=%s kind=%s "
-                    "attempt=%s/%s error_type=%s",
-                    stage,
-                    kind,
-                    retry_attempt,
-                    attempts,
-                    self._safe_error_type(record.error),
+                    "LLM本文形式エラー: stage=%s kind=%s attempt=%s/%s reason=empty_text",
+                    stage, kind, retry_attempt, attempts,
                 )
+                break
+            if format_failed:
                 continue
-
-            value = record.content.strip()
-            if value:
-                return value
-
-            failure_reason = "empty_text"
-            logger.error(
-                "LLM本文形式エラー: stage=%s kind=%s "
-                "attempt=%s/%s reason=empty_text",
-                stage,
-                kind,
-                retry_attempt,
-                attempts,
+            raise LLMCallError(
+                f"{stage} のLLM本文呼び出しに失敗しました: reason=technical_retry_exhausted"
             )
-
-        raise LLMCallError(
-            f"{stage} のLLM本文呼び出しに失敗しました: "
-            f"reason={failure_reason}"
-        )
+        raise OllamaResponseFormatError(f"{stage} のLLM本文がinvalid_response_limitまで不正です")
