@@ -19,8 +19,25 @@ def write_record(root: Path, relative: str, record: dict) -> None:
     path.write_text(json.dumps(record), encoding="utf-8")
 
 
+def target(artifact_id: str, artifact_kind: str, staging_path: str, final_path: str, status: str = "pending") -> dict:
+    role = {
+        "adoption": "adoption_record",
+        "selection": "selection_snapshot",
+        "scene-commit": "scene_commit_record",
+        "volume-publication": "publication_directory",
+    }.get(artifact_kind, "content_artifact")
+    return {
+        "artifact_id": artifact_id,
+        "target_kind": role,
+        "artifact_kind": artifact_kind if role == "content_artifact" else None,
+        "staging_path": staging_path,
+        "final_path": final_path,
+        "status": status,
+    }
+
+
 def base_state() -> dict:
-    return {"schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None, "current_stage": "request_intake", "current_target": {}, "current_selection_id": None, "pending_commit": {"kind": "candidate_adoption", "staging_path": "runtime/staging/adopt", "input_selection_id": None, "output_selection_id": "selection-000001", "state_update": {"current_selection_id": "selection-000001", "current_stage": "initial_design", "current_target": {}}, "targets": [{"artifact_id": "request-000001", "artifact_kind": "request", "staging_path": "runtime/staging/adopt/inputs/request-000001", "final_path": "inputs/request-000001", "status": "pending"}, {"artifact_id": "adoption-000001", "artifact_kind": "adoption", "staging_path": "runtime/staging/adopt/runtime/adoptions/adoption-000001", "final_path": "runtime/adoptions/adoption-000001", "status": "pending"}, {"artifact_id": "selection-000001", "artifact_kind": "selection", "staging_path": "runtime/staging/adopt/runtime/selections/selection-000001", "final_path": "runtime/selections/selection-000001", "status": "pending"}]}, "published_volumes": [], "created_at": NOW, "updated_at": NOW}
+    return {"schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None, "current_stage": "request_intake", "current_target": {}, "current_selection_id": None, "pending_commit": {"kind": "candidate_adoption", "staging_path": "runtime/staging/adopt", "input_selection_id": None, "output_selection_id": "selection-000001", "state_update": {"current_selection_id": "selection-000001", "current_stage": "initial_design", "current_target": {}}, "targets": [target("request-000001", "request", "runtime/staging/adopt/inputs/request-000001", "inputs/request-000001"), target("adoption-000001", "adoption", "runtime/staging/adopt/runtime/adoptions/adoption-000001", "runtime/adoptions/adoption-000001"), target("selection-000001", "selection", "runtime/staging/adopt/runtime/selections/selection-000001", "runtime/selections/selection-000001")]}, "published_volumes": [], "created_at": NOW, "updated_at": NOW}
 
 
 def populate_staging(root: Path) -> None:
@@ -37,9 +54,9 @@ def candidate_adoption_state() -> dict:
         "kind": "candidate_adoption", "staging_path": staging, "input_selection_id": "selection-000001", "output_selection_id": "selection-000002",
         "state_update": {"current_selection_id": "selection-000002", "current_stage": "volume_plan", "current_target": {"volume_number": 1}},
         "targets": [
-            {"artifact_id": "series-plan-000001", "artifact_kind": "series-plan", "staging_path": f"{staging}/series-plan-000001", "final_path": "design/series-plans/series-plan-000001", "status": "pending"},
-            {"artifact_id": "adoption-000001", "artifact_kind": "adoption", "staging_path": f"{staging}/adoption-000001", "final_path": "runtime/adoptions/adoption-000001", "status": "pending"},
-            {"artifact_id": "selection-000002", "artifact_kind": "selection", "staging_path": f"{staging}/selection-000002", "final_path": "runtime/selections/selection-000002", "status": "pending"},
+            target("series-plan-000001", "series-plan", f"{staging}/series-plan-000001", "design/series-plans/series-plan-000001"),
+            target("adoption-000001", "adoption", f"{staging}/adoption-000001", "runtime/adoptions/adoption-000001"),
+            target("selection-000002", "selection", f"{staging}/selection-000002", "runtime/selections/selection-000002"),
         ],
     }
     return state
@@ -68,10 +85,10 @@ def scene_commit_state() -> dict:
         "input_selection_id": "selection-000001", "output_selection_id": "selection-000002",
         "state_update": {"current_selection_id": "selection-000002", "current_stage": "scene_plan", "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2}},
         "targets": [
-            {"artifact_id": "scene-v01-c01-s01-000002", "artifact_kind": "scene", "staging_path": f"{staging}/scene-v01-c01-s01-000002", "final_path": "scenes/scene-v01-c01-s01-000002", "status": "pending"},
-            {"artifact_id": "gen-000002", "artifact_kind": "generation", "staging_path": f"{staging}/gen-000002", "final_path": "generations/gen-000002", "status": "pending"},
-            {"artifact_id": "scene-commit-v01-c01-s01-000001", "artifact_kind": "scene-commit", "staging_path": f"{staging}/scene-commit-v01-c01-s01-000001", "final_path": "scenes/scene-commit-v01-c01-s01-000001", "status": "pending"},
-            {"artifact_id": "selection-000002", "artifact_kind": "selection", "staging_path": f"{staging}/selection-000002", "final_path": "runtime/selections/selection-000002", "status": "pending"},
+            target("scene-v01-c01-s01-000002", "scene", f"{staging}/scene-v01-c01-s01-000002", "scenes/scene-v01-c01-s01-000002"),
+            target("gen-000002", "generation", f"{staging}/gen-000002", "generations/gen-000002"),
+            target("scene-commit-v01-c01-s01-000001", "scene-commit", f"{staging}/scene-commit-v01-c01-s01-000001", "scenes/scene-commit-v01-c01-s01-000001"),
+            target("selection-000002", "selection", f"{staging}/selection-000002", "runtime/selections/selection-000002"),
         ],
     }
     return state

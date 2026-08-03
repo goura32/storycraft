@@ -25,57 +25,48 @@
 
 ## 2. 未解決事項の正本
 
-初期設計は、各未解決事項を未解決事項として作ります。正規形未解決事項はコード採番 ID、名称、種別、結末必須性、説明を持ちます。結末必須未解決事項は達成条件を一つ持ちます。
+初期設計は、各未解決事項を未解決事項として作ります。正規形未解決事項は名称、種別、結末必須性、説明を持ちます。結末必須未解決事項は同じ`thread_name`の達成条件を一つ持ちます。
 
-`generation.unresolved_thread_states` は各未解決事項 ID に次を持ちます。
+`generation.unresolved_thread_states` は各未解決事項の名称に対応して次を持ちます。
 
 ```json
 {
-  "status": "open | progressed | resolved",
-  "evidence_scene_ids": [],
-  "resolved_condition_refs": []
+  "status": "open | progressed | resolved"
 }
 ```
 
-`resolved` は結末必須未解決事項の達成条件をすべて満たす本文根拠があるときだけ許可します。
+`resolved` は結末必須未解決事項の達成条件を満たす本文根拠があると独立確認され、対応するcontinuity-updateのevidence locationが存在するときだけ許可します。
 
-## 3. 予定の連鎖
+## 3. 計画payloadによる予定の連鎖
 
-シリーズ計画、巻計画、章計画、場面計画は、段階ごとに次の未解決事項割当を持ちます。
+V1では、`thread_id`、`action`、`required_conditions` を持つ別個のallocation payloadや`thread_allocations`成果物は作りません。未解決事項の予定は、各計画の既存payloadへ次の粒度で表現します。
 
-- series-plan: `thread_id`、`action`、`volume_number`、`required_conditions`。結末必須事項の `resolve` 対象巻は一意。
-- volume-plan: `thread_id`、`action`、`chapter_number`、`required_conditions`。親 series-plan と同じ巻・操作・条件に限る。
-- chapter-plan: `thread_id`、`action`、`scene_number`、`required_conditions`。親 volume-plan と同じ巻・章・操作・条件に限る。
-- scene-plan: `thread_id`、`action`、selection slot と artifact ID で束縛する完全座標 `{volume_number, chapter_number, scene_number}`、`required_conditions`。親 chapter-plan と同じ操作・条件に限る。座標を payload に重複保存しない。
+- series-plan: `thread_progression` と `revelation_schedule` が巻単位の進行・開示予定を持つ。
+- volume-plan: `thread_goals` と `revelations` が章単位の目標・開示予定を持つ。
+- chapter-plan: `required_revelations` と `ending_changes` が場面配分と章末状態を持つ。
+- scene-plan: `intended_revelations`、`intended_changes`、`intended_beats` が当該場面の予定を持ち、座標はselection slotとartifact IDだけで束縛する。
 
-`required_conditions` と `resolved_condition_refs` は、初期設計でコード採番した `ending_condition_id` だけを参照します。説明文を代用しません。
-
-- シリーズ計画: 結末必須未解決事項ごとに `resolve` の対象巻を一つだけ予定する。
-- 巻 / 章計画: 親計画の割当を次の座標粒度まで具体化する。新しい `resolve` を作らない。
-- 場面計画: 親章計画の割当を完全座標に具体化する。
-- 場面カード: その操作に必要な状態更新だけを許可する。
-
-親計画の各 allocation は、その `thread_id`、`action`、`required_conditions`、親座標を持つ一つ以上の子 allocation に漏れなく具体化し、子 allocation は親の座標範囲を狭めるだけです。`resolve` はシリーズ計画から場面計画まで一つの連鎖で完全具体化し、場面計画では完全座標を一意に持ちます。親計画にない未解決事項、操作、条件、または親の対象外の座標は形式不正です。
+子計画は親payloadの対象範囲を狭めて具体化し、親にない目的、開示、予定変化を追加しません。未解決事項の名称・達成条件との対応は、初期設計の`unresolved_threads`と`ending_conditions.thread_name`を読み合わせ、別名のIDや説明文の重複保存は行いません。scene-cardはscene-planの予定を`required_beats`、`ending_state_targets`、`allowed_updates`へ本文用に具体化するだけです。
 
 ## 4. 本文から解決まで
 
-`resolve` を予定した場面は、次をすべて満たす必要があります。
+未解決事項を進行・解決する場面は、次をすべて満たす必要があります。
 
 1. 場面本文に達成条件を満たす本文根拠がある。
-2. 継続性更新が未解決事項を `resolved` に変更する。
-3. 更新が本文位置と `ending_condition_id` を `resolved_condition_refs` に記録する。
+2. 継続性更新が許可された状態変更を記録する。
+3. 更新が本文位置をevidence locationとして記録する。
 4. 場面確定がその更新を後続の作品状態へ一度だけ適用する。
 
-`progress` は同じ手順で `progressed` にできますが、達成条件の全充足は要求しません。`introduce` は `open` のままでもよいです。
+`progressed` は同じ手順で記録できます。達成条件を満たした場合だけ`resolved`へ変更し、未達なら`open`または`progressed`のままにします。
 
 コードは本文根拠位置、場面計画の操作、カードの許可更新、未解決事項状態の遷移を検証します。LLM は本文が条件を意味的に満たすかを確認します。
 
 ## 5. 巻公開の検証
 
-巻公開は、当該巻で `resolve` を予定した未解決事項が正規形現在状態で `resolved` であり、`resolved_condition_refs` と本文根拠位置が全 `ending_condition_id` を漏れなく参照することを決定的に検証します。いずれかが不合格なら `publication_invalid` を `last_error.code` に保存して停止します。本文が達成条件を意味的に満たすかは、`resolve` 場面の通常の独立 LLM 確認で判定し、上限到達時は他の本文と同じく最後の形式有効版を注意付き採用します。
+巻公開は、当該巻のscene-plan、scene-card、本文、継続性更新、作品状態、品質判定のselection lineageを決定的に検証します。本文の意味的な達成判定は通常の本文品質確認で行い、上限到達時は他の本文と同じく最後の形式有効版を注意付き採用します。公開工程自身はLLMを呼びません。
 
-最終巻でも追加の達成条件照合、確認記録、本文再生成、注意付き公開による例外を設けません。シリーズ計画が結末必須未解決事項ごとに `resolve` の対象巻を一意に定め、巻・章・場面計画がその巻の中で具体座標を定め、各巻共通の公開検証が当該巻に予定された `resolve` の解決と本文根拠を検証するため、最終巻の通常公開が完了すれば全結末必須未解決事項も通常経路で検証済みになります。
+最終巻でも追加の確認記録、本文再生成、注意付き公開による例外を設けません。通常の巻公開検証が成功すれば、その巻の公開がシリーズ制作完了です。
 
 ## 6. 復旧
 
-`resolve` 場面の計画・本文・継続性更新・根拠が不整合なら停止し、その作業場所を再開しません。公開済み巻の本文、場面、作品状態、公開記録は変更できません。
+計画・本文・継続性更新・根拠が不整合なら停止し、その作業場所を再開しません。公開済み巻の本文、場面、作品状態、公開記録は変更できません。

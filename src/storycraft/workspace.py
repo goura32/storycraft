@@ -278,7 +278,7 @@ def _validate_persisted_records(root: Path) -> None:
             _validate_candidate_selection_delta(
                 root,
                 {"input_selection_id": record["input_selection_id"], "output_selection_id": record["output_selection_id"]},
-                [{"artifact_kind": records[item]["artifact_kind"], "artifact_id": item} for item in output_ids],
+                [{"target_kind": "content_artifact", "artifact_kind": records[item]["artifact_kind"], "artifact_id": item} for item in output_ids],
                 {"artifact_id": identifier}, quality["quality_id"], output_selection,
             )
         elif record["source_kind"] == "direct_request":

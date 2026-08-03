@@ -40,21 +40,8 @@ class PromptTemplate:
     ) -> dict[str, object]:
         """Schema fileをJSON objectとして読み込む。"""
         if category == "critique":
-            stage_schema = (
-                self.template_dir
-                / "schemas"
-                / f"critique_{stage}.json"
-            )
-            common_schema = (
-                self.template_dir
-                / "schemas"
-                / "critique.json"
-            )
-            schema_path = (
-                stage_schema
-                if stage_schema.is_file()
-                else common_schema
-            )
+            # 確認用スキーマは共通（critique.json）を使用
+            schema_path = self.template_dir / "schemas" / "critique.json"
         else:
             # GenerateとRevisionはStage別Schemaを共有する。
             schema_path = (
@@ -90,16 +77,12 @@ class PromptTemplate:
         self,
         response_mode: str = "json",
     ) -> str:
-        """応答形式に対応するシステムプロンプトを描画する。"""
-        if response_mode == "json":
-            name = "system/common.j2"
-        elif response_mode == "prose":
-            name = "system/prose.j2"
-        else:
+        """応答形式に対応するシステムプロンプトを描画する。単一の共通ファイルを使用。"""
+        if response_mode not in {"json", "prose"}:
             raise ValueError(
                 f"未知のresponse modeです: {response_mode}"
             )
-        return self.env.get_template(name).render()
+        return self.env.get_template("system/common.j2").render(response_mode=response_mode)
 
     def render_user(self, kind: str, template_stage: str, **kwargs) -> str:
         """ユーザープロンプトをテンプレート名とレンダリング値から構築する。"""

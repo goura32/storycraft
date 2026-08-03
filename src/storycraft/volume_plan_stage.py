@@ -54,7 +54,10 @@ class VolumePlanStageService:
         spec = CandidateStageSpec(
             stage="volume_plan", artifact_kind="volume-plan", next_stage="chapter_plan",
             next_target={"volume_number": target["volume_number"], "chapter_number": 1}, content_id_factory=self._content_id,
-            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["volume-plan"](content, {}),
+            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["volume-plan"](
+                content,
+                {**inputs, "__current_slot__": f"volume_plan.v{target['volume_number']:02d}", "__strict_parent__": True},
+            ),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 

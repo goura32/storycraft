@@ -37,7 +37,7 @@ uv run python -m storycraft.cli validate --help
 ### 1. 依頼文から始める場合
 
 ```bash
-# 設定ファイル作成（[仕様書 §3 の設定形式](docs/SPECIFICATION.md#3-入力と操作)）
+# 設定ファイル作成（[設定スキーマと正規化](docs/design/schemas-and-normalization.md#22-init-入力)）
 cat > config.json <<'EOF'
 {
   "provider": "ollama",

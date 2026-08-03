@@ -12,7 +12,7 @@
 }
 ```
 
-`invalid_response_limit` は形式不正再呼出しの上限回数（1以上の整数、既定 3）。
+`invalid_response_limit` は `config` の必須項目で、形式不正再呼出しの上限回数（1以上の整数）です。省略による既定値への正規化は行いません。検証済みの値を `settings.payload` に保存し、全工程がその値だけを参照します。
 
 | 値 | 形式 |
 |---|---|
@@ -78,14 +78,14 @@
 
 `generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する状態を **`content`** に持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
 
-`keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照し、採用済み作品成果物は参照しません。
+`keywords` は selection 前の不変初期入力記録で、`inputs/keywords-{通番6桁}/record.json` に保存します。`keywords_id`、`schema_version`、正規化済みキーワード配列、`language`、`created_at` を必須とし、`input_selection_id` は持ちません。selection 前の候補記録は `keywords_id` と `settings_id` を持ち、確認記録は候補IDとcall IDで候補へ結び付き、呼出し記録は `settings_id` と `input_refs` でkeywords/settingsを参照します。確認・呼出し記録に候補のprovenanceフィールドを重複保存せず、採用済み作品成果物は参照しません。
 
 `init --config FILE` は作業場所を作る前に設定を検証し、不変 `settings` を初期化時に確定します。キーワード入口の候補生成・確認・修正は、その `settings` を直接参照し、選択スナップショットはまだ持ちません。採用済み `request` は、直接依頼でもキーワードから採用した依頼でも、最初の選択スナップショットより前に確定する唯一の内容成果物であり、`input_selection_id=null` を必須とする。他の採用済み内容成果物は、すでに確定した入力 selection ID を必須とする。依頼採用時に、既存の `settings` と `request` をスロットに持つ最初の選択スナップショットを同じ adoption manifest で原子的に確定します。以後の成果物はこのスナップショットまたはその後続を `input_selection_id` にします。`settings` は `settings_id`、固定設定内容、`created_at` を持つ不変 JSON です。
 `settings` は `{ "schema_version": 1, "settings_id": "settings-000001", "payload": <§2.2 config>, "created_at": "RFC3339" }` の未知項目を拒否する不変 JSON である。`payload` は §2.2 の `config` と同じ閉じたスキーマ・型・範囲・相関制約に従い、初期化後に変更しない。
 
 ### 2.1 候補・確認記録
 
-`candidates/<candidate-id>/record.json` は `{schema_version, candidate_id, artifact_kind, input_selection_id, keywords_id|null, settings_id, payload, parent_candidate_id|null, review_record_id|null, call_id, created_at}`、`reviews/<review-id>/record.json` は `{schema_version, review_id, candidate_id, response, call_id, created_at}` を必須とし、未知項目を拒否する。初回生成候補は `parent_candidate_id=null` と `review_record_id=null`、修正候補は両方を必須とし、review は親 candidate を参照しなければならない。`request_intake` の候補・確認・call だけは `input_selection_id=null`、`keywords_id` と `settings_id` を必須参照とし、採用済み成果物 ID を参照してはならない。その他の工程では `input_selection_id` を必須とし、`keywords_id=null` とする。
+`candidates/<candidate-id>/record.json` は `{schema_version, candidate_id, artifact_kind, input_selection_id, keywords_id|null, settings_id, payload, parent_candidate_id|null, review_record_id|null, call_id, created_at}`、`reviews/<review-id>/record.json` は `{schema_version, review_id, candidate_id, response, call_id, created_at}` を必須とし、未知項目を拒否する。初回生成候補は `parent_candidate_id=null` と `review_record_id=null`、修正候補は両方を必須とし、review は親 candidate を参照しなければならない。`request_intake` の候補だけは `input_selection_id=null`、`keywords_id` と `settings_id` を必須参照とする。同工程のreviewは候補ID・call IDで入力源を再構成し、callは`settings_id`と`input_refs`（keywords/settingsを含む）で入力源を記録する。採用済み成果物 IDをrequest_intakeの記録へ入れてはならない。その他の工程では `input_selection_id` を必須とし、`keywords_id=null` とする。
 
 ### 2.2 `init` 入力
 
@@ -97,7 +97,7 @@
 
 ## 3. LLM 応答
 
-LLM は JSON オブジェクトを返し、未知項目は拒否します。保存成果物は `schema_version` を必須とします。
+構造化工程のLLMはJSONオブジェクトを返し、未知項目は拒否します。場面本文の生成・修正だけはraw textを返し、コードが座標付きscene-prose payloadへ包んでから共通候補検証へ渡します。保存成果物は `schema_version` を必須とします。
 
 ### 3.1 CandidateResponse (生成・修正の応答)
 
@@ -153,6 +153,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 - `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（品質修正上限に達して重大指摘が残った、または `quality_revision_limit=0` の既存有効候補への修正中に形式不正上限へ達した）。正の品質修正上限で形式不正上限へ達した場合は採用せず `blocked` とする。初回生成・確認で有効候補がないまま形式不正上限に達したときも、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
 - `remaining_major_issues` は既存recordのフィールド名を維持した名称であり、意味は `ReviewResponse.issues[].severity="critical"` の残存指摘だけとする。`notice` はこの配列に入れず、`major` という第三の重要度は存在しない。相関制約は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ remaining_major_issues` が1件以上、`notice_type="編集"` とする。
+- `quality.candidate_id` は採用対象の最終形式有効候補IDと一致し、`quality.review_record_ids` の全reviewは同じcandidate IDを参照しなければならない。改稿で旧候補から新候補へ進んだ場合、旧候補のreview IDを最終qualityへ混ぜず、最終候補に対して新たに作ったreviewだけを列挙する。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 3.4 scene ペイロード (場面確定用複合成果物)
@@ -210,7 +211,7 @@ LLM は JSON オブジェクトを返し、未知項目は拒否します。保�
 
 `scene-card`の対象座標はpayloadに重複保持しない。対象scene slot、artifact ID、input selection、親scene-planのselection lineageで一意に束縛する。`pov_character_id`、`participant_ids`、`location_id`、`story_time`、状態、beats、開示制約、許可更新、終了状態、文体制約はすべてLLMが返し、正本JSON Schemaで検証する。
 
-`scene-plan` は場面の意図（目的、開始条件、予定する展開・開示・変化）を所有し、`scene-card` はそれを本文用の局所制約（opening state、beats、許可更新、終了状態、文体）へ具体化する。`required_beats` と `ending_state_targets` は親 `scene-plan` の達成条件・予定変化を局所的に表現する派生値であり、カードが新しい `ending_condition_id`、計画にない物語目的、計画にない解決条件を追加することはできない。`pov_character_id`、`participant_ids`、`location_id` は計画の束縛をそのまま引き継ぐ識別項目であり、両者が異なる場合は形式不正とする。`purpose` は計画の目的をカード向けに具体化した表現で、別の物語目的を追加してはならない。両成果物は独立した正本ではなく、scene-planが意図、scene-cardが実行制約をそれぞれ一度だけ所有する。
+`scene-plan` は場面の意図（目的、開始条件、`intended_beats`、予定する開示・変化）を所有し、`scene-card` はそれを本文用の局所制約（opening state、`required_beats`、許可更新、`ending_state_targets`、文体）へ具体化する。`required_beats` と `ending_state_targets` はscene-cardだけが保存する派生値であり、カードが計画にない物語目的、未解決事項、解決条件を追加することはできない。`pov_character_id`、`participant_ids`、`location_id` は計画の束縛をそのまま引き継ぐ識別項目であり、両者が異なる場合は形式不正とする。`purpose` は計画の目的をカード向けに具体化した表現で、別の物語目的を追加してはならない。両成果物は独立した正本ではなく、scene-planが意図、scene-cardが実行制約をそれぞれ一度だけ所有する。
 
 ### 3.7 call record（呼出し記録）
 
@@ -237,7 +238,7 @@ call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存す
 }
 ```
 
-`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
+`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`request_intake` のcallは `input_selection_id` を持たず、`input_refs` にkeywords IDとsettings IDを含める。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
 
 ### 3.8 adoption record（採用記録）
 

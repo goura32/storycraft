@@ -157,7 +157,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             root = Path(temporary) / "novel"
             self._create_workspace(root)
             initial = RunStateStore(root).load()
-            series_id, completed_selection = "series-plan-000001", "selection-000002"
+            series_id, completed_selection = "series-plan-000001", "selection-000005"
 
             # Valid initial-design content per closed schema
             initial_design_content = {
@@ -191,7 +191,7 @@ class WorkspaceV2Tests(unittest.TestCase):
 
             # Valid scene-card content per closed schema
             scene_card_content = {
-        "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始",
+        "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "場面1", "opening_state": "開始",
                 "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]
             }
             self._write_json(root / "design/scene-cards/scene-card-v01-c01-s01-000001/record.json", {
@@ -221,6 +221,29 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "content": chapter_plan_content,
             })
 
+            parent_selection = SelectionSnapshotStore(root).create(
+                input_selection_id=initial["current_selection_id"],
+                slots={"request": "request-000001", "settings": "settings-000001", "series_plan": series_id,
+                       "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001",
+                       "current_state": "gen-000001"},
+                created_at="2026-07-28T00:00:00Z",
+            )
+            scene_plan_id = "scene-plan-v01-c01-s01-000001"
+            self._write_json(root / "design/scene-plans" / scene_plan_id / "record.json", {
+                "schema_version": 1, "artifact_id": scene_plan_id, "artifact_kind": "scene-plan",
+                "input_selection_id": parent_selection["selection_id"], "created_at": "2026-07-28T00:00:00Z",
+                "content": {"purpose": "場面1", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []},
+            })
+            scene_selection = SelectionSnapshotStore(root).create(
+                input_selection_id=parent_selection["selection_id"],
+                slots={**parent_selection["slots"], "scene_plan.v01.c01.s01": scene_plan_id},
+                created_at="2026-07-28T00:00:00Z",
+            )
+            scene_inputs = SelectionSnapshotStore(root).create(
+                input_selection_id=scene_selection["selection_id"],
+                slots={**scene_selection["slots"], "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001", "current_state": "gen-000001"},
+                created_at="2026-07-28T00:00:00Z",
+            )
             # Valid continuity-update content per closed schema
             continuity_update_content = {
                 "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
@@ -242,6 +265,15 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "input_selection_id": initial["current_selection_id"], "created_at": "2026-07-28T00:00:00Z",
                 "content": scene_prose_content,
             })
+            for artifact_id, directory in (("scene-card-v01-c01-s01-000001", "design/scene-cards"), ("scene-prose-v01-c01-s01-000001", "scenes"), ("continuity-v01-c01-s01-000001", "scenes")):
+                record_path = root / directory / artifact_id / "record.json"
+                record = json.loads(record_path.read_text(encoding="utf-8"))
+                record["input_selection_id"] = (
+                    scene_selection["selection_id"]
+                    if artifact_id.startswith(("scene-card", "scene-prose"))
+                    else scene_inputs["selection_id"]
+                )
+                self._write_json(record_path, record)
 
             # Valid scene artifact content per closed schema
             scene_content = {
@@ -355,9 +387,10 @@ class WorkspaceV2Tests(unittest.TestCase):
             slots = SelectionSnapshotStore(root).load(initial["current_selection_id"])["slots"]
             completed_snapshot = {
                 "schema_version": 1, "selection_id": completed_selection,
-                "input_selection_id": initial["current_selection_id"],
+                "input_selection_id": scene_inputs["selection_id"],
                 "slots": {**slots, "series_plan": series_id, "volume_plan.v01": "volume-plan-v01-000001",
                           "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001",
+                          "scene_plan.v01.c01.s01": scene_plan_id,
                           "scene.v01.c01.s01": "scene-v01-c01-s01-000001",
                           "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
                           "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001",

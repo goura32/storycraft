@@ -10,7 +10,7 @@ from typing import Any
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_directory
 from .commit_recovery import recover_pending_commit
-from .run_state import RunStateStore
+from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError
@@ -59,6 +59,10 @@ class SceneCommitStageService:
         prose = values["scene_prose"]["content"]
         continuity = values["continuity_update"]["content"]
         old_state = values["current_state"]["content"]
+        from .scene_continuity_stage import SceneContinuityStageService
+        SceneContinuityStageService._validate_content(continuity, {
+            "volume_number": volume, "chapter_number": chapter, "scene_number": scene_number,
+        }, slots)
         self._validate_coordinate_bundle(
             volume, chapter, scene_number, scene_plan, scene_card, prose, continuity,
         )
@@ -91,13 +95,20 @@ class SceneCommitStageService:
             "scene_number": scene_number,
             "created_at": timestamp,
         }
+        prior_volume_plan_id = slots.get("prior_volume_plan", {}).get("artifact_id") if isinstance(slots.get("prior_volume_plan"), dict) else None
         output_slots = dict(slots_to_ids(slots))
+        output_slots.pop("prior_volume_plan", None)
         output_slots.update({
             f"scene.v{volume:02d}.c{chapter:02d}.s{scene_number:02d}": scene_id,
             "current_state": generation_id,
             f"scene_commit.v{volume:02d}.c{chapter:02d}.s{scene_number:02d}": scene_commit_id,
-            "prior_volume_plan": values["volume_plan"]["artifact_id"],
         })
+        if volume > 1:
+            if not isinstance(prior_volume_plan_id, str):
+                prior_slot = f"volume_plan.v{volume - 1:02d}"
+                prior_volume_plan_id = output_slots.get(prior_slot)
+            if isinstance(prior_volume_plan_id, str):
+                output_slots["prior_volume_plan"] = prior_volume_plan_id
         selection = {
             "schema_version": 1, "selection_id": output_selection_id,
             "input_selection_id": input_selection_id, "slots": output_slots, "created_at": timestamp,
@@ -138,10 +149,9 @@ class SceneCommitStageService:
                 "input_selection_id": selection_id, "created_at": timestamp, "content": content}
 
     @staticmethod
-    def _target(artifact_id: str, kind: str, staging_root: str) -> dict[str, str]:
-        return {"artifact_id": artifact_id, "artifact_kind": kind,
-                "staging_path": f"{staging_root}/{artifact_id}",
-                "final_path": artifact_directory(kind, artifact_id).as_posix(), "status": "pending"}
+    def _target(artifact_id: str, kind: str, staging_root: str) -> dict[str, Any]:
+        staging_path = f"{staging_root}/{artifact_id}"
+        return make_pending_target(artifact_id, kind, staging_path, artifact_directory(kind, artifact_id).as_posix())
 
     def _write_staged_record(self, relative_directory: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory

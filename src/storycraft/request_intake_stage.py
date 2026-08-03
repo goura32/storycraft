@@ -16,7 +16,7 @@ from .artifact_record import validate_record
 from .artifact_registry import artifact_directory
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
-from .run_state import RunStateStore
+from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
 from .workspace import _validate_request, validate_workspace
@@ -159,14 +159,13 @@ class RequestIntakeStageService:
             "input_selection_id": None, "created_at": updated_at,
         }
         records = ((request_id, "request", request_record), (adoption_id, "adoption", adoption), (selection_id, "selection", selection))
-        targets: list[dict[str, str]] = []
+        targets: list[dict[str, Any]] = []
         for artifact_id, kind, record in records:
             staging_path = f"{staging_root}/{artifact_id}"
             self._write_staged(staging_path, record)
-            targets.append({"artifact_id": artifact_id, "artifact_kind": kind,
-                            "staging_path": staging_path,
-                            "final_path": artifact_directory(kind, artifact_id).as_posix(),
-                            "status": "pending"})
+            targets.append(make_pending_target(
+                artifact_id, kind, staging_path, artifact_directory(kind, artifact_id).as_posix(),
+            ))
         working = dict(state)
         working["updated_at"] = updated_at
         working["pending_commit"] = {

@@ -32,9 +32,9 @@ def content_record(artifact_id: str, kind: str, selection_id: str, content: dict
 
 def write_content(root: Path, artifact_id: str, kind: str, selection_id: str, content: dict) -> None:
     locations = {
-        "initial-design": "design/initial-designs",
+        "initial-design": "design/initial",
         "series-plan": "design/series-plans", "volume-plan": "design/volume-plans",
-        "chapter-plan": "design/chapter-plans", "scene-card": "design/scene-cards",
+        "chapter-plan": "design/chapter-plans", "scene-plan": "design/scene-plans", "scene-card": "design/scene-cards",
         "scene-prose": "scenes", "scene": "scenes", "continuity-update": "scenes",
         "generation": "generations",
     }
@@ -160,7 +160,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
     write_content(root, "gen-000001", "generation", base_id, generation_content)
     source_selection = selections.create(
         input_selection_id=base_id,
-        slots={"settings": "settings-000001", "current_state": "gen-000001"},
+        slots={"settings": "settings-000001", "initial_design": "initial-design-000001", "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001", "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "chapter_plan.v01.c02": "chapter-plan-v01-c02-000001", "current_state": "gen-000001"},
         created_at=NOW,
     )
     source_selection_id = source_selection["selection_id"]
@@ -179,9 +179,14 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
                     "text": f"本文 {chapter}-{scene}"
                 }
                 write_content(root, prose_id, "scene-prose", base_id, prose_content)
+            plan_id = f"scene-plan-v01-c{chapter:02d}-s{scene:02d}-000001"
+            write_content(root, plan_id, "scene-plan", source_selection_id, {
+                "purpose": f"場面{scene}", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main",
+                "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": [],
+            })
             # Valid scene content per closed schema
-            write_content(root, card_id, "scene-card", base_id, {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]})
-            write_content(root, continuity_id, "continuity-update", base_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "changes": []})
+            write_content(root, card_id, "scene-card", source_selection_id, {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": f"場面{scene}", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]})
+            write_content(root, continuity_id, "continuity-update", source_selection_id, {"coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene}, "changes": []})
             scene_content = {
                 "coordinate": {"volume_number": 1, "chapter_number": chapter, "scene_number": scene},
                 "scene_prose_id": prose_id, "scene_card_id": card_id, "continuity_update_id": continuity_id,
@@ -198,8 +203,31 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
             slots[f"scene_prose.{coordinate}"] = prose_id
             slots[f"scene_prose_disposition.{coordinate}"] = quality_id
             slots[f"continuity_disposition.{coordinate}"] = continuity_quality_id
+            slots[f"scene_plan.{coordinate}"] = plan_id
     slots["current_state"] = "gen-000001"
-    selection = selections.create(input_selection_id=source_selection_id, slots=slots, created_at=NOW)
+    scene_selection = selections.create(
+        input_selection_id=source_selection_id,
+        slots={**source_selection["slots"], **{slot: artifact_id for slot, artifact_id in slots.items() if slot.startswith("scene_plan.")}},
+        created_at=NOW,
+    )
+    scene_input_slots = {**scene_selection["slots"], **{slot: artifact_id for slot, artifact_id in slots.items() if slot.startswith(("scene_card.", "scene_prose."))}}
+    scene_inputs = selections.create(
+        input_selection_id=scene_selection["selection_id"], slots=scene_input_slots, created_at=NOW,
+    )
+    for slot, artifact_id in slots.items():
+        if slot.startswith(("scene_card.", "scene_prose.", "continuity_update.")):
+            directory = "design/scene-cards" if slot.startswith("scene_card.") else "scenes"
+            record_path = root / directory / artifact_id / "record.json"
+            if not record_path.exists():
+                continue
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["input_selection_id"] = (
+                scene_selection["selection_id"]
+                if slot.startswith(("scene_card.", "scene_prose."))
+                else scene_inputs["selection_id"]
+            )
+            write_json(record_path, record)
+    selection = selections.create(input_selection_id=scene_inputs["selection_id"], slots=slots, created_at=NOW)
     RunStateStore(root).save({
         "schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None,
         "current_stage": "volume_publication", "current_target": {"volume_number": 1},
@@ -253,16 +281,15 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["kind"], "volume_publication")
         self.assertIsNone(pending["output_selection_id"])
         self.assertEqual(pending["state_update"], {
-            "current_selection_id": "selection-000003", "current_stage": "volume_plan",
+            "current_selection_id": "selection-000005", "current_stage": "volume_plan",
             "current_target": {"volume_number": 2},
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
         })
-        self.assertEqual(set(pending["targets"][0]), {"artifact_id", "artifact_kind", "staging_path", "final_path", "status"})
-        self.assertEqual(pending["targets"][0]["artifact_kind"], "volume-publication")
+        self.assertEqual(set(pending["targets"][0]), {"artifact_id", "target_kind", "artifact_kind", "staging_path", "final_path", "status"})
+        self.assertEqual(pending["targets"][0]["target_kind"], "publication_directory")
+        self.assertIsNone(pending["targets"][0]["artifact_kind"])
         record = json.loads((root / "runtime/staging/volume-publication-volume-pub-v01-000001/volume-pub-v01-000001/record.json").read_text(encoding="utf-8"))
-        self.assertEqual(record["scene_ids"], [
-            "scene-v01-c01-s01-000001", "scene-v01-c01-s02-000001", "scene-v01-c02-s01-000001",
-        ])
+        self.assertIn(set(record), [{"schema_version", "volume_publication_id", "volume_number", "input_selection_id", "created_at"}, {"schema_version", "volume_publication_id", "volume_number", "input_selection_id", "created_at", "publication_notice_type"}])
 
     def test_generic_recovery_publishes_sources_in_chapter_scene_order_and_moves_nonfinal_to_next_plan(self) -> None:
         temporary, root = workspace()
@@ -270,7 +297,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         state = VolumePublicationStageService(root).run(updated_at=NOW)
         self.assertEqual(state["current_stage"], "volume_plan")
         self.assertEqual(state["current_target"], {"volume_number": 2})
-        self.assertEqual(state["current_selection_id"], "selection-000003")
+        self.assertEqual(state["current_selection_id"], "selection-000005")
         publication = root / "publications/volume-pub-v01-000001"
         self.assertTrue(publication.is_dir())
         manuscript = (publication / "manuscript.md").read_text(encoding="utf-8")
@@ -286,10 +313,10 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         assert isinstance(pending, dict)
         record_path = root / pending["targets"][0]["staging_path"] / "record.json"
         record = json.loads(record_path.read_text(encoding="utf-8"))
-        record["scene_ids"][0] = "scene-v01-c01-s01-999999"
+        record["input_selection_id"] = "selection-999999"
         record_path.write_text(json.dumps(record), encoding="utf-8")
 
-        with self.assertRaisesRegex(ContractError, "source/reference evidence"):
+        with self.assertRaisesRegex(ContractError, "immutable target"):
             recover_pending_commit(root)
 
     def test_public_recovery_converges_a_staged_publication_on_disk(self) -> None:
@@ -347,7 +374,7 @@ class VolumePublicationServiceV2Tests(unittest.TestCase):
         self.assertEqual(pending["state_update"], {
             "status": "completed",
             "last_error": None,
-            "current_selection_id": "selection-000003",
+            "current_selection_id": "selection-000005",
             "current_stage": None,
             "current_target": None,
             "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],

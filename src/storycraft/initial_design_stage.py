@@ -10,7 +10,7 @@ from .artifact_ids import reserve_counter
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
 from .llm_responses import review_response
-from .run_state import RunStateStore
+from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection, _validate_initial_design_content
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
@@ -308,16 +308,13 @@ class InitialDesignStageService:
             "timeline_position": 0,
         }
 
-    def _target(self, artifact_id: str, artifact_kind: str, staging_root: str) -> dict[str, str]:
+    def _target(self, artifact_id: str, artifact_kind: str, staging_root: str) -> dict[str, Any]:
         final_roots = {
             "initial-design": "design/initial", "generation": "generations",
             "adoption": "runtime/adoptions", "selection": "runtime/selections",
         }
-        return {
-            "artifact_id": artifact_id, "artifact_kind": artifact_kind,
-            "staging_path": f"{staging_root}/{artifact_id}",
-            "final_path": f"{final_roots[artifact_kind]}/{artifact_id}", "status": "pending",
-        }
+        staging_path = f"{staging_root}/{artifact_id}"
+        return make_pending_target(artifact_id, artifact_kind, staging_path, f"{final_roots[artifact_kind]}/{artifact_id}")
 
     def _write_staged_record(self, relative_directory: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory

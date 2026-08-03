@@ -61,7 +61,7 @@ class Model:
         self.contexts: list[dict[str, Any]] = []
         self.last_call_id: str | None = None
 
-    def _record_physical_call(self, operation: str, response: dict[str, Any]) -> None:
+    def _record_physical_call(self, operation: str, response: object) -> None:
         call_id = f"call-{len(list((self.root / 'runtime/calls').iterdir())) + 1:06d}"
         selection_id = RunStateStore(self.root).load()["current_selection_id"]
         candidates = sorted(path.name for path in (self.root / "candidates").iterdir())
@@ -92,9 +92,13 @@ class Model:
             "series-plan": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []},
             "volume-plan": {"title": "巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}], "required_end_state": "終了", "handoff_expectations": []},
             "chapter-plan": {"title": "章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"], "scene_summaries": [{"scene_number": 1, "purpose": "展開"}], "required_revelations": [], "constraints": []},
-            "scene-plan": {"purpose": "展開", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []},
-            "scene-card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
+            "scene-plan": {"purpose": "場面4", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []},
+            "scene-card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "場面4", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
         }
+        if self.kind == "scene-plan":
+            payloads["scene-plan"]["purpose"] = f"場面{self.contexts[-1]['scene_number']}"
+        if self.kind == "scene-card":
+            payloads["scene-card"]["purpose"] = self.contexts[-1]["scene_plan"]["purpose"]
         response = {"schema_version": "candidate-response-v1", "artifact_kind": self.kind, "payload": payloads.get(self.kind, {"stage": stage})}
         self._record_physical_call("generate", response)
         return response
@@ -156,7 +160,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
             "required_revelations": [], "constraints": []
         }
         scene_plan_content = {
-            "purpose": "テスト",
+            "purpose": "場面4",
             "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main",
             "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []
         }
@@ -248,21 +252,6 @@ class PlanningStagesV2Tests(unittest.TestCase):
                     write_content(root, kind, artifact_id, base["selection_id"], KIND_TO_CONTENT[kind])
                     written = True
 
-        selection = SelectionSnapshotStore(root).create(input_selection_id=base["selection_id"], created_at=NOW, slots=slots)
-        RunStateStore(root).save({
-            "schema_version": 3,
-            "workspace_id": "ws-000001",
-            "status": "running",
-            "last_error": None,
-            "current_stage": stage,
-            "current_target": target,
-            "current_selection_id": selection["selection_id"],
-            "pending_commit": None,
-            "published_volumes": [],
-            "created_at": NOW,
-            "updated_at": NOW
-        })
-
         # Write standard baseline artifacts that every test workspace needs:
         if skip_final != "initial-design":
             write_content(root, "initial-design", "initial-design-000001", base["selection_id"], initial_design_content)
@@ -278,6 +267,50 @@ class PlanningStagesV2Tests(unittest.TestCase):
         if skip_final != "scene-plan":
             write_content(root, "scene-plan", "scene-plan-v03-c03-s04-000001", base["selection_id"], scene_plan_content)
 
+        slot_kinds = {
+            "request": "request", "settings": "settings", "initial_design": "initial-design", "current_state": "generation",
+            "series_plan": "series-plan", "volume_plan": "volume-plan", "prior_volume_plan": "volume-plan", "chapter_plan": "chapter-plan",
+            "initial_design_adoption": "adoption",
+        }
+        parent_slots = {
+            slot: artifact_id for slot, artifact_id in slots.items()
+            if not slot.startswith("scene_plan")
+            and slot.split(".")[0] in slot_kinds
+            and (root / artifact_directory(slot_kinds[slot.split(".")[0]], artifact_id) / "record.json").is_file()
+        }
+        if any(slot.startswith("scene_plan") for slot in slots):
+            for slot, kind, artifact_id in (
+                ("series_plan", "series-plan", "series-plan-000001"),
+                ("volume_plan.v03", "volume-plan", "volume-plan-v03-000001"),
+                ("chapter_plan.v03.c03", "chapter-plan", "chapter-plan-v03-c03-000001"),
+            ):
+                if (root / artifact_directory(kind, artifact_id) / "record.json").is_file():
+                    parent_slots[slot] = artifact_id
+        parent = SelectionSnapshotStore(root).create(input_selection_id=base["selection_id"], created_at=NOW, slots=parent_slots)
+        scene_plan_id = slots.get("scene_plan.v03.c03.s04")
+        if scene_plan_id:
+            scene_plan_path = root / artifact_directory("scene-plan", scene_plan_id) / "record.json"
+            scene_plan_record = json.loads(scene_plan_path.read_text(encoding="utf-8"))
+            scene_plan_record["input_selection_id"] = parent["selection_id"]
+            write_json(scene_plan_path, scene_plan_record)
+        if any(slot.startswith("scene_plan") for slot in slots):
+            selection = SelectionSnapshotStore(root).create(input_selection_id=parent["selection_id"], created_at=NOW, slots=slots)
+        else:
+            selection = parent
+        RunStateStore(root).save({
+            "schema_version": 3,
+            "workspace_id": "ws-000001",
+            "status": "running",
+            "last_error": None,
+            "current_stage": stage,
+            "current_target": target,
+            "current_selection_id": selection["selection_id"],
+            "pending_commit": None,
+            "published_volumes": [],
+            "created_at": NOW,
+            "updated_at": NOW
+        })
+
     def _assert_stage(self, service: Any, kind: str, stage: str, target: dict[str, int], slots: dict[str, str],
                       expected_context_keys: set[str], next_stage: str, next_target: dict[str, int], expected_id: str,
                       *, staged_only: bool = False) -> None:
@@ -285,6 +318,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
             root = Path(temporary)
             self._workspace(root, stage=stage, target=target, slots=slots, skip_final=kind, expected_id=expected_id)
             model = Model(root, kind.replace('_', '-'))
+            input_selection_id = RunStateStore(root).load()["current_selection_id"]
             if staged_only:
                 with patch("storycraft.candidate_stage.recover_pending_commit", side_effect=lambda _: RunStateStore(root).load()):
                     result = service(root).run(model, workspace_already_validated=True, updated_at=NOW)
@@ -294,20 +328,20 @@ class PlanningStagesV2Tests(unittest.TestCase):
             if staged_only:
                 manifest = result["pending_commit"]
                 assert isinstance(manifest, dict)
+                next_selection_id = manifest["state_update"]["current_selection_id"]
                 self.assertEqual(manifest["state_update"], {
-                    "current_selection_id": "selection-000003",
+                    "current_selection_id": next_selection_id,
                     "current_stage": next_stage,
                     "current_target": next_target
                 })
-                next_selection = json.loads((root / manifest["staging_path"] / "selection-000003/record.json").read_text(encoding="utf-8"))
+                next_selection = json.loads((root / manifest["staging_path"] / f"{next_selection_id}/record.json").read_text(encoding="utf-8"))
             else:
                 self.assertEqual(result["current_stage"], next_stage)
                 self.assertEqual(result["current_target"], next_target)
-                self.assertEqual(result["current_selection_id"], "selection-000003")
                 self.assertIsNone(result["pending_commit"])
-                next_selection = SelectionSnapshotStore(root).load("selection-000003")
+                next_selection = SelectionSnapshotStore(root).load(result["current_selection_id"])
                 validate_workspace(root)
-            self.assertEqual(next_selection["input_selection_id"], "selection-000002")
+            self.assertEqual(next_selection["input_selection_id"], input_selection_id)
             self.assertEqual(next_selection["slots"][next(slot for slot in next_selection["slots"] if next_selection["slots"][slot] == expected_id)], expected_id)
 
     def test_series_plan_uses_required_selection_slots_and_transitions(self) -> None:

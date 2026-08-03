@@ -24,8 +24,8 @@ Scene Plan CandidateをChapter Plan、current Generation、
 15. 未入力の事実、ID、採用metadataを追加していない
 16. 不自然な日本語、意味の重複、直接矛盾がない
 
-各issueの `field` はCandidate内に実在するJSON pathを指定し、
-候補外の新事実をsuggestionとして追加しない。
+各issueの `evidence_locations` はCandidate内に実在するJSON pathを `$.` 付きで指定し、候補外の新事実を根拠や説明へ追加しない。
+issueの説明は `explanation` に書き、`field`、`description`、`suggestion` は出力しない。
 
 ## 候補
 

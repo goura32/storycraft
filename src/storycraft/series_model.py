@@ -74,6 +74,7 @@ class OpenAIStoryModel:
             "generate",
             stage,
             self._render("generate", stage, context=context),
+            invalid_limit=1,
         )
 
     def critique_prose(
@@ -110,6 +111,7 @@ class OpenAIStoryModel:
                 critique=critique,
                 context=context,
             ),
+            invalid_limit=1,
         )
 
     @staticmethod
@@ -247,13 +249,19 @@ class OpenAIStoryModel:
         kind: str,
         stage: str,
         user_prompt: str,
+        *,
+        invalid_limit: int | None = None,
     ) -> str:
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
-        invalid_limit = max(int(self.client.settings.llm.get("invalid_response_limit", 5)), 1)
+        if invalid_limit is None:
+            invalid_limit = max(int(self.client.settings.llm.get("invalid_response_limit", 5)), 1)
+        elif not isinstance(invalid_limit, int) or isinstance(invalid_limit, bool) or invalid_limit < 1:
+            raise ContractError("本文invalid_response_limitが不正です")
         ref = getattr(self, "_log_ref", stage)
-        for format_attempt in range(1, invalid_limit + 1):
-            if format_attempt > 1:
+        for local_format_attempt in range(1, invalid_limit + 1):
+            if local_format_attempt > 1:
                 self.begin_format_attempt()
+            format_attempt = getattr(self, "_format_attempt", local_format_attempt)
             format_failed = False
             for retry_attempt in range(1, attempts + 1):
                 self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1

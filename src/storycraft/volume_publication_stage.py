@@ -10,7 +10,7 @@ from typing import Any
 from .artifact_ids import reserve_counter
 from .commit_recovery import recover_pending_commit
 from .publication_builder import build_volume_publication_files, validate_volume_publication_files
-from .run_state import RunStateStore
+from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
@@ -100,13 +100,9 @@ class VolumePublicationStageService:
             "input_selection_id": input_selection_id,
             "output_selection_id": None,
             "state_update": state_update,
-            "targets": [{
-                "artifact_id": publication_id,
-                "artifact_kind": "volume-publication",
-                "staging_path": staging_target,
-                "final_path": f"publications/{publication_id}",
-                "status": "pending",
-            }],
+            "targets": [make_pending_target(
+                publication_id, "volume-publication", staging_target, f"publications/{publication_id}",
+            )],
         }
         working = deepcopy(state)
         working["updated_at"] = timestamp

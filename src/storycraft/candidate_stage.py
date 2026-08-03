@@ -16,7 +16,7 @@ from typing import Any, Protocol
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_directory, canonical_slot
 from .commit_recovery import recover_pending_commit
-from .run_state import RunStateStore
+from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
 from .review_contracts import field_tokens
@@ -195,12 +195,12 @@ class CandidateStageRunner:
             self.spec.content_validator(content["content"])
         adoption = {"schema_version": 1, "adoption_id": adoption_id, "source_kind": "candidate", "candidate_id": candidate_id, "quality_id": quality_id, "output_content_artifact_ids": [content_id], "output_selection_id": output_selection_id, "input_selection_id": input_selection_id, "created_at": updated_at}
         records = ((content_id, self.spec.artifact_kind, content), (adoption_id, "adoption", adoption), (output_selection_id, "selection", selection))
-        targets: list[dict[str, str]] = []
+        targets: list[dict[str, Any]] = []
         for artifact_id, kind, record in records:
             staged = f"{staging_root}/{artifact_id}"
             self._write_record(staged, "", record)
             final = self._final_path(kind, artifact_id)
-            targets.append({"artifact_id": artifact_id, "artifact_kind": kind, "staging_path": staged, "final_path": final, "status": "pending"})
+            targets.append(make_pending_target(artifact_id, kind, staged, final))
         working = dict(state)
         working["updated_at"] = updated_at
         working["pending_commit"] = {"kind": "candidate_adoption", "staging_path": staging_root, "input_selection_id": input_selection_id, "output_selection_id": output_selection_id, "state_update": {"current_selection_id": output_selection_id, "current_stage": self.spec.next_stage, "current_target": dict(self.spec.next_target)}, "targets": targets}
@@ -239,15 +239,22 @@ class CandidateStageRunner:
                     except ValueError as exc:
                         raise ContractError("review prose offsetが不正です") from exc
                     text = candidate.get("text")
-                    if not isinstance(text, str) or not 0 <= offset < len(text):
+                    if not isinstance(text, str):
                         raise ContractError("review prose evidenceが候補を指しません")
+                    encoded = text.encode("utf-8")
+                    if not 0 <= offset < len(encoded):
+                        raise ContractError("review prose evidenceが候補を指しません")
+                    try:
+                        encoded[:offset].decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise ContractError("review prose offsetがUTF-8文字境界ではありません") from exc
                 elif location.startswith("paragraph:"):
                     try:
                         paragraph = int(location.split(":", 1)[1])
                     except ValueError as exc:
                         raise ContractError("review paragraph indexが不正です") from exc
                     text = candidate.get("text")
-                    if not isinstance(text, str) or not 0 <= paragraph < len(text.split("\\n\\n")):
+                    if not isinstance(text, str) or not 0 <= paragraph < len(text.split("\n\n")):
                         raise ContractError("review paragraph evidenceが候補を指しません")
                 else:
                     current: Any = candidate

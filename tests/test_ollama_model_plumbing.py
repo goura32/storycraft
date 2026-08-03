@@ -9,10 +9,21 @@ from unittest.mock import patch
 
 from storycraft.llm import LLMClient
 from storycraft.ollama import OllamaResponseFormatError
+from storycraft.prompt_template import PromptTemplate
 from storycraft.series_model import OpenAIStoryModel
 
 
 class V2ModelPlumbingTests(unittest.TestCase):
+    def test_system_prompt_propagates_prose_response_mode(self) -> None:
+        loader = PromptTemplate(Path(__file__).parents[1] / "templates" / "prompts")
+
+        prose = loader.render_system("prose")
+        structured = loader.render_system("json")
+
+        self.assertIn("完成した自然な日本語散文本文だけ", prose)
+        self.assertNotIn("JSONオブジェクト", prose)
+        self.assertIn("JSONオブジェクト", structured)
+
     def test_prose_format_failures_consume_invalid_response_limit(self) -> None:
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:

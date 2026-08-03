@@ -58,7 +58,7 @@ class ReviewContractsTest(unittest.TestCase):
         critique = {
             "issues": [
                 {
-                    "field": "brief.premise",
+                    "evidence_locations": ["$.brief.premise"],
                 }
             ]
         }
@@ -94,7 +94,7 @@ class ReviewContractsTest(unittest.TestCase):
         critique = {
             "issues": [
                 {
-                    "field": "characters[0].emotion",
+                    "evidence_locations": ["$.characters[0].emotion"],
                 }
             ]
         }
@@ -130,7 +130,7 @@ class ReviewContractsTest(unittest.TestCase):
         critique = {
             "issues": [
                 {
-                    "field": "characters[0].emotion",
+                    "evidence_locations": ["$.characters[0].emotion"],
                 }
             ]
         }

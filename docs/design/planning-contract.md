@@ -49,10 +49,10 @@
 |---|---|
 | 責務 | 一場面が達成する物語上の目的、未解決事項の進行・解決予定、次の場面へ渡す予定を作る |
 | 必須入力スロット | `settings`、`initial_design`、`current_state`、`series_plan`、対象 `volume_plan`、対象 `chapter_plan` |
-| 出力成果物 | `scene-plan`。対象座標は artifact ID と selection slot で束縛し、目的、対象人物、未解決事項割当、予定する事実変化、次場面条件を持つ。`required_beats`、`ending_state_targets`、新たな結末条件はscene-plan側でのみ定義する |
+| 出力成果物 | `scene-plan`。対象座標は artifact ID と selection slot で束縛し、親計画の目的・対象人物・場所・予定する変化・開示制約の範囲内で、目的、対象人物、未解決事項割当、`intended_beats`、`intended_revelations`、`intended_changes`、`prohibited_disclosures` を具体化する。`required_beats` と `ending_state_targets` はscene-planには保存せず、次工程のscene-cardが本文用制約として派生する。scene-planもscene-cardも新しい結末条件、未解決事項、物語目的を定義しない。 |
 | 次工程 | `scene_card`、同一場面座標 |
 
-コードは、座標が章計画の未確定の次場面であること、未解決事項割当が親計画の対象範囲内であること、`resolve` がシリーズ計画で定めた対象巻と一致することを検証します。LLM は、場面目的、人物の動機、予定する変化、結末条件への寄与が意味的に成立することを確認します。
+コードは、座標が章計画の未確定の次場面であること、未解決事項の予定が親計画の対象範囲内であることを検証します。LLM は、場面目的、人物の動機、予定する変化、結末条件への寄与が意味的に成立することを確認します。
 
 ## 6. 採用と選択スナップショット
 

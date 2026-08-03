@@ -8,7 +8,7 @@
 
 - V1 の規範 provider は `ollama` だけである。
 - planning成果物（series-plan、volume-plan、chapter-plan）は正本JSON Schemaのmodern形式を使用し、旧 `volumes` / `chapters` / `scenes` / `thread_allocations` payloadは採用しない。
-- 正本設計が要求する `thread_id`、`action`、`required_conditions` のシリーズ→巻→章→場面の連鎖は、現行modern planning payloadへまだ反映されていない。現行コードは series の `thread_progression` と volume の `thread_goals` を検証するが、章・場面までの条件 ID 連鎖は実装未反映差分として残る。
+- 旧設計の `thread_id`、`action`、`required_conditions` を持つ別個のallocation payloadは採用しない。現行modern planning payloadの `thread_progression`、`thread_goals`、`required_revelations`、`ending_changes`、`intended_revelations`、`intended_changes` をselection lineageと親計画の束縛で検証する。
 - series planは4〜10巻、`volume_summaries`はseriesの巻数と一致する。巻・章・場面の座標はartifact envelopeとselection slotで管理し、planning payloadへ重複保存しない。
 - 注意付き巻公開の `publication_notice_type="編集"` と原稿冒頭の定型文は実装・試験済み。公開 `record.json` は閉じたスキーマで、`publication_notice_type: null` は拒否される。
 - 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質上限で停止しない遷移は実装済み。`quality_revision_limit = 0`（無制限）時は、形式有効な品質修正を上限なしで継続し、形式不正の再呼出しだけを `invalid_response_limit` で制限する。正の品質上限で改稿応答が形式不正上限に達した場合は注意付き採用せず `blocked` にする。
@@ -24,10 +24,10 @@
 - `scene-plan` と `scene-card` の視点人物・参加者・場所はコードで一致を検証し、`scene-card` と継続性更新の状態更新列挙をcanonicalな作品状態項目へ統一した。
 - 初期設計の実LLM応答は `candidate-response-v1` envelope を検証して payload をunwrapする。review/revise prompt は正式依頼・候補・確認を固定ラベル付きJSONで渡す。本文のraw text境界はstructured JSONと分離し、空本文・形式不正は `invalid_response_limit` を消費する。
 - `timeline_position` は非負整数の単調値で、scene commitは `set $.timeline_position` 以外を拒否する。品質判定は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ 非空 + notice_type="編集"` を検証する。request intakeの `required_elements` と `avoid` は空配列を許可する。
-- `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`、`response_format: json_schema`を使用。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
+- `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`を使用する。構造化工程では`response_format: json_schema`を付け、scene-proseの生成・修正では付けずraw textを運ぶ。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
 - 今回の文書監査で、巻公開記録は `input_selection_id` だけを正本参照として対象 ID 群を複写しない契約へ整理した。一方、現行の公開処理・テストは旧来の `settings_id`、計画 ID、状態 ID、場面 ID、品質判定 ID 群をまだ生成・検証するため、実装未反映差分として残る。
 - 同じく、文書上は `prior_volume_plan` の別名 slot、`starting_state_summary`、`handoff_expectations` を廃止した。一方、現行の planning/runtime と volume-plan スキーマには旧フィールドが残るため、これも実装未反映差分として扱う。
 
-**確認時点で160テスト、78 subtestsが通過しています。**
+**確認時点で166テスト、78 subtestsが通過しています。**
 
 これらは実装修正が完了した時点の記録です。実装の公開判断は、現在の仕様、実装、試験、配布物を確認して行います。

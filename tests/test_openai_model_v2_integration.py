@@ -19,7 +19,7 @@ NOW = "2026-07-31T00:00:00Z"
 
 class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
     requests: list[tuple[str, dict[str, object] | None]] = []
-    completion_responses: list[dict[str, object]] = []
+    completion_responses: list[object] = []
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -46,10 +46,40 @@ class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(length))
         self.__class__.requests.append((self.path, request))
         response = self.__class__.completion_responses.pop(0)
-        self._send({"choices": [{"message": {"content": json.dumps(response, ensure_ascii=False)}}]})
+        content = response if isinstance(response, str) else json.dumps(response, ensure_ascii=False)
+        self._send({"choices": [{"message": {"content": content}}]})
 
 
 class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
+    def test_public_prose_transport_omits_response_format(self) -> None:
+        handler = _OpenAICompatibleHandler
+        handler.requests = []
+        handler.completion_responses = ["本文そのもの"]
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                endpoint = f"http://127.0.0.1:{server.server_port}"
+                model = OpenAIStoryModel(SimpleNamespace(
+                    llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint,
+                         "model": "fake-model", "api_key_env": None, "headers_env": {},
+                         "thinking": True, "stream": False, "first_event_timeout_seconds": 5,
+                         "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
+                         "request_options": {}},
+                    retry={"max_attempts": 1},
+                ), Path(temporary) / "raw")
+                self.assertEqual(model.generate_prose("scene_prose", {"scene": "context"}), "本文そのもの")
+                posts = [body for path, body in handler.requests if path == "/v1/chat/completions"]
+                self.assertEqual(len(posts), 1)
+                post = posts[0]
+                self.assertIsNotNone(post)
+                assert post is not None
+                self.assertNotIn("response_format", post)
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_candidate_runner_uses_exact_v2_wrappers_and_persists_bound_physical_calls(self) -> None:
         handler = _OpenAICompatibleHandler
         handler.requests = []

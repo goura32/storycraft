@@ -46,7 +46,10 @@ class SceneCardStageService:
         spec = CandidateStageSpec(
             stage="scene_card", artifact_kind="scene-card", next_stage="scene_prose",
             next_target=dict(target), content_id_factory=self._content_id,
-            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["scene-card"](content, {}),
+            content_validator=lambda content: DEFAULT_CONTENT_VALIDATORS["scene-card"](
+                content,
+                {**inputs, "__current_slot__": f"scene_card.v{volume:02d}.c{chapter:02d}.s{scene:02d}"},
+            ),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 

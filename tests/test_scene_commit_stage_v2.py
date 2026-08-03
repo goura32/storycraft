@@ -20,7 +20,7 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def content_record(artifact_id: str, artifact_kind: str, input_selection_id: str, content: dict) -> dict:
+def content_record(artifact_id: str, artifact_kind: str, input_selection_id: str | None, content: dict) -> dict:
     return {
         "schema_version": 1,
         "artifact_id": artifact_id,
@@ -110,13 +110,13 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     
     # Valid scene-plan content per closed schema
     scene_plan_content = {
-        "purpose": "テスト", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main",
+        "purpose": "場面1", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main",
         "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []
     }
     
     # Valid scene-card content per closed schema
     scene_card_content = {
-        "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始",
+        "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "場面1", "opening_state": "開始",
         "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [],
         "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]
     }
@@ -157,7 +157,29 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         write_content(root, directory, artifact_id, kind, base_id, content)
     write_clean_quality(root, "quality-000001", "candidate-000001", {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "text": "本文"})
     write_clean_quality(root, "quality-000002", "candidate-000002", {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "text": "本文"})
-    current = selections.create(input_selection_id=base_id, created_at=NOW, slots={
+    parent = selections.create(input_selection_id=base_id, created_at=NOW, slots={
+        "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
+        "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
+        "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "current_state": "gen-000001",
+    })
+    scene_plan_selection = selections.create(input_selection_id=parent["selection_id"], created_at=NOW, slots={
+        "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
+        "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
+        "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001",
+        "current_state": "gen-000001",
+    })
+    scene_plan_record_path = root / "design/scene-plans/scene-plan-v01-c01-s01-000001/record.json"
+    scene_plan_record = json.loads(scene_plan_record_path.read_text(encoding="utf-8"))
+    scene_plan_record["input_selection_id"] = parent["selection_id"]
+    write_json(scene_plan_record_path, scene_plan_record)
+    scene_inputs = selections.create(input_selection_id=scene_plan_selection["selection_id"], created_at=NOW, slots={
+        "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
+        "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
+        "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001",
+        "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
+        "current_state": "gen-000001",
+    })
+    current = selections.create(input_selection_id=scene_inputs["selection_id"], created_at=NOW, slots={
         "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
         "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
         "chapter_plan.v01.c01": "chapter-plan-v01-c01-000001", "scene_plan.v01.c01.s01": "scene-plan-v01-c01-s01-000001",
@@ -166,6 +188,16 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         "continuity_disposition.v01.c01.s01": "quality-000002",
         "current_state": "gen-000001",
     })
+    for artifact_id in ("scene-card-v01-c01-s01-000001", "scene-prose-v01-c01-s01-000001", "continuity-v01-c01-s01-000001"):
+        directory = "design/scene-cards" if artifact_id.startswith("scene-card") else "scenes"
+        record_path = root / directory / artifact_id / "record.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["input_selection_id"] = (
+            scene_plan_selection["selection_id"]
+            if artifact_id.startswith(("scene-card", "scene-prose"))
+            else scene_inputs["selection_id"]
+        )
+        write_json(record_path, record)
     RunStateStore(root).save({
         "schema_version": 3, "workspace_id": "ws-000001", "status": "running", "last_error": None,
         "current_stage": "scene_commit", "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
@@ -196,7 +228,7 @@ class SceneCommitStageV2Tests(unittest.TestCase):
         assert isinstance(pending, dict)
         self.assertEqual(pending["kind"], "scene_commit")
         self.assertEqual(pending["state_update"], {
-            "current_selection_id": "selection-000003", "current_stage": "scene_plan",
+            "current_selection_id": "selection-000006", "current_stage": "scene_plan",
             "current_target": {"volume_number": 1, "chapter_number": 1, "scene_number": 2},
         })
         scene = json.loads((root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/scene-v01-c01-s01-000002/record.json").read_text(encoding="utf-8"))
@@ -206,7 +238,7 @@ class SceneCommitStageV2Tests(unittest.TestCase):
         self.assertEqual(state["content"]["timeline_position"], 1)
         commit = json.loads((root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/scene-commit-v01-c01-s01-000001/record.json").read_text(encoding="utf-8"))
         self.assertEqual(set(commit), {"schema_version", "scene_commit_id", "scene_id", "scene_card_id", "scene_prose_id", "continuity_update_id", "current_state_id", "quality_disposition_id", "volume_number", "chapter_number", "scene_number", "created_at"})
-        selection = json.loads((root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/selection-000003/record.json").read_text(encoding="utf-8"))
+        selection = json.loads((root / "runtime/staging/scene-commit-scene-commit-v01-c01-s01-000001/selection-000006/record.json").read_text(encoding="utf-8"))
         self.assertEqual(selection["slots"]["scene_prose_disposition.v01.c01.s01"], "quality-000001")
         self.assertEqual(selection["slots"]["scene_commit.v01.c01.s01"], "scene-commit-v01-c01-s01-000001")
 

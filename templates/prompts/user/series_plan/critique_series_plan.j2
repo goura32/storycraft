@@ -26,8 +26,8 @@ Series Plan CandidateをBrief、Initial Design、Initial Generationへ
 `issues: []` を返す前に全巻、全map、全schedule、
 全string fieldを再点検する。
 
-各issueの `field` はCandidate内に実在するJSON pathを指定し、
-候補外の新事実をsuggestionとして追加しない。
+各issueの `evidence_locations` はCandidate内に実在するJSON pathを `$.` 付きで指定し、候補外の新事実を根拠や説明へ追加しない。
+issueの説明は `explanation` に書き、`field`、`description`、`suggestion` は出力しない。
 
 ## 候補
 

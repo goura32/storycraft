@@ -12,6 +12,67 @@ from .series_contracts import ContractError
 from .workspace import validate_workspace
 
 
+class _ProseCandidateModel:
+    """Adapt raw prose transport to the generic candidate runner boundary."""
+
+    def __init__(self, model: Any, target: dict[str, int]) -> None:
+        self._model = model
+        self._target = dict(target)
+
+    @property
+    def last_call_id(self) -> str | None:
+        return getattr(self._model, "last_call_id", None)
+
+    def set_call_context(self, **kwargs: Any) -> None:
+        setter = getattr(self._model, "set_call_context", None)
+        if callable(setter):
+            setter(**kwargs)
+
+    def begin_format_attempt(self) -> None:
+        begin = getattr(self._model, "begin_format_attempt", None)
+        if callable(begin):
+            begin()
+
+    def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
+        method = getattr(self._model, "generate_prose", None)
+        if not callable(method):
+            raise ContractError("scene_prose modelにはgenerate_proseが必要です")
+        text = method(stage, context)
+        return self._envelope(text)
+
+    def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+        method = getattr(self._model, "critique_prose", None)
+        if not callable(method):
+            raise ContractError("scene_prose modelにはcritique_proseが必要です")
+        payload = candidate.get("payload") if isinstance(candidate.get("payload"), dict) else candidate
+        text = payload.get("text") if isinstance(payload, dict) else None
+        if not isinstance(text, str):
+            raise ContractError("scene_prose candidate textが不正です")
+        value = method(stage, text, context)
+        if not isinstance(value, dict):
+            raise ContractError("scene_prose critique responseが不正です")
+        return value
+
+    def revise(self, stage: str, context: dict[str, Any], candidate: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+        method = getattr(self._model, "revision_prose", None)
+        if not callable(method):
+            raise ContractError("scene_prose modelにはrevision_proseが必要です")
+        payload = candidate.get("payload") if isinstance(candidate.get("payload"), dict) else candidate
+        text = payload.get("text") if isinstance(payload, dict) else None
+        if not isinstance(text, str):
+            raise ContractError("scene_prose candidate textが不正です")
+        return self._envelope(method(stage, text, review, context))
+
+    def _envelope(self, text: object) -> dict[str, Any]:
+        if not isinstance(text, str):
+            raise ContractError("scene_prose modelの応答はraw textでなければなりません")
+        return {
+            "schema_version": "candidate-response-v1",
+            "artifact_kind": "scene-prose",
+            "payload": {"coordinate": dict(self._target), "text": text},
+        }
+
+
 class SceneProseStageService:
     """Generate and adopt prose exclusively from the current immutable selection."""
 
@@ -46,7 +107,7 @@ class SceneProseStageService:
             content_validator=lambda content: self._validate_content(content, target, inputs["settings"]),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(
-            model, context=self._context(inputs, target), updated_at=updated_at,
+            _ProseCandidateModel(model, target), context=self._context(inputs, target), updated_at=updated_at,
         )
 
     @staticmethod

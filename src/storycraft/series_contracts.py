@@ -4108,12 +4108,15 @@ class ContractValidator:
 
     @staticmethod
     def _validate_critique(value: Any) -> None:
-        if not isinstance(value, dict) or not isinstance(value.get("issues"), list):
+        if not isinstance(value, dict) or value.get("schema_version") != "review-response-v1" or value.get("decision") not in {"pass", "issues"} or not isinstance(value.get("issues"), list):
             raise ContractError("批評の issues が配列ではありません")
+        if (value["decision"] == "pass") != (not value["issues"]):
+            raise ContractError("批評decisionとissuesが一致しません")
         for issue in value["issues"]:
             if not isinstance(issue, dict) or issue.get("severity") not in {"critical", "notice"}:
                 raise ContractError("批評 issue が不正です")
-            ContractValidator._require(issue, "field", "description", "suggestion")
+            if set(issue) != {"severity", "evidence_locations", "explanation"} or not isinstance(issue.get("evidence_locations"), list) or not issue["evidence_locations"] or not isinstance(issue.get("explanation"), str) or not issue["explanation"].strip():
+                raise ContractError("批評 issue のevidence_locations/explanationが不正です")
 
     @staticmethod
     def _require(value: Any, *fields: str) -> None:

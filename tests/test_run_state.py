@@ -27,11 +27,18 @@ BASE_STATE = {
 }
 
 
-def target(artifact_id: str, artifact_kind: str, final_path: str) -> dict[str, str]:
+def target(artifact_id: str, artifact_kind: str, final_path: str, staging_root: str = "runtime/staging/adopt") -> dict[str, object]:
+    role = {
+        "adoption": "adoption_record",
+        "selection": "selection_snapshot",
+        "scene-commit": "scene_commit_record",
+        "volume-publication": "publication_directory",
+    }.get(artifact_kind, "content_artifact")
     return {
         "artifact_id": artifact_id,
-        "artifact_kind": artifact_kind,
-        "staging_path": f"runtime/staging/adopt/{final_path}",
+        "target_kind": role,
+        "artifact_kind": artifact_kind if role == "content_artifact" else None,
+        "staging_path": f"{staging_root}/{artifact_id}",
         "final_path": final_path,
         "status": "pending",
     }
@@ -120,7 +127,7 @@ class RunStateV2Tests(unittest.TestCase):
                 "current_target": {"volume_number": 2},
                 "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
             },
-            "targets": [target("volume-pub-v01-000001", "volume-publication", "publications/volume-pub-v01-000001")],
+            "targets": [target("volume-pub-v01-000001", "volume-publication", "publications/volume-pub-v01-000001", "runtime/staging/volume-publication-000001")],
         }
         state["pending_commit"]["targets"][0]["sha256"] = "0" * 64
         with self.assertRaisesRegex(ContractError, "field構成"):
@@ -157,13 +164,7 @@ class RunStateV2Tests(unittest.TestCase):
                 "current_target": None,
                 "published_volumes": [{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
             },
-            "targets": [{
-                "artifact_id": "volume-pub-v01-000001",
-                "artifact_kind": "volume-publication",
-                "staging_path": "runtime/staging/volume-publication-volume-pub-v01-000001/volume-pub-v01-000001",
-                "final_path": "publications/volume-pub-v01-000001",
-                "status": "pending",
-            }],
+            "targets": [target("volume-pub-v01-000001", "volume-publication", "publications/volume-pub-v01-000001", "runtime/staging/volume-publication-volume-pub-v01-000001")],
         }
         self.assertIs(validate_run_state(state), state)
 

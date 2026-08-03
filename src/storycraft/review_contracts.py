@@ -81,27 +81,19 @@ def validate_critique_fields(
     critique: dict[str, Any],
     candidate: dict[str, Any],
 ) -> None:
-    """全Review IssueがCandidate内のfieldを指すことを検証する。"""
+    """JSON path evidence locationsがCandidate内を指すことを検証する。"""
     for issue in critique["issues"]:
-        value: Any = candidate
-
-        for token in field_tokens(issue["field"]):
-            if (
-                isinstance(value, dict)
-                and isinstance(token, str)
-                and token in value
-            ):
-                value = value[token]
-            elif (
-                isinstance(value, list)
-                and isinstance(token, int)
-                and 0 <= token < len(value)
-            ):
-                value = value[token]
-            else:
-                raise ContractError(
-                    "批評 issue の field が候補を指しません"
-                )
+        locations = issue.get("evidence_locations", [])
+        json_locations = [location for location in locations if isinstance(location, str) and location.startswith("$")]
+        for location in json_locations:
+            value: Any = candidate
+            for token in field_tokens(location):
+                if isinstance(value, dict) and isinstance(token, str) and token in value:
+                    value = value[token]
+                elif isinstance(value, list) and isinstance(token, int) and 0 <= token < len(value):
+                    value = value[token]
+                else:
+                    raise ContractError("批評 issue の evidence_locations が候補を指しません")
 
 
 def validate_revision_scope(

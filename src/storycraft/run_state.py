@@ -40,7 +40,46 @@ _CONTENT_KINDS = frozenset({
     "request", "initial-design", "series-plan", "volume-plan", "chapter-plan",
     "scene-plan", "scene-card", "scene-prose", "continuity-update",
 })
-_TARGET_FIELDS = frozenset({"artifact_id", "artifact_kind", "staging_path", "final_path", "status"})
+_TARGET_KIND_CONTENT = "content_artifact"
+_TARGET_KIND_FOR_ARTIFACT = {
+    "adoption": "adoption_record",
+    "selection": "selection_snapshot",
+    "scene-commit": "scene_commit_record",
+    "volume-publication": "publication_directory",
+}
+_TARGET_KINDS = frozenset({_TARGET_KIND_CONTENT, *_TARGET_KIND_FOR_ARTIFACT.values()})
+_CONTENT_ARTIFACT_KINDS = frozenset({
+    "request", "initial-design", "generation", "series-plan", "volume-plan", "chapter-plan",
+    "scene-plan", "scene-card", "scene-prose", "continuity-update", "scene",
+})
+_TARGET_FIELDS = frozenset({"artifact_id", "target_kind", "artifact_kind", "staging_path", "final_path", "status"})
+
+
+def target_artifact_kind(target: dict[str, Any]) -> str:
+    """Return the registry kind represented by a closed pending target."""
+    target_kind = target.get("target_kind")
+    if target_kind == _TARGET_KIND_CONTENT:
+        artifact_kind = target.get("artifact_kind")
+        if not isinstance(artifact_kind, str):
+            raise ContractError("content targetにはartifact_kindが必要です")
+        return artifact_kind
+    for artifact_kind, expected_target_kind in _TARGET_KIND_FOR_ARTIFACT.items():
+        if target_kind == expected_target_kind:
+            return artifact_kind
+    raise ContractError("pending target_kindが不正です")
+
+
+def make_pending_target(artifact_id: str, artifact_kind: str, staging_path: str, final_path: str) -> dict[str, Any]:
+    """Build a manifest target with separate role and content namespaces."""
+    target_kind = _TARGET_KIND_FOR_ARTIFACT.get(artifact_kind, _TARGET_KIND_CONTENT)
+    return {
+        "artifact_id": artifact_id,
+        "target_kind": target_kind,
+        "artifact_kind": artifact_kind if target_kind == _TARGET_KIND_CONTENT else None,
+        "staging_path": staging_path,
+        "final_path": final_path,
+        "status": "pending",
+    }
 
 
 def validate_run_state(state: object) -> dict[str, Any]:
@@ -153,6 +192,15 @@ def _validate_manifest_targets(value: object, staging_root: object) -> list[dict
             raise ContractError("pending_commit.targets.staging_pathはmanifest staging配下でなければなりません")
         if target["status"] not in {"pending", "finalized"}:
             raise ContractError("pending_commit.targets.statusが不正です")
+        target_kind = target["target_kind"]
+        artifact_kind = target["artifact_kind"]
+        if target_kind not in _TARGET_KINDS:
+            raise ContractError("pending_commit.targets.target_kindが不正です")
+        if target_kind == _TARGET_KIND_CONTENT:
+            if artifact_kind not in _CONTENT_ARTIFACT_KINDS:
+                raise ContractError("content targetのartifact_kindが不正です")
+        elif artifact_kind is not None or target_artifact_kind(target) not in _TARGET_KIND_FOR_ARTIFACT:
+            raise ContractError("non-content targetのartifact_kindが不正です")
         artifact_id = target["artifact_id"]
         if not isinstance(artifact_id, str) or not artifact_id or artifact_id in ids:
             raise ContractError("pending_commit.targets.artifact_idが不正です")
@@ -166,7 +214,7 @@ def _validate_manifest_targets(value: object, staging_root: object) -> list[dict
 
 
 def _validate_target_set(kind: str, targets: list[dict[str, Any]]) -> None:
-    kinds = [target["artifact_kind"] for target in targets]
+    kinds = [target_artifact_kind(target) for target in targets]
     if kind == "candidate_adoption":
         expected = {"adoption", "selection"}
         content = [item for item in kinds if item in _CONTENT_KINDS]
@@ -185,7 +233,7 @@ def _validate_target_set(kind: str, targets: list[dict[str, Any]]) -> None:
 
 
 def _is_bootstrap_request_adoption(targets: list[dict[str, Any]]) -> bool:
-    return any(target["artifact_kind"] == "request" for target in targets)
+    return any(target_artifact_kind(target) == "request" for target in targets)
 
 
 def _validate_state_update(
@@ -205,7 +253,7 @@ def _validate_state_update(
     if value["current_selection_id"] != expected_selection:
         raise ContractError("pending_commit.state_update.current_selection_idが不正です")
     if kind != "volume_publication" and not any(
-        target["artifact_kind"] == "selection" and target["artifact_id"] == output_selection_id
+        target_artifact_kind(target) == "selection" and target["artifact_id"] == output_selection_id
         for target in targets
     ):
         raise ContractError("pending_commit.output_selection_idは後続selection targetと一致しなければなりません")
@@ -219,7 +267,7 @@ def _validate_state_update(
         _validate_target(stage, value["current_target"])
     if kind == "volume_publication":
         _validate_published_volumes(value["published_volumes"])
-        publication = next(target for target in targets if target["artifact_kind"] == "volume-publication")
+        publication = next(target for target in targets if target_artifact_kind(target) == "volume-publication")
         entries = value["published_volumes"]
         if not entries:
             raise ContractError("volume_publication.state_update.published_volumesが不正です")
@@ -230,7 +278,7 @@ def _validate_state_update(
 
 
 def _validate_canonical_target(target: dict[str, Any]) -> None:
-    artifact_id, kind, final_path = target["artifact_id"], target["artifact_kind"], target["final_path"]
+    artifact_id, kind, final_path = target["artifact_id"], target_artifact_kind(target), target["final_path"]
     try:
         artifact_spec(kind).match_id(artifact_id)
         expected_path = artifact_directory(kind, artifact_id).as_posix()

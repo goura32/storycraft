@@ -26,19 +26,10 @@ class PromptTemplateSchemaResolutionTests(
             }),
             encoding="utf-8",
         )
-        (
-            schemas
-            / "critique_initial_concept.json"
-        ).write_text(
-            json.dumps({
-                "marker": "initial-concept",
-            }),
-            encoding="utf-8",
-        )
 
         return PromptTemplate(root)
 
-    def test_stage_specific_critique_schema_is_preferred(
+    def test_common_critique_schema_is_used_for_all_stages(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -52,7 +43,7 @@ class PromptTemplateSchemaResolutionTests(
             self.assertEqual(
                 schema,
                 {
-                    "marker": "initial-concept",
+                    "marker": "common",
                 },
             )
 

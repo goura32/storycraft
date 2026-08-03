@@ -632,10 +632,8 @@ def normalize_review(
             "issue_id": f"{review_id}-issue-{index:03d}",
             "category": review_category,
             "severity": issue["severity"],
-            "location": issue["field"],
-            "description": issue["description"],
-            "expected": "指摘された問題が解消されていること",
-            "suggestion": issue["suggestion"],
+            "evidence_locations": issue["evidence_locations"],
+            "explanation": issue["explanation"],
         })
 
     return {

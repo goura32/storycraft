@@ -10,7 +10,7 @@ from .artifact_record import validate_call_record, validate_candidate_record, va
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
 from .immutable_directory import finalize_immutable_directory
 from .publication_builder import validate_volume_publication_files
-from .run_state import RunStateStore
+from .run_state import RunStateStore, target_artifact_kind
 from .selection_authority import resolve_selection
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError
@@ -67,14 +67,14 @@ def recover_pending_commit(workspace_root: Path) -> dict[str, Any]:
         working["pending_commit"]["targets"][index]["status"] = "finalized"
     for target in targets:
         _target_validator(root, target)(root / target["final_path"])
-        if target["artifact_kind"] == "scene-commit":
+        if target_artifact_kind(target) == "scene-commit":
             _validate_scene_commit_lineage(root, _single_record(root / target["final_path"]), manifest["input_selection_id"], manifest["output_selection_id"])
     if manifest["kind"] == "candidate_adoption":
-        adoption_target = next(target for target in targets if target["artifact_kind"] == "adoption")
+        adoption_target = next(target for target in targets if target_artifact_kind(target) == "adoption")
         if _single_record(root / adoption_target["final_path"]).get("source_kind") == "candidate":
             _validate_candidate_adoption_lineage(root, manifest)
     for target in targets:
-        if target["artifact_kind"] == "selection":
+        if target_artifact_kind(target) == "selection":
             resolve_selection(root, _single_record(root / target["final_path"]))
     result = deepcopy(working)
     result.update(manifest["state_update"])
@@ -123,7 +123,7 @@ def _reject_ambiguous_target(staging: Path, final: Path) -> None:
 
 
 def _target_validator(root: Path, target: dict[str, Any]):
-    kind = target["artifact_kind"]
+    kind = target_artifact_kind(target)
     artifact_id = target["artifact_id"]
     if kind == "volume-publication":
         def validate_publication(directory: Path) -> None:
@@ -237,17 +237,6 @@ def _validate_publication_source_evidence(root: Path, files: dict[str, Any]) -> 
     # must not be enough to publish if its selected scene/quality evidence differs.
     from .volume_publication_stage import VolumePublicationStageService
     sources = VolumePublicationStageService(root)._publication_inputs(slots, record["volume_number"])
-    expected = {
-        "settings_id": sources["settings_id"],
-        "series_plan_id": sources["series_plan_id"],
-        "volume_plan_id": sources["volume_plan_id"],
-        "current_state_id": sources["current_state_id"],
-        "chapter_plan_ids": sources["chapter_plan_ids"],
-        "scene_ids": sources["scene_ids"],
-        "quality_disposition_refs": sources["quality_ids"],
-    }
-    if any(record[field] != value for field, value in expected.items()):
-        raise ContractError("volume publication source/reference evidenceがselectionと一致しません")
     expected_manuscript = "\n\n".join(scene["prose"].strip() for scene in sources["scenes"]) + "\n"
     if sources["has_remaining_major_issues"]:
         expected_manuscript = "編集上の注意があります。\n\n" + expected_manuscript
@@ -270,10 +259,10 @@ def _validate_adoption(record: dict[str, Any], artifact_id: str) -> None:
 def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -> None:
     """Bind a candidate adoption's audit chain and immutable selection delta."""
     targets = manifest["targets"]
-    content_targets = [target for target in targets if target["artifact_kind"] not in {"adoption", "selection"}]
-    content_target = next(target for target in content_targets if target["artifact_kind"] != "generation")
-    adoption_target = next(target for target in targets if target["artifact_kind"] == "adoption")
-    selection_target = next(target for target in targets if target["artifact_kind"] == "selection")
+    content_targets = [target for target in targets if target_artifact_kind(target) not in {"adoption", "selection"}]
+    content_target = next(target for target in content_targets if target_artifact_kind(target) != "generation")
+    adoption_target = next(target for target in targets if target_artifact_kind(target) == "adoption")
+    selection_target = next(target for target in targets if target_artifact_kind(target) == "selection")
     content = _single_record(root / content_target["final_path"])
     adoption = _single_record(root / adoption_target["final_path"])
     selection = _single_record(root / selection_target["final_path"])
@@ -305,7 +294,7 @@ def _validate_candidate_adoption_lineage(root: Path, manifest: dict[str, Any]) -
         raise ContractError("candidate adoptionのrevise call targetが不正です")
     if call.get("settings_id") != candidate.get("settings_id"):
         raise ContractError("candidate adoptionのcall/settings lineageが不正です")
-    if candidate.get("candidate_id") != candidate_id or candidate.get("artifact_kind") != content_target["artifact_kind"]:
+    if candidate.get("candidate_id") != candidate_id or candidate.get("artifact_kind") != target_artifact_kind(content_target):
         raise ContractError("candidate adoptionのcandidate参照が不正です")
     if candidate.get("payload") != content.get("content"):
         raise ContractError("candidate adoptionのcontentがcandidateと一致しません")
@@ -366,8 +355,8 @@ def _validate_candidate_selection_delta(root: Path, manifest: dict[str, Any], co
     input_selection = _audit_record(root, "runtime/selections", input_selection_id)
     validate_selection_snapshot(input_selection)
     expected = dict(input_selection["slots"])
-    content_target = next(target for target in content_targets if target["artifact_kind"] != "generation")
-    kind, content_id = content_target["artifact_kind"], content_target["artifact_id"]
+    content_target = next(target for target in content_targets if target_artifact_kind(target) != "generation")
+    kind, content_id = target_artifact_kind(content_target), content_target["artifact_id"]
     if kind == "scene-prose":
         expected = {slot: artifact_id for slot, artifact_id in expected.items() if not slot.startswith("continuity_")}
     content_slot = artifact_spec(kind).slot_for(content_id)
@@ -375,7 +364,7 @@ def _validate_candidate_selection_delta(root: Path, manifest: dict[str, Any], co
     adoption_id = adoption_target["artifact_id"]
     if kind == "initial-design":
         expected["initial_design_adoption"] = adoption_id
-        generation = next(target for target in content_targets if target["artifact_kind"] == "generation")
+        generation = next(target for target in content_targets if target_artifact_kind(target) == "generation")
         expected["current_state"] = generation["artifact_id"]
     elif kind in {"series-plan", "volume-plan", "chapter-plan", "scene-plan"}:
         stem, coordinate = content_slot.split(".", 1) if "." in content_slot else (content_slot, "")

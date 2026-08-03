@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from storycraft.candidate_stage import CandidateStageRunner
+from storycraft.scene_continuity_stage import SceneContinuityStageService
 from storycraft.selection_authority import DEFAULT_CONTENT_VALIDATORS, resolve_selection
 from storycraft.series_contracts import ContractError
 
@@ -24,6 +26,89 @@ def snapshot(selection_id: str, slots: dict[str, str], parent: str | None = None
 
 
 class SelectionAuthorityTests(unittest.TestCase):
+    def test_review_prose_evidence_uses_utf8_byte_boundaries(self) -> None:
+        review = {
+            "schema_version": "review-response-v1", "decision": "issues",
+            "issues": [{"severity": "notice", "evidence_locations": ["prose:3"], "explanation": "n"}],
+        }
+        self.assertEqual(CandidateStageRunner._review_with_evidence(review, {"text": "本文"}), review)
+        bad = json.loads(json.dumps(review).replace("prose:3", "prose:1"))
+        with self.assertRaises(ContractError):
+            CandidateStageRunner._review_with_evidence(bad, {"text": "本文"})
+        paragraph_review = {
+            "schema_version": "review-response-v1", "decision": "issues",
+            "issues": [{"severity": "notice", "evidence_locations": ["paragraph:1"], "explanation": "n"}],
+        }
+        paragraph_text = {"text": "第一\n\n第二"}
+        self.assertEqual(CandidateStageRunner._review_with_evidence(paragraph_review, paragraph_text), paragraph_review)
+        self.assertTrue(SceneContinuityStageService._evidence_is_in_prose("paragraph:1", paragraph_text["text"]))
+        with self.assertRaises(ContractError):
+            CandidateStageRunner._review_with_evidence(
+                json.loads(json.dumps(paragraph_review).replace("paragraph:1", "paragraph:2")), paragraph_text,
+            )
+
+    @staticmethod
+    def _scene_plan() -> dict:
+        return {
+            "purpose": "場面",
+            "pov_character_id": "char-main",
+            "participant_ids": ["char-main"],
+            "location_id": "loc-main",
+            "starting_conditions": ["開始"],
+            "intended_beats": ["展開"],
+            "intended_revelations": [],
+            "intended_changes": ["変化"],
+            "prohibited_disclosures": [],
+        }
+
+    def test_scene_plan_is_bound_to_the_coordinate_and_parent_plans(self) -> None:
+        parents = {
+            "__current_slot__": "scene_plan.v01.c01.s01",
+            "chapter_plan.v01.c01": {"content": {"scene_summaries": [{"scene_number": 1, "purpose": "場面"}], "ending_changes": ["変化"], "required_revelations": []}},
+            "volume_plan.v01": {"content": {"chapter_summaries": [{"chapter_number": 1, "purpose": "章"}]}},
+            "series_plan": {"content": {"volume_summaries": [{"volume_number": 1, "purpose": "巻", "ending_change": "変化"}]}},
+        }
+        DEFAULT_CONTENT_VALIDATORS["scene-plan"](self._scene_plan(), parents)
+        invalid = self._scene_plan()
+        invalid["purpose"] = "親にない目的"
+        with self.assertRaisesRegex(ContractError, "purpose"):
+            DEFAULT_CONTENT_VALIDATORS["scene-plan"](invalid, parents)
+
+    def test_scene_card_is_bound_to_the_coordinate_scene_plan(self) -> None:
+        card = {
+            "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main",
+            "story_time": "夜", "purpose": "場面", "opening_state": "開始",
+            "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}],
+            "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [],
+            "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"],
+        }
+        inputs = {
+            "__current_slot__": "scene_card.v01.c01.s01",
+            "scene_plan.v01.c01.s01": {"content": self._scene_plan()},
+        }
+        DEFAULT_CONTENT_VALIDATORS["scene-card"](card, inputs)
+        invalid = dict(card, pov_character_id="char-other")
+        with self.assertRaisesRegex(ContractError, "pov_character_id"):
+            DEFAULT_CONTENT_VALIDATORS["scene-card"](invalid, inputs)
+
+    def test_continuity_candidate_enforces_timeline_allowed_update_and_evidence(self) -> None:
+        target = {"volume_number": 1, "chapter_number": 1, "scene_number": 1}
+        inputs = {
+            "current_state": {"content": {"story_facts": [{}], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {}, "timeline_position": 2}},
+            "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}]}},
+            "scene_prose.v01.c01.s01": {"content": {"text": "本文"}},
+        }
+        valid = {"coordinate": target, "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]}
+        SceneContinuityStageService._validate_content(valid, target, inputs)
+        self.assertTrue(SceneContinuityStageService._evidence_is_in_prose("prose:3", "本文"))
+        self.assertFalse(SceneContinuityStageService._evidence_is_in_prose("prose:4", "本文"))
+        with self.assertRaisesRegex(ContractError, "timeline_position"):
+            SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "value": 1}]}, target, inputs)
+        with self.assertRaisesRegex(ContractError, "allowed_updates"):
+            SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "target": "reader_disclosures", "path": "$.reader_disclosures.item", "value": "x"}]}, target, inputs)
+        with self.assertRaisesRegex(ContractError, "evidence"):
+            SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "evidence_locations": ["prose:99"]}]}, target, inputs)
+
     def test_resolves_bootstrap_enveloped_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

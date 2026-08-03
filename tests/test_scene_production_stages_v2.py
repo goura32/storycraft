@@ -39,7 +39,7 @@ class Model:
         self.contexts: dict[str, dict[str, Any]] = {}
         self.last_call_id: str | None = None
 
-    def _record_physical_call(self, operation: str, stage: str, response: dict[str, Any]) -> None:
+    def _record_physical_call(self, operation: str, stage: str, response: object) -> None:
         call_id = f"call-{len(list((self.root / 'runtime/calls').iterdir())) + 1:06d}"
         selection_id = RunStateStore(self.root).load()["current_selection_id"]
         candidates = sorted(path.name for path in (self.root / "candidates").iterdir())
@@ -60,13 +60,30 @@ class Model:
         self.contexts[stage] = context
         payloads = {
             "scene_card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
-            "scene_prose": {"coordinate": COORDINATE, "text": "場面本文"},
             "scene_continuity": {"coordinate": COORDINATE, "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]},
         }
-        kinds = {"scene_card": "scene-card", "scene_prose": "scene-prose", "scene_continuity": "continuity-update"}
+        if stage == "scene_card":
+            payloads[stage]["purpose"] = context["scene_plan"]["purpose"]
+            payloads[stage]["allowed_updates"] = [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}]
+        kinds = {"scene_card": "scene-card", "scene_continuity": "continuity-update"}
         response = {"schema_version": "candidate-response-v1", "artifact_kind": kinds[stage], "payload": payloads[stage]}
         self._record_physical_call("generate", stage, response)
         return response
+
+    def generate_prose(self, stage: str, context: dict[str, Any]) -> str:
+        self.contexts[stage] = context
+        self._record_physical_call("generate", stage, "場面本文")
+        return "場面本文"
+
+    def critique_prose(self, stage: str, candidate: str, context: dict[str, Any]) -> dict[str, Any]:
+        del candidate, context
+        response = {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
+        self._record_physical_call("review", stage, response)
+        return response
+
+    def revision_prose(self, stage: str, candidate: str, review: dict[str, Any], context: dict[str, Any]) -> str:
+        del candidate, review, context
+        raise AssertionError("passing prose review must not revise")
 
     def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
         response = {"schema_version": "review-response-v1", "decision": "pass", "issues": []}
@@ -118,7 +135,7 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         
         # Valid scene-plan content per closed schema
         scene_plan_content = {
-            "purpose": "テスト",
+            "purpose": "場面4",
             "pov_character_id": "char-main",
             "participant_ids": ["char-main"],
             "location_id": "loc-main",
@@ -148,7 +165,16 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         }
         for kind, (artifact_id, content) in records.items():
             write_content(root, kind, artifact_id, base["selection_id"], content)
-        current = selections.create(input_selection_id=base["selection_id"], created_at=NOW, slots={
+        parent = selections.create(input_selection_id=base["selection_id"], created_at=NOW, slots={
+            "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
+            "series_plan": "series-plan-000001", "volume_plan.v03": "volume-plan-v03-000001",
+            "chapter_plan.v03.c02": "chapter-plan-v03-c02-000001", "current_state": "gen-000001",
+        })
+        scene_plan_path = root / artifact_directory("scene-plan", "scene-plan-v03-c02-s04-000001") / "record.json"
+        scene_plan_record = json.loads(scene_plan_path.read_text(encoding="utf-8"))
+        scene_plan_record["input_selection_id"] = parent["selection_id"]
+        write_json(scene_plan_path, scene_plan_record)
+        current = selections.create(input_selection_id=parent["selection_id"], created_at=NOW, slots={
             "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
             "series_plan": "series-plan-000001", "volume_plan.v03": "volume-plan-v03-000001",
             "chapter_plan.v03.c02": "chapter-plan-v03-c02-000001", "scene_plan.v03.c02.s04": "scene-plan-v03-c02-s04-000001",
