@@ -16,6 +16,29 @@ from storycraft.workspace import create_workspace, validate_workspace
 
 TIMESTAMP = "2026-07-31T00:00:00Z"
 
+RICH_INITIAL_DESIGN = {
+    "schema_version": 1,
+    "core": {
+        "logline": "選択の代償",
+        "premise": "主人公が選択の結果を引き受ける",
+        "central_question": "何を守るのか",
+        "themes": ["選択"],
+        "dramatic_engine": "選択の結果が次の障害を生む",
+        "tone": ["希望"],
+        "reader_promise": "人物の選択が結末を変える",
+        "ending_direction": "責任を引き受ける",
+    },
+    "cast": [{"name": "主人公", "role": "英雄", "description": "選択を迫られる", "relationships": []}],
+    "world": {"settings": ["剣と魔法"], "constraints": ["契約を破れない"], "institutions": ["王国"]},
+    "knowledge_model": {
+        "author_knows": ["主人公の秘密"],
+        "character_knows": {"主人公": ["自分の目的"]},
+        "reader_knows": ["主人公の目的"],
+    },
+    "unresolved_threads": [{"name": "塔の試練", "type": "goal", "required_for_ending": True, "description": "塔を登頂する"}],
+    "ending_conditions": [{"thread_name": "塔の試練", "condition": "塔を登頂する"}],
+}
+
 
 class FakeInitialDesignModel:
     __storycraft_test_double__ = True
@@ -26,14 +49,7 @@ class FakeInitialDesignModel:
 
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         self.calls.append((stage, context))
-        return {
-            "core": "選択の代償",
-            "cast": [{"name": "主人公", "role": "英雄"}],
-            "world": "剣と魔法の世界",
-            "knowledge_model": {},
-            "unresolved_threads": [],
-            "ending_conditions": ["塔を登頂する"]
-        }
+        return RICH_INITIAL_DESIGN
 
     def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
         self.calls.append(("review", {"stage": stage, "context": context, "candidate": candidate}))
@@ -108,14 +124,7 @@ class InitialDesignStageV2Tests(unittest.TestCase):
                 ("review", {
                     "stage": "initial_design",
                     "context": {"request": request, "settings": settings},
-                    "candidate": {
-                        "core": "選択の代償",
-                        "cast": [{"name": "主人公", "role": "英雄"}],
-                        "world": "剣と魔法の世界",
-                        "knowledge_model": {},
-                        "unresolved_threads": [],
-                        "ending_conditions": ["塔を登頂する"]
-                    },
+                    "candidate": RICH_INITIAL_DESIGN,
                 }),
             ])
             self.assertIsNone(result["pending_commit"])
@@ -130,14 +139,7 @@ class InitialDesignStageV2Tests(unittest.TestCase):
                 "artifact_kind": "initial-design",
                 "input_selection_id": "selection-000001",
                 "created_at": TIMESTAMP,
-                "content": {
-                    "core": "選択の代償",
-                    "cast": [{"name": "主人公", "role": "英雄"}],
-                    "world": "剣と魔法の世界",
-                    "knowledge_model": {},
-                    "unresolved_threads": [],
-                    "ending_conditions": ["塔を登頂する"]
-                },
+                "content": RICH_INITIAL_DESIGN,
             })
             next_selection = json.loads((root / "runtime/selections/selection-000002/record.json").read_text(encoding="utf-8"))
             self.assertEqual(next_selection["input_selection_id"], "selection-000001")
@@ -148,27 +150,10 @@ class InitialDesignStageV2Tests(unittest.TestCase):
             })
             generation = json.loads((root / "generations/gen-000001/record.json").read_text(encoding="utf-8"))
             self.assertEqual(generation["input_selection_id"], "selection-000001")
-            self.assertEqual(generation["content"], {
-                "story_facts": [
-                    {"fact_id": "fact-000001", "scope": "core", "value": "選択の代償"},
-                    {"fact_id": "fact-000002", "scope": "world", "value": "剣と魔法の世界"},
-                    {"fact_id": "fact-000003", "scope": "character", "subject_id": "char-000001", "value": {"name": "主人公", "role": "英雄"}},
-                ],
-                "character_knowledge": {"char-000001": []},
-                "reader_disclosures": [],
-                "unresolved_thread_states": {},
-                "timeline_position": 0,
-            })
+            self.assertEqual(generation["content"], InitialDesignStageService._build_initial_state(RICH_INITIAL_DESIGN))
             candidate = json.loads((root / "candidates/candidate-000001/record.json").read_text(encoding="utf-8"))
             self.assertEqual(candidate["artifact_kind"], "initial-design")
-            self.assertEqual(candidate["payload"], {
-                "core": "選択の代償",
-                "cast": [{"name": "主人公", "role": "英雄"}],
-                "world": "剣と魔法の世界",
-                "knowledge_model": {},
-                "unresolved_threads": [],
-                "ending_conditions": ["塔を登頂する"]
-            })
+            self.assertEqual(candidate["payload"], RICH_INITIAL_DESIGN)
             review = json.loads((root / "reviews/review-000001/record.json").read_text(encoding="utf-8"))
             self.assertEqual(review["candidate_id"], "candidate-000001")
             self.assertEqual(review["response"], {"schema_version": "review-response-v1", "decision": "pass", "issues": []})

@@ -90,12 +90,13 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
         
         # Valid initial-design content per closed schema
         initial_design_content = {
-            "core": "英雄の旅",
-            "cast": [{"name": "主人公", "role": "英雄"}],
-            "world": "剣と魔法の世界",
-            "knowledge_model": {},
-            "unresolved_threads": [],
-            "ending_conditions": ["塔を登頂する"]
+            "schema_version": 1,
+            "core": {"logline": "英雄の旅", "premise": "選択の物語", "central_question": "何を守るのか", "themes": ["選択"], "dramatic_engine": "選択が障害を生む", "tone": ["希望"], "reader_promise": "人物の選択が結末を変える", "ending_direction": "責任を引き受ける"},
+            "cast": [{"name": "主人公", "role": "英雄", "description": "選択を迫られる", "relationships": []}],
+            "world": {"settings": ["剣と魔法"], "constraints": ["契約を破れない"], "institutions": ["王国"]},
+            "knowledge_model": {"author_knows": ["秘密"], "character_knows": {"主人公": ["目的"]}, "reader_knows": ["目的"]},
+            "unresolved_threads": [{"name": "塔の試練", "type": "goal", "required_for_ending": True, "description": "塔を登頂する"}],
+            "ending_conditions": [{"thread_name": "塔の試練", "condition": "塔を登頂する"}],
         }
         
         # Valid series-plan content per closed schema

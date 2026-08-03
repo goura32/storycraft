@@ -38,77 +38,28 @@ def _validate_request_content(content: dict[str, Any], inputs: dict[str, dict[st
         raise ContractError("request content")
 
 def _validate_initial_design_content(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
+    del inputs
     if not isinstance(content, dict):
         raise ContractError("initial-design content")
-    # The shipped LLM schema is the rich V1 contract.  Keep the compact
-    # fixture shape accepted by older isolated tests, but never let a rich
-    # response bypass the schema or its cross-reference rules.
-    if content.get("schema_version") == 1 and isinstance(content.get("core"), dict):
-        try:
-            jsonschema.Draft202012Validator(
-                get_template_loader().load_schema_object("generate", "initial_design")
-            ).validate(content)
-        except jsonschema.ValidationError as exc:
-            raise ContractError("initial-design content schema不正") from exc
-        cast = content["cast"]
-        cast_names = [item["name"] for item in cast]
-        thread_names = [item["name"] for item in content["unresolved_threads"]]
-        if len(cast_names) != len(set(cast_names)) or len(thread_names) != len(set(thread_names)):
-            raise ContractError("initial-design contentの名称が重複しています")
-        character_knows = content["knowledge_model"]["character_knows"]
-        if set(character_knows) != set(cast_names):
-            raise ContractError("initial-design contentの人物知識主体がcastと一致しません")
-        required_threads = {item["name"] for item in content["unresolved_threads"] if item["required_for_ending"]}
-        condition_threads = {item["thread_name"] for item in content["ending_conditions"]}
-        if condition_threads != required_threads:
-            raise ContractError("initial-design contentの結末条件が未解決事項と一致しません")
-        return
+    try:
+        jsonschema.Draft202012Validator(
+            get_template_loader().load_schema_object("generate", "initial_design")
+        ).validate(content)
+    except jsonschema.ValidationError as exc:
+        raise ContractError("initial-design content schema不正") from exc
+    cast = content["cast"]
+    cast_names = [item["name"] for item in cast]
+    thread_names = [item["name"] for item in content["unresolved_threads"]]
+    if len(cast_names) != len(set(cast_names)) or len(thread_names) != len(set(thread_names)):
+        raise ContractError("initial-design contentの名称が重複しています")
+    character_knows = content["knowledge_model"]["character_knows"]
+    if set(character_knows) != set(cast_names):
+        raise ContractError("initial-design contentの人物知識主体がcastと一致しません")
+    required_threads = {item["name"] for item in content["unresolved_threads"] if item["required_for_ending"]}
+    condition_threads = {item["thread_name"] for item in content["ending_conditions"]}
+    if condition_threads != required_threads:
+        raise ContractError("initial-design contentの結末条件が未解決事項と一致しません")
 
-    required = {
-        "core": str,
-        "cast": list,
-        "world": str,
-        "knowledge_model": dict,
-        "unresolved_threads": list,
-        "ending_conditions": list,
-    }
-    if not isinstance(content, dict):
-        raise ContractError("initial-design content")
-    actual_keys = set(content.keys())
-    expected_keys = set(required.keys())
-    if actual_keys != expected_keys:
-        raise ContractError("initial-design content")
-    for key, typ in required.items():
-        val = content[key]
-        if not isinstance(val, typ):
-            raise ContractError("initial-design content")
-        if key == "core" or key == "world":
-            if not isinstance(val, str) or not val.strip():
-                raise ContractError("initial-design content")
-        if key == "cast":
-            if not isinstance(val, list):
-                raise ContractError("initial-design content")
-            for item in val:
-                if not isinstance(item, dict):
-                    raise ContractError("initial-design content")
-                if set(item.keys()) != {"name", "role"}:
-                    raise ContractError("initial-design content")
-                if not isinstance(item.get("name"), str) or not item["name"].strip():
-                    raise ContractError("initial-design content")
-                if not isinstance(item.get("role"), str) or not item["role"].strip():
-                    raise ContractError("initial-design content")
-        if key == "knowledge_model":
-            if not isinstance(val, dict):
-                raise ContractError("initial-design content")
-        if key == "unresolved_threads":
-            if not isinstance(val, list):
-                raise ContractError("initial-design content")
-        if key == "ending_conditions":
-            if not isinstance(val, list):
-                raise ContractError("initial-design content")
-            for item in val:
-                if not isinstance(item, str) or not item.strip():
-                    raise ContractError("initial-design content")
 
 def _require_object(content: dict[str, Any], kind: str) -> dict[str, Any]:
     if not isinstance(content, dict) or not content:
