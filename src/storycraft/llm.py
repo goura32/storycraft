@@ -31,10 +31,11 @@ from .filesystem_security import (
     directory_identity,
     directory_entry_identity,
     directory_fd_path,
+    ensure_directory_at,
+    _open_directory_chain,
     open_directory_at,
     read_text_at,
     unlink_if_identity_at,
-    open_workspace_directory,
 )
 from .log import logger
 from .ollama import OllamaResponseFormatError, OllamaTechnicalError, generate as ollama_generate
@@ -46,8 +47,10 @@ STATUS_SAVING = "saving"
 _RAW_LOG_LOCK = threading.Lock()
 
 
-def _close_descriptors(*descriptors: int) -> None:
+def _close_descriptors(*descriptors: int | None) -> None:
     for descriptor in descriptors:
+        if not isinstance(descriptor, int):
+            continue
         try:
             os.close(descriptor)
         except OSError:
@@ -140,6 +143,69 @@ class CallRecord:
         }
 
 
+def _open_canonical_workspace_descriptors(
+    workspace_root: Path,
+    raw_dir: Path,
+    *,
+    expected_root_identity: tuple[int, int] | None = None,
+    include_calls: bool = True,
+) -> tuple[Path, int, int, int | None, int]:
+    """Open root, runtime, calls, and raw logs in ancestor-FD order.
+
+    The runtime ancestor must be captured before opening any runtime child.  In
+    particular, opening ``raw_logs`` first and then resolving ``runtime`` by
+    pathname would allow an ancestor replacement to redirect call records.
+    """
+    root_candidate = absolute_without_resolving(Path(workspace_root))
+    raw_candidate = absolute_without_resolving(Path(raw_dir))
+    canonical_raw = root_candidate / "runtime" / "raw_logs"
+    if raw_candidate != canonical_raw:
+        raise ContractError("raw log directoryはworkspace/runtime/raw_logsでなければなりません")
+    if expected_root_identity is None:
+        expected_root_identity = directory_identity(root_candidate)
+    root_path = assert_no_symlink_path(root_candidate, require_directory=True)
+    root_descriptor: int | None = None
+    runtime_descriptor: int | None = None
+    call_descriptor: int | None = None
+    raw_descriptor: int | None = None
+    try:
+        root_descriptor = _open_directory_chain(root_path, expected_identity=expected_root_identity)
+        expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
+        runtime_descriptor = open_directory_at(
+            root_descriptor,
+            ("runtime",),
+            expected_identity=expected_runtime_identity,
+        )
+        if include_calls:
+            expected_call_identity = directory_entry_identity(runtime_descriptor, "calls")
+            call_descriptor = open_directory_at(
+                runtime_descriptor,
+                ("calls",),
+                expected_identity=expected_call_identity,
+            )
+        try:
+            expected_raw_identity = directory_entry_identity(runtime_descriptor, "raw_logs")
+        except ContractError as missing_or_invalid:
+            try:
+                entry = os.stat("raw_logs", dir_fd=runtime_descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                raw_descriptor = ensure_directory_at(runtime_descriptor, ("raw_logs",), exist_ok=True)
+            except OSError:
+                raise missing_or_invalid
+            else:
+                raise missing_or_invalid
+        else:
+            raw_descriptor = open_directory_at(
+                runtime_descriptor,
+                ("raw_logs",),
+                expected_identity=expected_raw_identity,
+            )
+        return root_path, root_descriptor, runtime_descriptor, call_descriptor, raw_descriptor
+    except Exception:
+        _close_descriptors(*(descriptor for descriptor in (raw_descriptor, call_descriptor, runtime_descriptor, root_descriptor) if isinstance(descriptor, int)))
+        raise
+
+
 class LLMClient:
     def __init__(
         self,
@@ -154,37 +220,14 @@ class LLMClient:
         root_candidate = absolute_without_resolving(Path(workspace_root))
         raw_candidate = absolute_without_resolving(Path(raw_dir))
         expected_root_identity = directory_identity(root_candidate)
-        expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
-        root = assert_no_symlink_path(root_candidate, require_directory=True)
-        raw_path = assert_no_symlink_path(raw_candidate)
-        root_descriptor, raw_descriptor = open_workspace_directory(
-            root,
-            raw_path,
-            create=True,
+        root, root_descriptor, runtime_descriptor, call_descriptor, raw_descriptor = _open_canonical_workspace_descriptors(
+            root_candidate,
+            raw_candidate,
             expected_root_identity=expected_root_identity,
-            expected_child_identity=expected_raw_identity,
         )
-        runtime_descriptor: int | None = None
-        call_descriptor: int | None = None
-        try:
-            expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
-            runtime_descriptor = open_directory_at(
-                root_descriptor,
-                ("runtime",),
-                expected_identity=expected_runtime_identity,
-            )
-            expected_call_identity = directory_entry_identity(runtime_descriptor, "calls")
-            call_descriptor = open_directory_at(
-                runtime_descriptor,
-                ("calls",),
-                expected_identity=expected_call_identity,
-            )
-        except Exception:
-            _close_descriptors(*(descriptor for descriptor in (call_descriptor, runtime_descriptor, raw_descriptor, root_descriptor) if isinstance(descriptor, int)))
-            raise
         self.settings = settings
         self.settings_id = getattr(settings, "settings_id", None)
-        self.raw_dir = raw_path
+        self.raw_dir = raw_candidate
         self.workspace_root = root
         self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
         self._workspace_root_descriptor = root_descriptor
@@ -251,28 +294,13 @@ class LLMClient:
         root_candidate = absolute_without_resolving(Path(workspace_root))
         raw_candidate = absolute_without_resolving(Path(raw_dir))
         expected_root_identity = directory_identity(root_candidate)
-        expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
-        root = assert_no_symlink_path(root_candidate, require_directory=True)
-        raw_path = assert_no_symlink_path(raw_candidate)
-        root_descriptor, raw_descriptor = open_workspace_directory(
-            root,
-            raw_path,
-            create=True,
+        root, root_descriptor, runtime_descriptor, call_descriptor, raw_descriptor = _open_canonical_workspace_descriptors(
+            root_candidate,
+            raw_candidate,
             expected_root_identity=expected_root_identity,
-            expected_child_identity=expected_raw_identity,
         )
-        runtime_descriptor: int | None = None
-        call_descriptor: int | None = None
-        try:
-            expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
-            runtime_descriptor = open_directory_at(root_descriptor, ("runtime",), expected_identity=expected_runtime_identity)
-            expected_call_identity = directory_entry_identity(runtime_descriptor, "calls")
-            call_descriptor = open_directory_at(runtime_descriptor, ("calls",), expected_identity=expected_call_identity)
-        except Exception:
-            _close_descriptors(*(descriptor for descriptor in (call_descriptor, runtime_descriptor, raw_descriptor, root_descriptor) if isinstance(descriptor, int)))
-            raise
         self.workspace_root = root
-        self.raw_dir = raw_path
+        self.raw_dir = raw_candidate
         self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
         self._workspace_root_descriptor = root_descriptor
         self._runtime_directory_descriptor = runtime_descriptor
@@ -361,6 +389,7 @@ class LLMClient:
             root_descriptor = getattr(self, "_workspace_root_descriptor", None)
             raw_descriptor = getattr(self, "_raw_directory_descriptor", None)
             temporary_anchor = False
+            runtime_anchor_descriptor: int | None = None
             if not isinstance(root_descriptor, int) or not isinstance(raw_descriptor, int):
                 raw_candidate = absolute_without_resolving(Path(self.raw_dir))
                 workspace_root = getattr(self, "workspace_root", None)
@@ -368,14 +397,11 @@ class LLMClient:
                     raise ContractError("raw log保存にはworkspace_rootが必要です")
                 root_candidate = absolute_without_resolving(Path(workspace_root))
                 expected_root_identity = directory_identity(root_candidate)
-                expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
-                raw_path = assert_no_symlink_path(raw_candidate)
-                root_descriptor, raw_descriptor = open_workspace_directory(
+                _, root_descriptor, runtime_anchor_descriptor, _, raw_descriptor = _open_canonical_workspace_descriptors(
                     root_candidate,
-                    raw_path,
-                    create=True,
+                    raw_candidate,
                     expected_root_identity=expected_root_identity,
-                    expected_child_identity=expected_raw_identity,
+                    include_calls=False,
                 )
                 temporary_anchor = True
             try:
@@ -469,7 +495,7 @@ class LLMClient:
                     _unlink_at(raw_descriptor, reservation_name)
             finally:
                 if temporary_anchor:
-                    _close_descriptors(raw_descriptor, root_descriptor)
+                    _close_descriptors(raw_descriptor, runtime_anchor_descriptor, root_descriptor)
 
     @staticmethod
     def _write_raw_file(path: Path, content: str) -> tuple[int, int]:

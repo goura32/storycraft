@@ -106,10 +106,12 @@ class DeferredAuditRegressionTests(unittest.TestCase):
 
     def test_raw_log_pair_rolls_back_when_second_file_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            raw_dir = Path(temporary)
+            workspace_root = Path(temporary) / "workspace"
+            raw_dir = workspace_root / "runtime" / "raw_logs"
+            raw_dir.mkdir(parents=True)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir
-            client.workspace_root = raw_dir
+            client.workspace_root = workspace_root
             record = CallRecord(
                 kind="generate",
                 phase="initial_design",

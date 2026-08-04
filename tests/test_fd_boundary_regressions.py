@@ -388,19 +388,19 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             external = Path(temporary) / "external-calls"
             external.mkdir()
             backup = root / "runtime/calls.backup"
-            original_open = ollama_module.open_workspace_directory
+            original_open = ollama_module.open_directory_at
             swapped = False
 
-            def raced_open(root_arg, child_arg, *, create=True, **kwargs):
+            def raced_open(directory_fd, parts, *, expected_identity=None):
                 nonlocal swapped
-                if not swapped:
+                if parts == ("calls",) and not swapped:
                     swapped = True
                     calls.rename(backup)
                     external.rename(calls)
-                return original_open(root_arg, child_arg, create=create, **kwargs)
+                return original_open(directory_fd, parts, expected_identity=expected_identity)
 
             try:
-                with patch.object(ollama_module, "open_workspace_directory", side_effect=raced_open):
+                with patch.object(ollama_module, "open_directory_at", side_effect=raced_open):
                     with self.assertRaises(ContractError):
                         ollama_module.generate(
                             "http://127.0.0.1:1", "probe-model", "probe", None,
@@ -422,16 +422,16 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             external = Path(temporary) / "external-raw"
             external.mkdir()
             backup = root / "runtime/raw_logs.backup"
-            original_open = llm_module.open_workspace_directory
+            original_open = llm_module.open_directory_at
             swapped = False
 
-            def raced_open(root_arg, child_arg, *, create=True, **kwargs):
+            def raced_open(directory_fd, parts, *, expected_identity=None):
                 nonlocal swapped
-                if not swapped:
+                if parts == ("raw_logs",) and not swapped:
                     swapped = True
                     raw_dir.rename(backup)
                     external.rename(raw_dir)
-                return original_open(root_arg, child_arg, create=create, **kwargs)
+                return original_open(directory_fd, parts, expected_identity=expected_identity)
 
             settings = SimpleNamespace(
                 settings_id="settings-000001",
@@ -439,7 +439,7 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
                 retry={},
             )
             try:
-                with patch.object(llm_module, "open_workspace_directory", side_effect=raced_open):
+                with patch.object(llm_module, "open_directory_at", side_effect=raced_open):
                     with self.assertRaises(ContractError):
                         LLMClient(settings, raw_dir, workspace_root=root)
                 self.assertEqual(list(raw_dir.iterdir()), [])

@@ -138,10 +138,12 @@ class HardeningContractTests(unittest.TestCase):
 
     def test_raw_logs_redact_secrets_and_reserve_unique_atomic_stems(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            raw_dir = Path(temporary)
+            workspace_root = Path(temporary) / "workspace"
+            raw_dir = workspace_root / "runtime" / "raw_logs"
+            raw_dir.mkdir(parents=True)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir
-            client.workspace_root = raw_dir
+            client.workspace_root = workspace_root
             barrier = threading.Barrier(8)
 
             def save(index: int) -> None:
@@ -181,10 +183,11 @@ class HardeningContractTests(unittest.TestCase):
 
     def test_raw_log_symlink_is_rejected_before_external_write(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            external = root / "external"
+            root = Path(temporary) / "workspace"
+            external = Path(temporary) / "external"
             external.mkdir()
-            raw_dir = root / "raw_logs"
+            (root / "runtime").mkdir(parents=True)
+            raw_dir = root / "runtime" / "raw_logs"
             raw_dir.symlink_to(external, target_is_directory=True)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir

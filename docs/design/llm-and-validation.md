@@ -18,7 +18,8 @@ LLM 境界は Ollama との通信のみを担当し、シード・タイムア�
 provider境界は有効な`settings_id`、`workspace_root`、およびworkspace内のcanonicalな`runtime/calls` directoryを必須とします。HTTP開始前にworkspace rootとrecord directoryのdirectory descriptorを保持し、能力取得とcompletionの両方を同じFD anchorへ束縛してから通信します。record保存時にpathとdescriptorのidentityが一致しなければfail-closedで停止し、保存先を再解決しません。raw logも同様に、workspace内の`runtime/raw_logs` descriptorへJSON/Markdown pairのatomic書込みを固定します。HTTP openerは環境変数のproxy設定を使わず、hostnameのliteral address pinningを迂回させません。
 provider境界ではworkspace rootだけでなく`runtime`とcanonicalな`runtime/calls`のdescriptorもLLMClient生成時に保持し、各物理呼出しへ引き渡します。`runtime`のcounterとcall recordはこの保持FDから操作し、pathをprovider呼出し直前に再解決しません。provider境界へはHTTP wire実装だけが到達可能で、Python SDK client、SDK stream、別provider transportへのfallbackを持ちません。`ollama_http_boundary` が真でない場合、provider call開始前に契約エラーで停止します。初回path検査で取得したroot/対象directoryのidentityと、実際に開いたdescriptorを比較してから通信・保存を開始し、call record leafの公開後identityも再検証して差替えを検知します。raw logの予約後targetも既存entryを置換せず、JSON/Markdown各leafの公開後identityを再検証します。各物理HTTP呼出しのcall recordは固有のseedを保存し、同じ論理呼出しで能力取得とcompletionを行う場合もseedを共有しません。能力取得はcompletionとは別の決定的seedを使い、completion requestの`options.seed`は呼出し元のseedを使います。
 
-provider endpointのpathは正規化後にちょうど一つの`/v1` suffixを持ち、`/v1/v1`の重複はcanonical pathへ畳み込みます。
+各provider anchorはpath順序に依存せず、安定したworkspace root descriptorから`runtime`、`runtime/calls`、`runtime/raw_logs`の順にentry identityを取得してから各descriptorを開きます。既存entryはidentity一致を必須とし、欠落した`raw_logs`だけはruntime descriptor相対のnofollow createを許可します。`raw_dir`に別directoryを指定する低層呼出しはcanonical契約違反として拒否します。seedの既存record走査、HTTP、call record公開は同一workspace内で排他し、並行呼出しのscan→publish競合を許可しません。既存recordはseed比較前に完全なcall-record schemaで検証し、不正recordが一つでもあればfail-closedで停止します。provider endpointのpathは正規化後にちょうど一つの`/v1` suffixを持ち、`/v1/v1`の重複はcanonical pathへ畳み込みます。
+
 
 ### 1.2 決定的応答検証
 

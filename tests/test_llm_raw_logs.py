@@ -11,6 +11,13 @@ from storycraft.series_contracts import ContractError
 
 
 class RawLogMarkdownTests(unittest.TestCase):
+    @staticmethod
+    def _canonical_raw_workspace(prefix: str) -> tuple[Path, Path]:
+        root = Path(tempfile.mkdtemp(prefix=prefix)) / "workspace"
+        raw_dir = root / "runtime" / "raw_logs"
+        raw_dir.mkdir(parents=True)
+        return root, raw_dir
+
     def test_save_raw_requires_workspace_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             client = LLMClient.__new__(LLMClient)
@@ -22,10 +29,10 @@ class RawLogMarkdownTests(unittest.TestCase):
                 )
 
     def test_save_raw_writes_same_stem_markdown_with_expanded_contents(self) -> None:
-        raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-"))
+        workspace_root, raw_dir = self._canonical_raw_workspace("storycraft-raw-")
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
-        client.workspace_root = raw_dir
+        client.workspace_root = workspace_root
         record = CallRecord(
             kind="generate",
             phase="plan",
@@ -68,10 +75,10 @@ class RawLogMarkdownTests(unittest.TestCase):
         )
 
     def test_save_raw_uses_stage_without_placeholder_coordinates_for_global_stage(self) -> None:
-        raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-global-"))
+        workspace_root, raw_dir = self._canonical_raw_workspace("storycraft-raw-global-")
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
-        client.workspace_root = raw_dir
+        client.workspace_root = workspace_root
 
         client.save_raw(
             CallRecord(
@@ -84,10 +91,10 @@ class RawLogMarkdownTests(unittest.TestCase):
         self.assertTrue((raw_dir / "0000_generate_request_intake.md").exists())
 
     def test_save_raw_includes_stage_and_available_coordinates_for_scene_stage(self) -> None:
-        raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-scene-"))
+        workspace_root, raw_dir = self._canonical_raw_workspace("storycraft-raw-scene-")
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
-        client.workspace_root = raw_dir
+        client.workspace_root = workspace_root
 
         client.save_raw(
             CallRecord(
@@ -100,10 +107,10 @@ class RawLogMarkdownTests(unittest.TestCase):
         self.assertTrue((raw_dir / "0000_critique_scene_prose_v1_c6_s2.md").exists())
 
     def test_save_raw_sanitizes_progress_ref_only_in_filename(self) -> None:
-        raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-parent-")) / "raw"
+        workspace_root, raw_dir = self._canonical_raw_workspace("storycraft-raw-parent-")
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
-        client.workspace_root = raw_dir.parent
+        client.workspace_root = workspace_root
         record = CallRecord(
             kind="generate",
             phase="scene_prose",

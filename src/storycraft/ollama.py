@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import threading
 from pathlib import Path
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 from jsonschema import Draft202012Validator, ValidationError
 
 from .artifact_ids import reserve_counter_at
+from .artifact_record import validate_call_record
 from .endpoint_security import pinned_http_request
 from .error_sanitizer import redact_value
 from .filesystem_security import (
@@ -35,8 +37,8 @@ from .filesystem_security import (
     directory_identity,
     directory_entry_identity,
     directory_fd_path,
+    ensure_directory_at,
     open_directory_at,
-    open_workspace_directory,
     read_text_at,
     remove_directory_at,
 )
@@ -57,6 +59,7 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 
 
 _HTTP_OPENER = build_opener(ProxyHandler({}), _NoRedirectHandler)
+_SEED_RESERVATION_LOCK = threading.RLock()
 
 
 def urlopen(request: Request, timeout: float):
@@ -138,21 +141,31 @@ class _RecordAnchor:
                 candidate_relative = candidate_absolute.relative_to(absolute_without_resolving(root_path)).parts
                 if candidate_relative != ("runtime", "calls"):
                     raise ContractError("call record directoryはworkspace/runtime/callsでなければなりません")
-                expected_directory_identity = directory_identity(candidate_absolute, missing_ok=True)
-                root_descriptor, owned_directory_descriptor = open_workspace_directory(
-                    root_path,
-                    candidate_absolute,
-                    create=True,
-                    expected_root_identity=expected_root_identity,
-                    expected_child_identity=expected_directory_identity,
-                )
+                root_descriptor = _open_directory_chain(root_path, expected_identity=expected_root_identity)
                 expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
                 owned_runtime_descriptor = open_directory_at(
                     root_descriptor,
                     ("runtime",),
                     expected_identity=expected_runtime_identity,
                 )
-                directory_path = absolute_without_resolving(directory_path)
+                try:
+                    expected_directory_identity = directory_entry_identity(owned_runtime_descriptor, "calls")
+                except ContractError as missing_or_invalid:
+                    try:
+                        os.stat("calls", dir_fd=owned_runtime_descriptor, follow_symlinks=False)
+                    except FileNotFoundError:
+                        owned_directory_descriptor = ensure_directory_at(owned_runtime_descriptor, ("calls",), exist_ok=True)
+                    except OSError:
+                        raise missing_or_invalid
+                    else:
+                        raise missing_or_invalid
+                else:
+                    owned_directory_descriptor = open_directory_at(
+                        owned_runtime_descriptor,
+                        ("calls",),
+                        expected_identity=expected_directory_identity,
+                    )
+                directory_path = directory_fd_path(root_descriptor) / "runtime/calls"
             relative_parts = ("runtime", "calls")
             try:
                 counter_stat = os.stat("counters.json", dir_fd=owned_runtime_descriptor, follow_symlinks=False)
@@ -203,9 +216,10 @@ def _assert_seed_available(directory_fd: int, seed: int) -> None:
                 record = json.loads(read_text_at(call_descriptor, Path("record.json")))
             finally:
                 os.close(call_descriptor)
+            validated = validate_call_record(name, record)
         except (OSError, json.JSONDecodeError, ContractError) as exc:
             raise ContractError("既存call recordのseedを検証できません") from exc
-        if isinstance(record, dict) and record.get("seed") == seed:
+        if validated["seed"] == seed:
             raise ContractError("provider callのseedが既存物理callと重複しています")
 
 
@@ -383,7 +397,7 @@ def _capability(
     return payload["context_length"]
 
 
-def _generate_with_anchor(
+def _generate_with_anchor_impl(
     endpoint: str,
     model: str,
     prompt: str,
@@ -491,6 +505,12 @@ def _generate_with_anchor(
     if call_id is not None and call_id_sink is not None:
         call_id_sink(call_id)
     return value
+
+
+def _generate_with_anchor(*args: Any, **kwargs: Any) -> dict[str, Any] | str:
+    """Serialize seed check, provider calls, and their immutable records."""
+    with _SEED_RESERVATION_LOCK:
+        return _generate_with_anchor_impl(*args, **kwargs)
 
 
 def generate(
