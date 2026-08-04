@@ -8,7 +8,7 @@ from storycraft.publication_builder import build_volume_publication_files, valid
 from storycraft.series_contracts import ContractError
 
 
-class VolumePublicationV2Tests(unittest.TestCase):
+class VolumePublicationTests(unittest.TestCase):
     def test_builds_only_record_and_manuscript_for_one_volume(self) -> None:
         files = build_volume_publication_files(
             publication_id="volume-pub-v01-000001",

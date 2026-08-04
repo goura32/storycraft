@@ -118,7 +118,7 @@ class WorkflowDispatcherTests(unittest.TestCase):
         self.assertEqual(result, completed)
         self.assertEqual(calls, [("initial_design", model), ("scene_commit", None)])
 
-    def test_default_registry_contains_only_implemented_v2_handlers(self) -> None:
+    def test_default_registry_contains_only_implemented_handlers(self) -> None:
         from storycraft import workflow
 
         handlers = workflow._default_handlers()

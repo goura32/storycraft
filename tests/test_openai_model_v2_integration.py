@@ -58,7 +58,7 @@ class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
         self._send({"choices": [{"message": {"content": content}}]})
 
 
-class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
+class OpenAIStoryModelIntegrationTests(unittest.TestCase):
     def test_http_200_provider_error_is_technical_failure_and_is_recorded(self) -> None:
         handler = _OpenAICompatibleHandler
         handler.requests = []
@@ -132,7 +132,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                 runtime.mkdir(parents=True, exist_ok=True)
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
-                    llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint,
+                    llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
                          "model": "fake-model", "api_key_env": None, "headers_env": {},
                          "thinking": True, "stream": False, "first_event_timeout_seconds": 5,
                          "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
@@ -155,7 +155,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def test_legacy_prose_critique_alias_records_canonical_review_operation(self) -> None:
+    def test_adapter_prose_critique_alias_records_canonical_review_operation(self) -> None:
         handler = _OpenAICompatibleHandler
         handler.requests = []
         handler.completion_responses = [{"schema_version": "review-response-v1", "decision": "pass", "issues": []}]
@@ -170,7 +170,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                 runtime.mkdir(parents=True, exist_ok=True)
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
-                    llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint,
+                    llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
                          "model": "fake-model", "api_key_env": None, "headers_env": {},
                          "thinking": True, "stream": False, "first_event_timeout_seconds": 5,
                          "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
@@ -186,7 +186,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def test_candidate_runner_uses_exact_v2_wrappers_and_persists_bound_physical_calls(self) -> None:
+    def test_candidate_runner_uses_exact_wrappers_and_persists_bound_physical_calls(self) -> None:
         handler = _OpenAICompatibleHandler
         handler.requests = []
         handler.completion_responses = [
@@ -210,7 +210,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                 counters = json.loads(counters_path.read_text(encoding="utf-8"))
                 counters["next_selection"] = 2
                 counters_path.write_text(json.dumps(counters) + "\n", encoding="utf-8")
-                model = OpenAIStoryModel(SimpleNamespace(llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint, "model": "fake-model", "api_key_env": None, "headers_env": {}, "thinking": True, "stream": False, "first_event_timeout_seconds": 5, "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5, "request_options": {}}, retry={"max_attempts": 1}), root / "runtime/raw_logs")
+                model = OpenAIStoryModel(SimpleNamespace(llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint, "model": "fake-model", "api_key_env": None, "headers_env": {}, "thinking": True, "stream": False, "first_event_timeout_seconds": 5, "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5, "request_options": {}}, retry={"max_attempts": 1}), root / "runtime/raw_logs")
                 runner = CandidateStageRunner(root, CandidateStageSpec(stage="request_intake", artifact_kind="request", next_stage="initial_design", next_target={}, content_id_factory=lambda _root, _target: "request-000002"))
 
                 result = runner.run(model, context={"request": "current"}, updated_at=NOW)

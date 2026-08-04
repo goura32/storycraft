@@ -1,4 +1,4 @@
-"""巻単位 v2 公開の決定的組立・検証。"""
+"""巻単位公開の決定的組立・検証。"""
 from __future__ import annotations
 
 import re

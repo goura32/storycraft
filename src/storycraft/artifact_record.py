@@ -1,4 +1,4 @@
-"""Deterministic V2 artifact record-envelope validation."""
+"""Deterministic artifact record-envelope validation."""
 from __future__ import annotations
 
 import re

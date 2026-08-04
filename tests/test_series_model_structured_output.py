@@ -93,7 +93,7 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertIn("current-candidate", revise_prompt)
         self.assertIn("fix-this", revise_prompt)
 
-    def test_legacy_revision_alias_uses_canonical_revise_prompt(self) -> None:
+    def test_adapter_revision_alias_uses_canonical_revise_prompt(self) -> None:
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)
         client = CaptureClient()
         setattr(model, "client", client)
@@ -110,16 +110,16 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertEqual(client.calls[0]["messages"][2]["__kind"], "revise")
         self.assertIn("current-candidate", client.calls[0]["messages"][1]["content"])
         self.assertIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
-        legacy_prompt = OpenAIStoryModel._render(
+        adapter_prompt = OpenAIStoryModel._render(
             "revision",
             "initial_design",
-            candidate={"core": {"logline": "legacy-candidate"}},
+            candidate={"core": {"logline": "adapter-candidate"}},
             critique={"decision": "issues", "issues": []},
-            context={"request": {"title": "legacy-title"}},
+            context={"request": {"title": "adapter-title"}},
         )
-        self.assertNotIn("{{", legacy_prompt)
-        self.assertIn("legacy-candidate", legacy_prompt)
-        self.assertIn("candidate-response-v1", legacy_prompt)
+        self.assertNotIn("{{", adapter_prompt)
+        self.assertIn("adapter-candidate", adapter_prompt)
+        self.assertIn("candidate-response-v1", adapter_prompt)
 
     def test_prose_revision_uses_raw_text_fix_template(self) -> None:
         model = OpenAIStoryModel.__new__(OpenAIStoryModel)
@@ -140,7 +140,7 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertIn("本文候補", client.calls[0]["messages"][1]["content"])
         self.assertIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
 
-    def test_every_public_llm_stage_has_all_v2_templates_and_a_candidate_schema(self) -> None:
+    def test_every_public_llm_stage_has_all_templates_and_a_candidate_schema(self) -> None:
         self.assertIn("request_intake", ACTIVE_TEMPLATE_STAGES)
         for stage in ACTIVE_TEMPLATE_STAGES:
             with self.subTest(stage=stage, operation="generate"):

@@ -1,7 +1,6 @@
-"""V2 共通ユーティリティ - Candidate/Review/Revision 処理で使う補助関数。
+"""Candidate/Review/Revision 処理で使う共通ユーティリティ。
 
-これらは `reviewed_candidate_stage.py` と `reviewed_prose_stage.py` の
-レガシー Runner クラスから分離したもので、V2 ワークフローでも使用可能。
+候補・確認・修正の不変記録と採用境界を補助する。
 """
 from __future__ import annotations
 

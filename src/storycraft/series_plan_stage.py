@@ -1,4 +1,4 @@
-"""V2 selection-based planning-stage adapter."""
+"""Selection-based planning-stage adapter."""
 from __future__ import annotations
 
 from pathlib import Path

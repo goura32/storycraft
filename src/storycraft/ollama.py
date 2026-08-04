@@ -1,4 +1,4 @@
-"""OpenAI-compatible Ollama V2 boundary.
+"""OpenAI-compatible Ollama boundary.
 
 This module is deliberately transport-only: it discovers a model's capability via
 ``/v1/models/{model}``, sends a non-streaming OpenAI chat completion, and writes

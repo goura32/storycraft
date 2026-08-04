@@ -13,8 +13,7 @@
     "thread_goals",
     "revelations",
     "chapter_summaries",
-    "required_end_state",
-    "handoff_expectations"
+    "required_end_state"
   ],
   "properties": {
     "title": {
@@ -105,16 +104,6 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 1600
-    },
-    "handoff_expectations": {
-      "type": "array",
-      "maxItems": 32,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 1000
-      }
     }
   }
 }

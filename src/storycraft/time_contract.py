@@ -1,4 +1,4 @@
-"""Strict UTC RFC 3339 timestamps used by persisted V2 records."""
+"""Strict UTC RFC 3339 timestamps used by persisted records."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta

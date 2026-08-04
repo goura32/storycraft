@@ -1,4 +1,4 @@
-"""V2 keyword-bootstrap request-intake adapter.
+"""Keyword-bootstrap request-intake adapter.
 
 This is the sole selection-free candidate stage.  It derives its input bundle from
 exactly one immutable keywords record and the immutable settings record, then hands

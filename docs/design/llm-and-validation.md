@@ -67,7 +67,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
   ├─ 重大あり・上限前: 修正(context + candidate + critique)
   │                         → 決定的検証
   │                         → 再確認(context + revised candidate)
-  重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` と `last_error.code=invalid_response_limit` とする。
+  重大あり・上限到達: 最後の構造有効候補を注意付き採用。構造有効候補が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` と `last_error.code=invalid_response_limit` とする。
 ```
 
 `quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。`quality_revision_limit=N` は1以上の整数で、重大指摘に対する修正を最大 `N` 回許可します。修正回数が `N` に達した時点で重大指摘が残っていれば、最後の形式有効候補を注意付き採用して次工程へ進みます。

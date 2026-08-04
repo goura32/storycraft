@@ -158,7 +158,7 @@ src/storycraft/           # 実装コード
 ├── cli.py                # CLI エントリーポイント
 ├── workflow.py           # 実行ディスパッチャ
 ├── workspace.py          # 作業場所初期化・検証
-├── run_state.py          # 実行状態 v3
+├── run_state.py          # 実行状態
 ├── volume_publication_stage.py  # 巻公開
 ├── candidate_stage.py    # 汎用候補生成/確認/修正/採用
 ├── scene_prose_stage.py         # 場面本文
@@ -173,7 +173,7 @@ src/storycraft/           # 実装コード
 templates/prompts/
 ├── system/                      # システムプロンプト
 ├── schemas/                     # JSONスキーマ
-└── user/                        # active 9 LLM工程の generate/critique/fix（旧 brief 3 template は非接続。scene_commit と volume_publication はコード処理）
+└── user/                        # 現行9 LLM工程の generate/critique/fix（scene_commit と volume_publication はコード処理）
 
 docs/
 ├── SPECIFICATION.md             # 仕様正本

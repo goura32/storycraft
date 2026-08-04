@@ -1,4 +1,4 @@
-"""V2 成果物の種類、ID、保存先、selection slot を一箇所で対応付ける。"""
+"""成果物の種類、ID、保存先、selection slot を一箇所で対応付ける。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ _COUNTER = r"(?P<counter>[0-9]{6})"
 
 @dataclass(frozen=True)
 class ArtifactSpec:
-    """一つの採用済み V2 成果物の正規 ID・配置・slot 規則。"""
+    """一つの採用済み成果物の正規 ID・配置・slot 規則。"""
 
     id_pattern: str
     directory_root: str
@@ -76,7 +76,7 @@ ARTIFACT_SPECS: Mapping[str, ArtifactSpec] = MappingProxyType({
 
 
 def artifact_spec(artifact_kind: object) -> ArtifactSpec:
-    """未知の kind を許さず、その V2 registry entry を返す。"""
+    """未知の kind を許さず、その registry entry を返す。"""
     if not isinstance(artifact_kind, str) or artifact_kind not in ARTIFACT_SPECS:
         raise ContractError("未知のartifact_kindです")
     return ARTIFACT_SPECS[artifact_kind]

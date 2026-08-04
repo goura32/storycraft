@@ -1,4 +1,4 @@
-"""正本 docs/design/state-and-transitions.md に基づく閉じた run-state v3 契約。"""
+"""正本 docs/design/state-and-transitions.md に基づく閉じた run-state schema_version=3 契約。"""
 from __future__ import annotations
 
 import copy
@@ -44,7 +44,7 @@ def target(artifact_id: str, artifact_kind: str, final_path: str, staging_root: 
     }
 
 
-class RunStateV2Tests(unittest.TestCase):
+class RunStateTests(unittest.TestCase):
     def test_run_state_is_closed_and_has_no_active_candidate_or_scene(self) -> None:
         state = copy.deepcopy(BASE_STATE)
         self.assertIs(validate_run_state(state), state)

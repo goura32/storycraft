@@ -18,7 +18,7 @@
 |---|---|
 | ID | [成果物と保存](artifacts-and-storage.md#2-配置と-id) の形式。ASCII 英数字と `-` だけを使い、通番は6桁、巻・章・場面番号は2桁ゼロ埋め |
 | 時刻 | UTC の RFC 3339 文字列 |
-| スキーマ版 | 正の整数。LLM 応答だけ `*-v1` 文字列 |
+| スキーマ識別値 | 保存 JSON は正の整数。LLM 応答は `*-v1` 文字列。いずれも製品版番号ではない |
 | 成果物参照 | `artifact_kind` と `artifact_id` のオブジェクト |
 | 座標 | `volume_number`、`chapter_number`、`scene_number`。すべて 1 以上の整数 |
 | 根拠位置 | `$.path`（JSON パス）、`paragraph:N`（空行区切りの0始まり段落番号）、`prose:N`（本文のUTF-8 byte オフセット、0始まり）のいずれか。対象本文・JSON に解決できる値 |
@@ -153,7 +153,7 @@
 
 - `result`: `accepted`（重大指摘なし）または `accepted_with_notice`（品質修正上限に達して重大指摘が残った）。修正応答が形式不正上限へ達した場合は採用せず `blocked` とする。初回生成・確認で有効候補がないまま形式不正上限に達したときも、採用も品質判定も作らず、call record と run-state の `blocked` だけで記録する。
 - `remaining_major_issues` は既存recordのフィールド名を維持した名称であり、意味は `ReviewResponse.issues[].severity="critical"` の残存指摘だけとする。`notice` はこの配列に入れず、`major` という第三の重要度は存在しない。相関制約は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ remaining_major_issues` が1件以上、`notice_type="編集"` とする。
-- `quality.candidate_id` は採用対象の最終形式有効候補IDと一致し、`quality.review_record_ids` の全reviewは同じcandidate IDを参照しなければならない。改稿で旧候補から新候補へ進んだ場合、旧候補のreview IDを最終qualityへ混ぜず、最終候補に対して新たに作ったreviewだけを列挙する。
+- `quality.candidate_id` は採用対象の最終形式有効候補IDと一致し、`quality.review_record_ids` の全reviewは同じcandidate IDを参照しなければならない。改稿で前回候補から今回候補へ進んだ場合、前回候補のreview IDを最終qualityへ混ぜず、最終候補に対して新たに作ったreviewだけを列挙する。
 - `notice_type`: `accepted_with_notice` のときだけ `編集` を保存する。`accepted` ではキーを省略する。巻公開時は値を変換せず `publication_notice_type` へ転写する。
 
 ### 3.4 scene ペイロード (場面確定用複合成果物)
@@ -255,7 +255,7 @@ LLM は新規人物と新規未解決事項を意味内容で返します。
 
 後続工程は新規 ID を作りません。人物・未解決事項を扱うときは、入力カタログの既存 ID を選びます。カタログは ID、種別、短い説明を持ち、返却値がカタログ外なら形式不正です。
 
-**重要度の二段階化に合わせて**：`ReviewResponse.issues[].severity` は `critical` と `notice` のみを許可します（`reference` は廃止）。
+**重要度の二段階化に合わせて**：`ReviewResponse.issues[].severity` は `critical` と `notice` のみを許可します（`reference` は許可しません）。
 
 ## 5. 内容成果物の閉じた検証境界
 

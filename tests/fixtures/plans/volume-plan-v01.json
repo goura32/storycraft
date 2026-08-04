@@ -30,10 +30,6 @@
     }
   ],
   "required_end_state": "澪が凪の証言を得る。",
-  "handoff_expectations": [
-    "凪の証言",
-    "地下保管庫の存在"
-  ],
   "created_at": "2026-07-23T10:20:00Z",
   "title": "帰郷"
 }

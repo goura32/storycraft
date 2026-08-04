@@ -1,4 +1,4 @@
-"""docs 契約だけを公開する v2 CLI。"""
+"""仕様契約だけを公開するV1 CLI。"""
 from __future__ import annotations
 
 import argparse
@@ -129,7 +129,7 @@ def cmd_validate(args: argparse.Namespace) -> dict[str, object]:
 
 
 def cmd_run(args: argparse.Namespace) -> dict[str, object]:
-    """v2の保存済み確定を優先して収束し、公開工程を決定的に実行する。"""
+    """保存済み確定を優先して収束し、公開工程を決定的に実行する。"""
     root = Path(args.workspace).expanduser()
     return _common(run(root))
 

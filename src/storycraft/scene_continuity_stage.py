@@ -1,4 +1,4 @@
-"""V2 selection-based scene continuity adapter."""
+"""Selection-based scene continuity adapter."""
 from __future__ import annotations
 
 from pathlib import Path

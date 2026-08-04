@@ -26,7 +26,7 @@ class SelectionSnapshotTests(unittest.TestCase):
         snapshot = {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"request": "request-000001", "scene_prose.v01.c02.s03": "scene-prose-v01-c02-s03-000001", "scene_prose_disposition.v01.c02.s03": "quality-000001"}, "created_at": "2026-07-29T00:00:00Z"}
         self.assertIs(validate_selection_snapshot(snapshot), snapshot)
 
-    def test_rejects_legacy_quality_slot_name(self) -> None:
+    def test_rejects_unsupported_quality_slot_name(self) -> None:
         snapshot = {"schema_version": 1, "selection_id": "selection-000001", "input_selection_id": None, "slots": {"quality_disposition.quality-000001": "quality-000001"}, "created_at": "2026-07-29T00:00:00Z"}
         with self.assertRaises(ContractError):
             validate_selection_snapshot(snapshot)

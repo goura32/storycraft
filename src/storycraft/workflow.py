@@ -1,4 +1,4 @@
-"""V2 recovery-first workflow dispatcher.
+"""Recovery-first workflow dispatcher.
 
 The dispatcher is deliberately the only owner of process-wide sequencing: static
 workspace validation, generic pending-commit convergence, then the current stage.
@@ -64,7 +64,7 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
 
 
 def _model_settings_from_payload(payload: dict[str, Any], settings_id: str) -> Any:
-    """Adapt immutable V2 settings at the legacy provider boundary only."""
+    """Adapt immutable settings at the provider boundary."""
     class SettingsWrapper:
         def __init__(self, llm: dict[str, Any], retry: dict[str, Any], settings_id: str) -> None:
             self.llm = llm
@@ -83,7 +83,7 @@ def _model_settings_from_payload(payload: dict[str, Any], settings_id: str) -> A
                 "idle_timeout_seconds": 600,
                 "stream_progress_log_interval_seconds": 60,
                 "request_options": payload.get("request_options"),
-                "v2_openai_ollama": True,
+                "ollama_http_boundary": True,
             },
             {"max_attempts": payload["technical_retry_limit"]},
             settings_id,
@@ -101,7 +101,7 @@ def _request_intake(root: Path, state: dict[str, Any], model: Any | None) -> dic
 
 
 def _planning_handler(module: str, factory: str) -> StageHandler:
-    """Adapt a migrated V2 planning service without preserving legacy dispatch."""
+    """Adapt a selection-based planning service without alternate dispatch."""
     def handler(root: Path, state: dict[str, Any], model: Any | None) -> dict[str, Any]:
         imported = __import__(f"storycraft.{module}", fromlist=[factory])
         return getattr(imported, factory)(root).run(
@@ -137,13 +137,13 @@ def _volume_publication(root: Path, state: dict[str, Any], model: Any | None) ->
 def _unavailable(stage: str) -> StageHandler:
     def handler(root: Path, state: dict[str, Any], model: Any | None) -> dict[str, Any]:
         del root, state, model
-        raise ContractError(f"V2 handler is not available for {stage}")
+        raise ContractError(f"current handler is not available for {stage}")
     return handler
 
 
 def _default_handlers() -> dict[str, HandlerSpec]:
-    # Do not route V2 state through retired active-candidate services.  Stages that
-    # have not adopted immutable V2 inputs fail closed as an authority mismatch.
+    # Do not route immutable state through active-candidate services.  Every stage
+    # must consume its declared selection inputs or fail closed.
     return {
         "request_intake": (True, _request_intake),
         "initial_design": (True, _initial_design),
@@ -195,11 +195,11 @@ def run(
     handlers: Mapping[str, HandlerSpec] | None = None,
     model_factory: Callable[[Path, dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
-    """Run V2 stages until the run completes or an error is persisted as blocked.
+    """Run stages until the run completes or an error is persisted as blocked.
 
     Static validation and generic recovery always precede model construction.  The
     optional injected dependencies keep dispatcher tests provider-free and permit
-    newly migrated stage adapters to be introduced without reviving legacy state.
+    stage adapters to be introduced without creating a second state format.
     """
     root = workspace_root.expanduser()
     selected_handlers = dict(_default_handlers() if handlers is None else handlers)
@@ -239,7 +239,7 @@ def run(
             stage = state["current_stage"]
             specification = selected_handlers.get(stage) if isinstance(stage, str) else None
             if specification is None:
-                _block(store, state, "authority_inconsistency", f"V2 handler is not available for {stage}")
+                _block(store, state, "authority_inconsistency", f"current handler is not available for {stage}")
                 raise RunUnavailable("authority_inconsistency")
             needs_model, handler = specification
             try:

@@ -27,12 +27,12 @@ class WorkflowSettingsTests(unittest.TestCase):
         self.assertEqual(settings.llm["base_url"], "http://127.0.0.1:11434/v1")
         self.assertEqual(settings.llm["model"], "test-model")
         self.assertEqual(settings.llm["request_options"], {"temperature": 0.4})
-        self.assertTrue(settings.llm["v2_openai_ollama"])
+        self.assertTrue(settings.llm["ollama_http_boundary"])
         self.assertEqual(settings.retry, {"max_attempts": 3})
         self.assertEqual(settings.settings_id, "settings-000001")
 
 
-class CliV2AcceptanceTests(unittest.TestCase):
+class CliAcceptanceTests(unittest.TestCase):
     def test_packaged_console_entrypoint_targets_public_cli(self) -> None:
         pyproject = (Path(__file__).parents[1] / "pyproject.toml").read_text(
             encoding="utf-8"

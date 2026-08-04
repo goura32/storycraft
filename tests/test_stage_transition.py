@@ -1,4 +1,4 @@
-"""正本 docs の v2 工程遷移。"""
+"""正本仕様の工程遷移。"""
 from __future__ import annotations
 
 import unittest
@@ -8,7 +8,7 @@ from storycraft.series_contracts import ContractError
 from storycraft.stages import Stage
 
 
-class StageTransitionV2Tests(unittest.TestCase):
+class StageTransitionTests(unittest.TestCase):
     def test_initial_design_is_one_stage(self) -> None:
         self.assertEqual(
             allowed_next_stages(Stage.REQUEST_INTAKE),
@@ -29,6 +29,6 @@ class StageTransitionV2Tests(unittest.TestCase):
             (Stage.VOLUME_PUBLICATION, Stage.VOLUME_PLAN),
         )
 
-    def test_legacy_stages_are_not_transitions(self) -> None:
+    def test_unsupported_stages_are_not_transitions(self) -> None:
         with self.assertRaisesRegex(ContractError, "未知"):
             allowed_next_stages("completion")

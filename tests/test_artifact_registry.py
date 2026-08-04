@@ -1,4 +1,4 @@
-"""V2 成果物 registry の ID・保存先・selection slot 契約。"""
+"""成果物 registry の ID・保存先・selection slot 契約。"""
 from __future__ import annotations
 
 import unittest
@@ -12,8 +12,8 @@ from storycraft.artifact_registry import (
 from storycraft.series_contracts import ContractError
 
 
-class ArtifactRegistryV2Tests(unittest.TestCase):
-    def test_each_v2_artifact_kind_has_its_canonical_id_directory_and_slot(self) -> None:
+class ArtifactRegistryTests(unittest.TestCase):
+    def test_each_artifact_kind_has_its_canonical_id_directory_and_slot(self) -> None:
         cases = (
             ("request", "request-000001", "inputs/request-000001", "request"),
             ("keywords", "keywords-000001", "inputs/keywords-000001", "keywords"),

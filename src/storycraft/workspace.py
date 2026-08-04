@@ -1,4 +1,4 @@
-"""新規 v2 workspace の初期化・静的検証。"""
+"""新規V1 workspace の初期化・静的検証。"""
 from __future__ import annotations
 
 import json
@@ -25,7 +25,7 @@ from .selection_snapshot import SelectionSnapshotStore, validate_selection_snaps
 from .series_contracts import ContractError
 
 
-_V2_DIRECTORIES = (
+_WORKSPACE_DIRECTORIES = (
     "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
     "runtime/staging", "runtime/selections", "runtime/calls",
     "runtime/adoptions", "design", "design/initial", "design/series-plans",
@@ -43,7 +43,7 @@ def create_workspace(
     created_at: str,
     keywords: Optional[dict[str, Any]] = None,
 ) -> Path:
-    """既存worktreeを触らず、新形式だけを持つ作業場所を作る。"""
+    """既存worktreeを触らず、V1保存形式だけを持つ作業場所を作る。"""
     root = workspace_root.expanduser()
     if root.exists() or root.is_symlink():
         raise ContractError("workspaceが既に存在します")
@@ -62,9 +62,9 @@ def create_workspace(
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
     root.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.v2-", dir=root.parent))
+    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=root.parent))
     try:
-        for relative in _V2_DIRECTORIES:
+        for relative in _WORKSPACE_DIRECTORIES:
             (staging / relative).mkdir(parents=True, exist_ok=True)
         settings_id = "settings-000001"
         _write_json(staging / "runtime/settings" / settings_id / "record.json", {
@@ -145,13 +145,13 @@ def create_workspace(
 
 
 def validate_workspace(workspace_root: Path) -> None:
-    """providerを初期化せず、新形式の正本・参照を静的に検証する。"""
+    """providerを初期化せず、V1保存形式の正本・参照を静的に検証する。"""
     root = workspace_root.expanduser()
     if not root.is_dir() or root.is_symlink():
-        raise ContractError("v2 workspace directoryが存在しません")
-    for relative in _V2_DIRECTORIES:
+        raise ContractError("workspace directoryが存在しません")
+    for relative in _WORKSPACE_DIRECTORIES:
         if not (root / relative).is_dir() or (root / relative).is_symlink():
-            raise ContractError(f"v2 workspace必須directoryがありません: {relative}")
+            raise ContractError(f"workspace必須directoryがありません: {relative}")
     state = RunStateStore(root).load()
     selection_id = state["current_selection_id"]
     resolution_cache: dict[str, dict[str, dict[str, Any]]] = {}

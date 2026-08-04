@@ -1,4 +1,4 @@
-"""V2 provider-free atomic scene commit stage."""
+"""Provider-free atomic scene commit stage."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -253,13 +253,11 @@ class SceneCommitStageService:
         return result
 
     @staticmethod
-    def _numbers(content: object, field: str) -> list[int]:
-        modern_field = {"scenes": "scene_summaries", "chapters": "chapter_summaries"}.get(field, field)
-        number_field = {"scenes": "scene_number", "chapters": "chapter_number"}.get(field, field[:-1] + "_number")
-        if not isinstance(content, dict) or not isinstance(content.get(modern_field), list):
+    def _numbers(content: object, field: str, number_field: str) -> list[int]:
+        if not isinstance(content, dict) or not isinstance(content.get(field), list):
             raise ContractError(f"{field}を持つ計画contentが必要です")
         values: list[int] = []
-        for item in content[modern_field]:
+        for item in content[field]:
             raw = item.get(number_field) if isinstance(item, dict) else item
             if not isinstance(raw, int) or isinstance(raw, bool) or raw < 1:
                 raise ContractError(f"{field}の番号が不正です")
@@ -269,8 +267,8 @@ class SceneCommitStageService:
         return values
 
     def _next_work(self, values: dict[str, dict[str, Any]], volume: int, chapter: int, scene: int) -> tuple[str, dict[str, int]]:
-        scenes = self._numbers(values["chapter_plan"]["content"], "scenes")
-        chapters = self._numbers(values["volume_plan"]["content"], "chapters")
+        scenes = self._numbers(values["chapter_plan"]["content"], "scene_summaries", "scene_number")
+        chapters = self._numbers(values["volume_plan"]["content"], "chapter_summaries", "chapter_number")
         if scene not in scenes or chapter not in chapters:
             raise ContractError("scene_commit対象が親計画にありません")
         scene_index = scenes.index(scene)

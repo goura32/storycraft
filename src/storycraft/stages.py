@@ -1,4 +1,4 @@
-"""docs v2 の唯一の工程定義。"""
+"""現行仕様の唯一の工程定義。"""
 from __future__ import annotations
 from enum import StrEnum
 

@@ -1,4 +1,4 @@
-"""V2 initial-design adapter: selection input, immutable adoption, generic recovery."""
+"""Initial-design adapter: selection input, immutable adoption, generic recovery."""
 from __future__ import annotations
 
 import json
@@ -22,7 +22,7 @@ def create_initial_design_stage_service(workspace_root: Path) -> "InitialDesignS
 
 
 class InitialDesignStageService:
-    """Generate one v2 initial-design from the current request/settings selection."""
+    """Generate one initial-design from the current request/settings selection."""
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.expanduser()

@@ -1,4 +1,4 @@
-"""Storycraft Version 1 のStage遷移契約。"""
+"""Storycraft V1 のStage遷移契約。"""
 from __future__ import annotations
 
 from collections.abc import Mapping

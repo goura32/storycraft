@@ -33,7 +33,7 @@
 
 `initializing`、`stopping`、`stopped`、`failed` は V1 の保存値にしません。作業場所作成は、作成用一時場所を検証してから、最初から `running` の V1 状態を確定します。
 
-`published_volumes` は巻番号の昇順で、重複なく `1..N` の連続列にします。各 ID は巻公開記録を参照します。単一の `current_publication_id` は廃止します。
+`published_volumes` は巻番号の昇順で、重複なく `1..N` の連続列にします。各 ID は巻公開記録を参照します。単一の `current_publication_id` は保存しません。
 
 `completed` は、保留中確定がなく、`current_stage` と `current_target` が `null` で、公開済み巻がシリーズ計画の全巻と一致し、最後の公開済み巻が最終巻であるときだけ許可します。
 
@@ -80,7 +80,7 @@ input → { keywords: request_intake | direct request: initial_design } → seri
 → scene_card → scene_prose → scene_continuity → scene_commit → volume_publication
 ```
 
-`volume_handoff` と `completion` は削除します。`volume_publication` は巻公開準備・確定を表す唯一の終盤工程です。
+未定義の巻間要約・シリーズ完了工程は受理しません。`volume_publication` は巻公開準備・確定を表す唯一の終盤工程です。
 
 ```text
 scene_commit

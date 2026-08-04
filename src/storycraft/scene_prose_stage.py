@@ -1,4 +1,4 @@
-"""V2 selection-based scene prose adapter."""
+"""Selection-based scene prose adapter."""
 from __future__ import annotations
 
 from pathlib import Path

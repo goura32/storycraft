@@ -35,7 +35,7 @@ class OpenAIStoryModel:
         input_refs: list[str],
         target_candidate_id: str | None = None,
     ) -> None:
-        """Bind the next V2 operation to immutable workspace provenance."""
+        """Bind the next operation to immutable workspace provenance."""
         self._call_context = {
             "settings_id": settings_id,
             "input_refs": list(input_refs),
@@ -54,12 +54,12 @@ class OpenAIStoryModel:
         return self._call("critique", stage, self._render("critique", stage, candidate=candidate, context=context))
 
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-        # Keep the legacy method name as an alias to the canonical V2 operation.
+        # Keep the method name used by the reviewed stage as an alias to the
+        # canonical revise operation.
         return self.revise(stage, context, candidate, critique)
 
-    # CandidateStage is the public V2 workflow surface.  Keep the older names for
-    # V1 callers, but make the V2 protocol explicit rather than asking adapters to
-    # probe for legacy methods.
+    # CandidateStage is the public workflow surface.  Keep the adapter method names
+    # explicit rather than asking stage code to probe for alternate protocols.
     def review(self, stage: str, context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
         return self._call("review", stage, self._render("review", stage, candidate=candidate, context=context))
 
@@ -192,10 +192,11 @@ class OpenAIStoryModel:
         )
 
         for retry_attempt in range(1, attempts + 1):
-            # V2 records model discovery and completion as two physical calls.
+            # The provider boundary records model discovery and completion as two
+            # physical calls.
             # Reserve a distinct monotonic seed for each physical call record.
             llm_settings = getattr(self.client.settings, "llm", {})
-            seed_step = 2 if llm_settings.get("v2_openai_ollama", False) else 1
+            seed_step = 2 if llm_settings.get("ollama_http_boundary", False) else 1
             seed = getattr(self, "_seed_sequence", 0) + 1
             self._seed_sequence = seed + seed_step - 1
             messages = [

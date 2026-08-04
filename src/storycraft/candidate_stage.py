@@ -1,4 +1,4 @@
-"""V2 generic candidate/review/adoption runner.
+"""Generic candidate/review/adoption runner.
 
 The runner owns immutable candidate, review, quality, and adoption records.  Stage
 adapters supply only stage-specific IDs and deterministic content validation; model
@@ -307,7 +307,7 @@ class CandidateStageRunner:
         input_refs: list[str],
         target_candidate_id: str | None = None,
     ) -> None:
-        """Supply V2 audit bindings without imposing them on injected test models."""
+        """Supply audit bindings without imposing them on injected test models."""
         setter = getattr(model, "set_call_context", None)
         if callable(setter):
             setter(

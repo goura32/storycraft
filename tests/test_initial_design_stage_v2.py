@@ -133,7 +133,7 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     return request, settings
 
 
-class InitialDesignStageV2Tests(unittest.TestCase):
+class InitialDesignStageTests(unittest.TestCase):
     def test_revalidates_persisted_settings_when_workspace_validation_is_skipped(self) -> None:
         for mutation in ("injected_endpoint", "missing_model"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
@@ -167,19 +167,19 @@ class InitialDesignStageV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request, settings = _workspace(root)
-            # These retired paths must neither supply input nor be read by the adapter.
-            _write_json(root / "input/brief.json", {"title": "LEGACY BRIEF"})
-            _write_json(root / "runtime/config.json", {"model": "LEGACY MODEL"})
+            # These unsupported paths must neither supply input nor be read by the adapter.
+            _write_json(root / "input/brief.json", {"title": "UNSUPPORTED BRIEF"})
+            _write_json(root / "runtime/config.json", {"model": "UNSUPPORTED MODEL"})
             model = FakeInitialDesignModel()
-            legacy_paths = {root / "input/brief.json", root / "runtime/config.json"}
+            unsupported_paths = {root / "input/brief.json", root / "runtime/config.json"}
             original_read_text = Path.read_text
 
-            def reject_legacy_reads(path: Path, *args: Any, **kwargs: Any) -> str:
-                if path in legacy_paths:
+            def reject_unsupported_reads(path: Path, *args: Any, **kwargs: Any) -> str:
+                if path in unsupported_paths:
                     raise AssertionError(f"adapter read retired path: {path}")
                 return original_read_text(path, *args, **kwargs)
 
-            with patch.object(Path, "read_text", new=reject_legacy_reads):
+            with patch.object(Path, "read_text", new=reject_unsupported_reads):
                 result = InitialDesignStageService(root).run(model, updated_at=TIMESTAMP)
 
             self.assertEqual(model.calls, [

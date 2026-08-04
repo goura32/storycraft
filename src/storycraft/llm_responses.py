@@ -1,4 +1,4 @@
-"""Closed-schema validation for V2 CandidateResponse and ReviewResponse."""
+"""Closed-schema validation for CandidateResponse and ReviewResponse."""
 from __future__ import annotations
 from typing import Any
 from .artifact_registry import artifact_spec

@@ -75,7 +75,6 @@ def _raw_filename(rec: "CallRecord", index: int) -> str:
         "scene_card": ("v", "c", "s"),
         "scene_prose": ("v", "c", "s"),
         "scene_continuity": ("v", "c", "s"),
-        "volume_handoff": ("v",),
     }
     for coordinate in scope_by_stage.get(rec.phase, ()):
         match = re.search(rf"\b{coordinate}:\s*(\d+)", rec.ref)
@@ -137,11 +136,11 @@ class LLMClient:
         self.raw_dir = raw_dir
 
         llm = settings.llm
-        # V2 Ollama uses the urllib boundary in storycraft.ollama, which performs
+        # The Ollama HTTP boundary in storycraft.ollama performs
         # the documented per-model capability call and persists its own audit
-        # record.  Do not initialize the retired OpenAI SDK health probe here:
-        # it would issue an unrecorded GET /v1/models before the V2 boundary.
-        if llm.get("v2_openai_ollama", False):
+        # record.  Do not initialize the separate SDK health probe here: it would
+        # issue an unrecorded capability request outside that boundary.
+        if llm.get("ollama_http_boundary", False):
             self.client: Any = None
             return
         base_url = llm["base_url"]
@@ -526,12 +525,12 @@ class LLMClient:
         return rec
 
     def call_once(self, messages, response_format, seed: int) -> CallRecord:
-        if not self.settings.llm.get("v2_openai_ollama", False):
+        if not self.settings.llm.get("ollama_http_boundary", False):
             return self._make_call(messages, response_format, seed)
         meta = messages[-1] if messages and isinstance(messages[-1], dict) else {}
         bound_settings_id = meta.get("settings_id") or self.settings_id or getattr(self.settings, "settings_id", None)
         if not isinstance(bound_settings_id, str) or re.fullmatch(r"settings-[0-9]{6}", bound_settings_id) is None:
-            raise ContractError("V2 provider callには有効なsettings_idが必要です")
+            raise ContractError("provider callには有効なsettings_idが必要です")
         visible_messages = [
             message for message in messages
             if isinstance(message, dict) and isinstance(message.get("role"), str)

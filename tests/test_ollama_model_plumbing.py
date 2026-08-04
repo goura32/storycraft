@@ -13,7 +13,7 @@ from storycraft.prompt_template import PromptTemplate
 from storycraft.series_model import OpenAIStoryModel
 
 
-class V2ModelPlumbingTests(unittest.TestCase):
+class ModelPlumbingTests(unittest.TestCase):
     def test_system_prompt_propagates_prose_response_mode(self) -> None:
         loader = PromptTemplate(Path(__file__).parents[1] / "templates" / "prompts")
 
@@ -30,7 +30,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
             client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
-                "v2_openai_ollama": True,
+                "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
                 "model": "m",
                 "invalid_response_limit": 2,
@@ -45,13 +45,13 @@ class V2ModelPlumbingTests(unittest.TestCase):
 
         self.assertEqual(generate.call_count, 2)
 
-    def test_call_once_keeps_v2_prose_as_raw_text_when_response_format_is_none(self) -> None:
+    def test_call_once_keeps_prose_as_raw_text_when_response_format_is_none(self) -> None:
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
             client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
-                "v2_openai_ollama": True,
+                "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
                 "model": "m",
             })
@@ -77,7 +77,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
             client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
-                "v2_openai_ollama": True,
+                "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
                 "model": "m",
                 "request_options": {"temperature": 0.4},
@@ -109,7 +109,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
         client = LLMClient.__new__(LLMClient)
         client.settings_id = "settings-000001"
         client.raw_dir = Path(tempfile.gettempdir()) / "storycraft-test-raw"
-        client.settings = SimpleNamespace(llm={"v2_openai_ollama": True, "base_url": "http://127.0.0.1:11434/v1", "model": "m"})
+        client.settings = SimpleNamespace(llm={"ollama_http_boundary": True, "base_url": "http://127.0.0.1:11434/v1", "model": "m"})
         with patch("storycraft.llm.ollama_generate", side_effect=OllamaResponseFormatError("bad response")):
             with self.assertRaisesRegex(OllamaResponseFormatError, "bad response"):
                 client.call_once([{"role": "user", "content": "user"}], {"type": "json_schema", "json_schema": {"schema": {}}}, 1)

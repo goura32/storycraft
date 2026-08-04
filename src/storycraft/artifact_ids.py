@@ -1,4 +1,4 @@
-"""V2 immutable artifact identifiers and atomic counter reservation."""
+"""Immutable artifact identifiers and atomic counter reservation."""
 from __future__ import annotations
 
 import json

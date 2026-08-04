@@ -1,4 +1,4 @@
-"""v2 volume_publication manifest の provider-free recovery 境界。"""
+"""volume_publication manifest の provider-free recovery 境界。"""
 from __future__ import annotations
 
 from pathlib import Path

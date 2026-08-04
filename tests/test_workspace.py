@@ -1,4 +1,4 @@
-"""v2 新規 workspace 初期化の最小不変契約。"""
+"""新規V1 workspace 初期化の最小不変契約。"""
 from __future__ import annotations
 
 import json
@@ -12,7 +12,7 @@ from storycraft.publication_builder import build_volume_publication_files
 from storycraft.workspace import create_workspace, validate_workspace
 
 
-class WorkspaceV2Tests(unittest.TestCase):
+class WorkspaceTests(unittest.TestCase):
     def _write_json(self, path: Path, value: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -26,7 +26,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             created_at="2026-07-28T00:00:00Z",
         )
 
-    def test_creates_fresh_v2_workspace_with_request_settings_selection(self) -> None:
+    def test_creates_fresh_workspace_with_request_settings_selection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "novel"
             create_workspace(
@@ -213,7 +213,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             volume_plan_content = {
                 "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
                 "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
-                "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ", "handoff_expectations": []
+                "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ"
             }
 
             chapter_plan_content = {

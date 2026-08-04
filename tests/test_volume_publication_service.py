@@ -1,4 +1,4 @@
-"""V2 volume-publication stage contracts: registry inputs and generic recovery."""
+"""Volume-publication stage contracts: registry inputs and generic recovery."""
 from __future__ import annotations
 
 import json
@@ -130,7 +130,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
     volume_plan_content = {
         "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
         "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
-        "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 3)], "required_end_state": "次へ", "handoff_expectations": []
+        "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 3)], "required_end_state": "次へ"
     }
     write_content(root, "volume-plan-v01-000001", "volume-plan", base_id, volume_plan_content)
 
@@ -320,7 +320,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
     return temporary, root
 
 
-class VolumePublicationServiceV2Tests(unittest.TestCase):
+class VolumePublicationServiceTests(unittest.TestCase):
     def test_publication_accepts_scene_input_state_when_current_state_has_advanced(self) -> None:
         temporary, root = workspace()
         self.addCleanup(temporary.cleanup)

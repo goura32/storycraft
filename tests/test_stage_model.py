@@ -6,7 +6,7 @@ import unittest
 from storycraft.stages import STAGES, Stage
 
 
-class StageModelV2Tests(unittest.TestCase):
+class StageModelTests(unittest.TestCase):
     def test_current_stage_set_has_no_handoff_or_completion(self) -> None:
         self.assertEqual(
             STAGES,

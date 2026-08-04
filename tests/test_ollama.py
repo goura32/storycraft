@@ -35,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-class OllamaV2Tests(unittest.TestCase):
+class OllamaTests(unittest.TestCase):
     def setUp(self) -> None:
         Handler.capability = {"id": "m", "context_length": 8192}
         Handler.completion = {"choices": [{"message": {"content": '{"schema_version": 1}'}}]}

@@ -1,4 +1,4 @@
-"""V2 provider-free volume publication through the generic commit manifest."""
+"""Provider-free volume publication through the generic commit manifest."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -135,7 +135,7 @@ class VolumePublicationStageService:
         if not isinstance(volume_content, dict):
             raise ContractError("巻公開selectionのvolume planが不正です")
         volume_count = self._volume_count(series, volume)
-        chapter_numbers = self._ordered_numbers(volume_content, "chapters", "chapter_number")
+        chapter_numbers = self._ordered_numbers(volume_content, "chapter_summaries", "chapter_number")
         chapter_slots = {f"chapter_plan.v{volume:02d}.c{number:02d}" for number in chapter_numbers}
         selected_chapter_slots = {key for key in slots if key.startswith(f"chapter_plan.v{volume:02d}.")}
         if selected_chapter_slots != chapter_slots:
@@ -153,7 +153,7 @@ class VolumePublicationStageService:
             if not isinstance(chapter_content, dict):
                 raise ContractError("巻公開selectionのchapter planが不正です")
             chapter_ids.append(self._record_id(chapter_record, "artifact_id"))
-            for scene in self._ordered_numbers(chapter_content, "scenes", "scene_number"):
+            for scene in self._ordered_numbers(chapter_content, "scene_summaries", "scene_number"):
                 coordinate = f"v{volume:02d}.c{chapter:02d}.s{scene:02d}"
                 committed = self._slot(slots, f"scene.{coordinate}")
                 commit_record = self._slot(slots, f"scene_commit.{coordinate}")
@@ -209,11 +209,10 @@ class VolumePublicationStageService:
 
     @staticmethod
     def _ordered_numbers(content: object, field: str, number_field: str) -> list[int]:
-        modern_field = {"volumes": "volume_summaries", "chapters": "chapter_summaries", "scenes": "scene_summaries"}.get(field, field)
-        if not isinstance(content, dict) or not isinstance(content.get(modern_field), list):
+        if not isinstance(content, dict) or not isinstance(content.get(field), list):
             raise ContractError(f"巻公開の{field}計画が不正です")
         result: list[int] = []
-        for item in content[modern_field]:
+        for item in content[field]:
             number = item.get(number_field) if isinstance(item, dict) else None
             if not isinstance(number, int) or isinstance(number, bool) or number < 1:
                 raise ContractError(f"巻公開の{field}計画番号が不正です")
@@ -225,7 +224,7 @@ class VolumePublicationStageService:
     def _volume_count(self, series: dict[str, Any], volume: int) -> int:
         if series.get("artifact_kind") != "series-plan":
             raise ContractError("巻公開selectionのseries planが不正です")
-        numbers = self._ordered_numbers(series.get("content"), "volumes", "volume_number")
+        numbers = self._ordered_numbers(series.get("content"), "volume_summaries", "volume_number")
         if numbers != list(range(1, len(numbers) + 1)) or volume not in numbers:
             raise ContractError("巻公開selectionのseries plan巻集合が不正です")
         return len(numbers)

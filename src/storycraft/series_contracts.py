@@ -2242,13 +2242,6 @@ class ContractValidator:
                     "一致しません"
                 )
 
-        if (
-            volume_number < volume_count
-            and not candidate["handoff_expectations"]
-        ):
-            raise ContractError(
-                "最終巻以外にはhandoff_expectationsが必要です"
-            )
 
     @staticmethod
     def _validate_chapter_plan(

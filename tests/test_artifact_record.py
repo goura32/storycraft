@@ -11,7 +11,7 @@ NOW = "2026-07-29T00:00:00Z"
 
 
 class ArtifactRecordTests(unittest.TestCase):
-    def test_content_artifacts_use_the_v2_envelope_and_input_selection_id(self) -> None:
+    def test_content_artifacts_use_the_content_envelope_and_input_selection_id(self) -> None:
         record = {
             "schema_version": 1,
             "artifact_id": "initial-design-000001",
@@ -118,7 +118,7 @@ class ArtifactRecordTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             validate_selection_snapshot({**selection, "selection_id": "selection-1"})
 
-    def test_persisted_review_rejects_legacy_evidence_locations(self) -> None:
+    def test_persisted_review_rejects_unsupported_evidence_locations(self) -> None:
         review = {
             "schema_version": 1,
             "review_id": "review-000001",

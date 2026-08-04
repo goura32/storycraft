@@ -1,4 +1,4 @@
-"""V2 artifact counter reservation contracts."""
+"""Artifact counter reservation contracts."""
 from __future__ import annotations
 
 import json
