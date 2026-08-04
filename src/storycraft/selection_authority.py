@@ -114,7 +114,7 @@ def _validate_series_plan(content: dict[str, Any], inputs: dict[str, dict[str, A
 def _validate_volume_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
     value = _require_object(content, "volume-plan")
     _validate_schema(value, "volume-plan")
-    _reject_unknown(value, "volume-plan", {"title", "starting_state_summary", "volume_purpose", "central_conflict", "character_changes", "relationship_changes", "thread_goals", "revelations", "chapter_summaries", "required_end_state"})
+    _reject_unknown(value, "volume-plan", {"title", "volume_purpose", "central_conflict", "character_changes", "relationship_changes", "thread_goals", "revelations", "chapter_summaries", "required_end_state"})
     summaries = value.get("chapter_summaries")
     numbers = [item.get("chapter_number") if isinstance(item, dict) else None for item in summaries] if isinstance(summaries, list) else []
     if not summaries or numbers != list(range(1, len(summaries) + 1)):

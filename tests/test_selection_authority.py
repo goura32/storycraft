@@ -173,7 +173,7 @@ class SelectionAuthorityTests(unittest.TestCase):
             "revelation_schedule": [], "ending_path": "完結", "global_constraints": [],
         }
         volume = {
-            "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+            "title": "第一巻", "volume_purpose": "目的", "central_conflict": "対立",
             "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"未知のthread": "進展"}, "revelations": [],
             "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}], "required_end_state": "終了",
         }
@@ -232,12 +232,13 @@ class SelectionAuthorityTests(unittest.TestCase):
 
     def test_rejects_unsupported_volume_plan_field_and_coordinate_gaps(self) -> None:
         series = {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": "p", "ending_change": "c"} for n in (1, 2, 3, 5)], "character_arc_map": {"c": [1]}, "relationship_arc_map": {"r": [1]}, "thread_progression": {"t": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "k"}], "ending_path": "完結", "global_constraints": []}
-        volume = {"title": "巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"c": "変化"}, "relationship_changes": {"r": "変化"}, "thread_goals": {"t": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}, {"chapter_number": 3, "purpose": "章"}], "required_end_state": "終了"}
-        with self.assertRaisesRegex(ContractError, "schema不正"):
-            DEFAULT_CONTENT_VALIDATORS["volume-plan"](
-                {**volume, "handoff_expectations": []},
-                {"series_plan": {"content": series}},
-            )
+        volume = {"title": "巻", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"c": "変化"}, "relationship_changes": {"r": "変化"}, "thread_goals": {"t": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}, {"chapter_number": 3, "purpose": "章"}], "required_end_state": "終了"}
+        for field, value in (("handoff_expectations", []), ("starting_state_summary", "開始")):
+            with self.subTest(field=field), self.assertRaisesRegex(ContractError, "schema不正"):
+                DEFAULT_CONTENT_VALIDATORS["volume-plan"](
+                    {**volume, field: value},
+                    {"series_plan": {"content": series}},
+                )
         chapter = {"title": "章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"], "scene_summaries": [{"scene_number": 1, "purpose": "場面"}, {"scene_number": 3, "purpose": "場面"}], "required_revelations": [], "constraints": []}
         with self.assertRaises(ContractError):
             DEFAULT_CONTENT_VALIDATORS["series-plan"](series, {})

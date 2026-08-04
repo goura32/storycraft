@@ -211,7 +211,7 @@ class WorkspaceTests(unittest.TestCase):
             }
 
             volume_plan_content = {
-                "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+                "title": "第一巻", "volume_purpose": "目的", "central_conflict": "対立",
                 "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
                 "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ"
             }

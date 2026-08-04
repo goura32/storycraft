@@ -124,7 +124,7 @@ class SceneProductionStagesTests(unittest.TestCase):
             "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []
         }
         volume_plan_content = {
-            "title": "第三巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+            "title": "第三巻", "volume_purpose": "目的", "central_conflict": "対立",
             "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
             "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 4)], "required_end_state": "次へ"
         }

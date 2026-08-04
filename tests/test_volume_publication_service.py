@@ -128,7 +128,7 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
     write_content(root, "series-plan-000001", "series-plan", base_id, series_plan_content)
 
     volume_plan_content = {
-        "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+        "title": "第一巻", "volume_purpose": "目的", "central_conflict": "対立",
         "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
         "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 3)], "required_end_state": "次へ"
     }

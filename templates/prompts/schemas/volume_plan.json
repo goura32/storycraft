@@ -5,7 +5,6 @@
   "additionalProperties": false,
   "required": [
     "title",
-    "starting_state_summary",
     "volume_purpose",
     "central_conflict",
     "character_changes",
@@ -22,11 +21,6 @@
       "maxLength": 80,
       "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$",
       "description": "読者向け巻題。巻番号や「第N巻」は含めず、本文内容を簡潔に示す題名だけを書く。"
-    },
-    "starting_state_summary": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1600
     },
     "volume_purpose": {
       "type": "string",
