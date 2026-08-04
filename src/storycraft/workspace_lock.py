@@ -8,6 +8,7 @@ from pathlib import Path
 import stat
 from typing import Iterator
 
+from .filesystem_security import open_nofollow
 from .series_contracts import ContractError
 class WorkspaceLockBusy(ContractError):
     """writer lock を取得できない場合。CLI は exit 75 に写像する。"""
@@ -30,7 +31,7 @@ def workspace_lock(
 
     try:
         try:
-            descriptor = os.open(lock_path, flags)
+            descriptor = open_nofollow(lock_path, flags)
         except FileNotFoundError as exc:
             raise ContractError(
                 "V1 workspace lockがありません"

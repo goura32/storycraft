@@ -93,12 +93,14 @@ def workspace(*, volume_count: int = 2, omit_scene_source: bool = False) -> tupl
     for relative in (
         "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
         "runtime/staging", "runtime/selections", "runtime/calls",
-        "runtime/adoptions", "design", "design/initial", "design/series-plans",
+        "runtime/adoptions", "runtime/raw_logs", "design", "design/initial", "design/series-plans",
         "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations",
         "scenes", "publications",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
     write_json(root / "runtime/counters.json", initial_counters())
+    (root / "runtime/lock").touch()
+    (root / "runtime/counters.lock").touch()
     write_json(root / "runtime/settings/settings-000001/record.json", {
         "schema_version": 1, "settings_id": "settings-000001", "payload": {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]}, "created_at": NOW,
     })

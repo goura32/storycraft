@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 from typing import Any, NoReturn
 
+from .error_sanitizer import safe_exception_message, sanitize_text
 from .run_state import RunStateStore
 from .series_contracts import ContractError
 from .workspace import create_workspace, validate_workspace
@@ -177,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         _emit_error("invalid_argument", str(exc))
         return 2
     except Exception as exc:
-        _emit_error("internal_error", str(exc))
+        _emit_error("internal_error", safe_exception_message(exc))
         return 70
     if args.json:
         print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
@@ -197,7 +198,7 @@ _ERROR_CODES = {
 
 
 def _emit_error(code: str, message: str) -> None:
-    print(json.dumps({"ok": False, "code": code, "message": message}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
+    print(json.dumps({"ok": False, "code": code, "message": sanitize_text(message)}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
 
 
 def console_main() -> None:

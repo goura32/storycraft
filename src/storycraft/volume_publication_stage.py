@@ -10,12 +10,13 @@ from typing import Any
 from .artifact_record import validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_ids import reserve_counter
 from .commit_recovery import recover_pending_commit
-from .filesystem_security import assert_no_symlink_path
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, read_text_nofollow
 from .publication_builder import build_volume_publication_files, validate_volume_publication_files
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
+from .state_derivation import apply_continuity_state
 from .workspace import validate_workspace
 
 
@@ -177,6 +178,7 @@ class VolumePublicationStageService:
                     raise ContractError("巻公開のscene_commit recordがselection sourceと一致しません")
                 source_state_id = self._committed_input_state_id(committed)
                 self._validate_committed_source(committed, prose, quality, scene_card, continuity, source_state_id, volume, chapter, scene)
+                self._validate_scene_commit_generation(commit_record, committed, continuity, source_state_id, current_state_id)
                 scene_ids.append(self._record_id(committed, "artifact_id"))
                 quality_ids.append(self._record_id(quality, "quality_id"))
                 prose_content = prose["content"]
@@ -276,10 +278,11 @@ class VolumePublicationStageService:
 
     @staticmethod
     def _load_json_record(path: Path) -> dict[str, Any]:
+        assert_no_symlink_path(path.parent, require_directory=True)
         if path.is_symlink() or not path.is_file():
             raise ContractError(f"品質参照recordが通常fileではありません: {path.name}")
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(read_text_nofollow(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError("品質参照recordを読めません") from exc
         if not isinstance(value, dict):
@@ -312,6 +315,44 @@ class VolumePublicationStageService:
         if not isinstance(quality.get("remaining_major_issues"), list):
             raise ContractError("巻公開のscene prose品質判定が不正です")
 
+    def _validate_scene_commit_generation(
+        self,
+        committed: dict[str, Any],
+        scene_record: dict[str, Any],
+        continuity: dict[str, Any],
+        input_state_id: str,
+        final_state_id: str,
+    ) -> None:
+        output_state_id = committed.get("current_state_id")
+        if not isinstance(output_state_id, str):
+            raise ContractError("巻公開のscene_commit current_state参照が不正です")
+        input_state = self._load_json_record(self.workspace_root / "generations" / input_state_id / "record.json")
+        output_state = self._load_json_record(self.workspace_root / "generations" / output_state_id / "record.json")
+        validate_record("generation", input_state_id, input_state)
+        validate_record("generation", output_state_id, output_state)
+        expected = apply_continuity_state(input_state.get("content"), continuity.get("content"))
+        if output_state.get("content") != expected:
+            raise ContractError("巻公開のscene_commit output generationが派生状態と一致しません")
+        self._require_generation_ancestor(output_state_id, final_state_id)
+
+    def _require_generation_ancestor(self, ancestor_id: str, descendant_id: str) -> None:
+        current_id = descendant_id
+        seen: set[str] = set()
+        while current_id != ancestor_id:
+            if current_id in seen:
+                raise ContractError("巻公開のgeneration lineageが循環しています")
+            seen.add(current_id)
+            generation = self._load_json_record(self.workspace_root / "generations" / current_id / "record.json")
+            validate_record("generation", current_id, generation)
+            selection_id = generation.get("input_selection_id")
+            if not isinstance(selection_id, str):
+                raise ContractError("巻公開のgeneration input selectionが不正です")
+            selection = SelectionSnapshotStore(self.workspace_root).load(selection_id)
+            parent_id = selection["slots"].get("current_state")
+            if not isinstance(parent_id, str):
+                raise ContractError("巻公開のgeneration ancestorが不正です")
+            current_id = parent_id
+
     def _write_files(self, staging_root: str, files: dict[str, dict[str, Any] | str]) -> None:
         directory = self.workspace_root / staging_root
         if directory.exists() or directory.is_symlink():
@@ -320,4 +361,4 @@ class VolumePublicationStageService:
         for name, value in files.items():
             path = directory / name
             text = json.dumps(value, ensure_ascii=False, indent=2) + "\n" if isinstance(value, dict) else value
-            path.write_text(text, encoding="utf-8")
+            atomic_write_text(path, text)

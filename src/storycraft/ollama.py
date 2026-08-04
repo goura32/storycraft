@@ -7,7 +7,6 @@ one immutable audit record for each physical HTTP call when given a call directo
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from collections.abc import Callable
@@ -23,11 +22,11 @@ from jsonschema import Draft202012Validator, ValidationError
 from .artifact_ids import reserve_counter
 from .endpoint_security import pinned_http_request
 from .error_sanitizer import redact_value
-from .filesystem_security import assert_no_symlink_path
-from .series_contracts import ContractError
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, ensure_directory_nofollow
+from .series_contracts import ContractError, EndpointResolutionError, LLMCallError
 
 
-class OllamaTechnicalError(ContractError):
+class OllamaTechnicalError(LLMCallError):
     """A connection, HTTP, or timeout failure from the provider."""
 
 
@@ -100,19 +99,14 @@ def _write_record(
     if directory is None:
         return None
     _require_settings_id(settings_id)
-    directory = Path(directory)
-    assert_no_symlink_path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    assert_no_symlink_path(directory, require_directory=True)
+    directory = ensure_directory_nofollow(Path(directory))
     counters = directory.parent / "counters.json"
     if directory.name == "calls" and counters.is_file():
         call_id = f"call-{reserve_counter(directory.parent.parent, 'next_call'):06d}"
     else:
         # Standalone boundary tests have no workspace counter authority.
         call_id = f"call-{uuid4().hex}"
-    target = directory / call_id
-    # A newly-created directory gives each physical call a write-once namespace.
-    target.mkdir(parents=True, exist_ok=False)
+    target = ensure_directory_nofollow(directory / call_id, exist_ok=False)
     redacted_request = redact_value(request)
     redacted_response = redact_value(response)
     record = {
@@ -134,21 +128,9 @@ def _write_record(
         "validation": validation,
     }
     record_path = target / "record.json"
-    temporary = target / f".record.json.{uuid4().hex}.tmp"
     try:
-        with temporary.open("x", encoding="utf-8") as handle:
-            handle.write(_canonical_json(record) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, record_path)
-        if os.name == "posix":
-            descriptor = os.open(target, os.O_RDONLY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+        atomic_write_text(record_path, _canonical_json(record) + "\n")
     except OSError:
-        temporary.unlink(missing_ok=True)
         raise
     return call_id
 
@@ -169,7 +151,7 @@ def _capability(
         with urlopen(Request(url, method="GET"), timeout=30) as response:
             raw = response.read().decode("utf-8")
             payload = json.loads(raw)
-    except (HTTPError, URLError, OSError) as exc:
+    except (HTTPError, URLError, OSError, EndpointResolutionError) as exc:
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=None, transport="failure",
                       validation={"result": "not_applicable", "checks": [], "failure_code": _failure_code(exc)},

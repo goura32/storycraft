@@ -113,14 +113,14 @@ class SelectionAuthorityTests(unittest.TestCase):
             "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}]}},
             "scene_prose.v01.c01.s01": {"content": {"text": "本文"}},
         }
-        valid = {"coordinate": target, "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]}
+        valid = {"coordinate": target, "changes": [{"op": "set", "target": "timeline_position", "path": "/timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]}
         SceneContinuityStageService._validate_content(valid, target, inputs)
         self.assertTrue(SceneContinuityStageService._evidence_is_in_prose("prose:3", "本文"))
         self.assertFalse(SceneContinuityStageService._evidence_is_in_prose("prose:4", "本文"))
         with self.assertRaisesRegex(ContractError, "timeline_position"):
             SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "value": 1}]}, target, inputs)
         with self.assertRaisesRegex(ContractError, "allowed_updates"):
-            SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "target": "reader_disclosures", "path": "$.reader_disclosures.item", "value": "x"}]}, target, inputs)
+            SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "target": "reader_disclosures", "path": "/reader_disclosures/item", "value": "x"}]}, target, inputs)
         with self.assertRaisesRegex(ContractError, "evidence"):
             SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "evidence_locations": ["prose:99"]}]}, target, inputs)
 
@@ -129,7 +129,7 @@ class SelectionAuthorityTests(unittest.TestCase):
             "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "unresolved_thread_states", "target_id": "未知のthread", "allowed_fields": ["status"]}]}},
             "scene_prose.v01.c01.s01": {"content": {"text": "本文"}},
         }
-        invalid_thread = {"coordinate": target, "changes": [{"op": "set", "target": "unresolved_thread_states", "path": "$.unresolved_thread_states.未知のthread.status", "value": "resolved", "evidence_locations": ["prose:0"]}]}
+        invalid_thread = {"coordinate": target, "changes": [{"op": "set", "target": "unresolved_thread_states", "path": "/unresolved_thread_states/未知のthread/status", "value": "resolved", "evidence_locations": ["prose:0"]}]}
         with self.assertRaisesRegex(ContractError, "canonical"):
             SceneContinuityStageService._validate_content(invalid_thread, target, thread_inputs)
         canonical_thread_inputs = {
@@ -137,7 +137,7 @@ class SelectionAuthorityTests(unittest.TestCase):
             "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "unresolved_thread_states", "target_id": "塔の試練", "allowed_fields": ["status"]}]}},
         }
         for operation, value in (("add", "progressed"), ("remove", None), ("set", "invalid")):
-            bad_change = {"op": operation, "target": "unresolved_thread_states", "path": "$.unresolved_thread_states.塔の試練.status", "value": value, "evidence_locations": ["prose:0"]}
+            bad_change = {"op": operation, "target": "unresolved_thread_states", "path": "/unresolved_thread_states/塔の試練/status", "value": value, "evidence_locations": ["prose:0"]}
             with self.assertRaisesRegex(ContractError, "canonical"):
                 SceneContinuityStageService._validate_content({"coordinate": target, "changes": [bad_change]}, target, canonical_thread_inputs)
 

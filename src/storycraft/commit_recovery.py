@@ -10,12 +10,14 @@ from typing import Any, Mapping
 from .artifact_record import validate_call_record, validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec
 from .immutable_directory import finalize_immutable_directory
+from .filesystem_security import read_text_nofollow
 from .publication_builder import validate_volume_publication_files
 from .review_contracts import validate_critique_fields
 from .run_state import RunStateStore, target_artifact_kind
 from .selection_authority import resolve_selection
 from .selection_snapshot import validate_selection_snapshot
 from .series_contracts import ContractError
+from .state_derivation import apply_continuity_state, build_initial_state
 from .time_contract import parse_utc_timestamp
 
 
@@ -221,7 +223,7 @@ def _target_validator(root: Path, target: dict[str, Any], input_selection_id: st
             if any(path.is_symlink() or not path.is_file() for path in (record_path, manuscript_path)):
                 raise ContractError("volume publication targetのleaf fileは通常fileでなければなりません")
             try:
-                files = {"record.json": json.loads(record_path.read_text(encoding="utf-8")), "manuscript.md": manuscript_path.read_text(encoding="utf-8")}
+                files = {"record.json": json.loads(read_text_nofollow(record_path)), "manuscript.md": read_text_nofollow(manuscript_path)}
             except (OSError, json.JSONDecodeError) as exc:
                 raise ContractError("volume publication targetを読めません") from exc
             validate_volume_publication_files(files)
@@ -267,7 +269,7 @@ def _single_record(directory: Path) -> dict[str, Any]:
     if record_path.is_symlink() or not record_path.is_file():
         raise ContractError("immutable targetのrecord.jsonが不正です")
     try:
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record = json.loads(read_text_nofollow(record_path))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError("immutable targetのrecord.jsonを読めません") from exc
     if not isinstance(record, dict):
@@ -293,11 +295,17 @@ def _validate_scene_commit_lineage(
         ("quality-disposition", "quality_disposition_id"),
     )
     input_current_state_id: str | None = None
+    continuity_record: dict[str, Any] | None = None
+    output_generation_record: dict[str, Any] | None = None
     for kind, field in references:
         identifier = record[field]
         directory = _target_path(root, target_paths, kind, identifier)
         referenced = _single_record(directory)
         validate_record(kind, identifier, referenced)
+        if kind == "continuity-update":
+            continuity_record = referenced
+        elif kind == "generation":
+            output_generation_record = referenced
         if kind == "scene":
             content = referenced.get("content")
             if not isinstance(content, dict) or not isinstance(content.get("current_state_id"), str):
@@ -353,6 +361,13 @@ def _validate_scene_commit_lineage(
         raise ContractError("scene-commit output selectionのslot deltaが不正です")
     if output_slots.get(output_slot) != record["scene_commit_id"]:
         raise ContractError("scene-commit output selectionの座標slotが参照と一致しません")
+    if continuity_record is None or output_generation_record is None:
+        raise ContractError("scene-commitのgeneration/continuity参照がありません")
+    input_generation = _single_record(_target_path(root, target_paths, "generation", input_current_state_id))
+    validate_record("generation", input_current_state_id, input_generation)
+    expected_generation = apply_continuity_state(input_generation["content"], continuity_record["content"])
+    if output_generation_record.get("input_selection_id") != input_selection_id or output_generation_record.get("content") != expected_generation:
+        raise ContractError("scene-commit output generationがinput generationとcontinuity updateから導出した状態と一致しません")
 
 
 def _validate_publication_source_evidence(root: Path, files: dict[str, Any]) -> None:
@@ -446,6 +461,15 @@ def _validate_candidate_adoption_lineage(
         raise ContractError("candidate adoptionのcandidate参照が不正です")
     if candidate.get("payload") != content.get("content"):
         raise ContractError("candidate adoptionのcontentがcandidateと一致しません")
+    if target_artifact_kind(content_target) == "initial-design":
+        generation_targets = [target for target in content_targets if target_artifact_kind(target) == "generation"]
+        if len(generation_targets) != 1:
+            raise ContractError("initial-design adoptionのgeneration targetが一意ではありません")
+        generation_target = generation_targets[0]
+        generation = _single_record(_target_path(root, target_paths, "generation", generation_target["artifact_id"]))
+        validate_record("generation", generation_target["artifact_id"], generation)
+        if generation.get("input_selection_id") != manifest["input_selection_id"] or generation.get("content") != build_initial_state(content["content"]):
+            raise ContractError("initial-design adoptionのgenerationがinitial-designから導出した状態と一致しません")
     if quality["candidate_id"] != candidate_id:
         raise ContractError("candidate adoptionのquality candidate参照が不正です")
     lineage = _candidate_lineage(root, candidate_id)

@@ -73,7 +73,7 @@ class HardeningContractTests(unittest.TestCase):
                     {
                         "op": "set",
                         "target": "story_facts",
-                        "path": "$.story_facts.0.value",
+                        "path": "/story_facts/0/value",
                         "value": "判明",
                         "evidence_locations": ["prose:0"],
                     }

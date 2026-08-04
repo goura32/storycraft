@@ -12,6 +12,8 @@ from typing import Any, Callable, Mapping
 
 from .commit_recovery import recover_pending_commit
 from .artifact_registry import artifact_spec
+from .error_sanitizer import safe_exception_message, sanitize_text
+from .filesystem_security import read_text_nofollow
 from .ollama import OllamaResponseFormatError
 from .run_state import RunStateStore
 from .series_contracts import ContractError, LLMCallError
@@ -41,13 +43,13 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
             settings_id = settings_directories[0].name
         elif isinstance(selection_id, str):
             selection = json.loads(
-                (root / "runtime/selections" / selection_id / "record.json").read_text(encoding="utf-8")
+                read_text_nofollow(root / "runtime/selections" / selection_id / "record.json")
             )
             settings_id = selection["slots"]["settings"]
         else:
             raise ContractError("LLM stageにはcurrent selectionが必要です")
         payload = json.loads(
-            (root / "runtime/settings" / settings_id / "record.json").read_text(encoding="utf-8")
+            read_text_nofollow(root / "runtime/settings" / settings_id / "record.json")
         )["payload"]
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ContractError("current selectionのsettingsを読めません") from exc
@@ -168,7 +170,7 @@ def _block(store: RunStateStore, state: dict[str, Any], code: str, message: str)
         "status": "blocked",
         "last_error": {
             "code": code,
-            "message": message,
+            "message": sanitize_text(message),
             "evidence_refs": [],
             "occurred_at": state["updated_at"],
         },
@@ -217,8 +219,9 @@ def run(
         except ContractError as exc:
             if state["status"] == "completed":
                 raise RunUnavailable("authority_inconsistency") from exc
-            _block(store, state, "authority_inconsistency", str(exc))
-            raise RunUnavailable("authority_inconsistency") from exc
+            code = _stage_error_code(state.get("current_stage"), exc)
+            _block(store, state, code, safe_exception_message(exc))
+            raise RunUnavailable(code) from exc
         if state["status"] == "completed":
             return state
 
@@ -233,7 +236,7 @@ def run(
                     state = recover_pending_commit(root)
                 except Exception as exc:
                     code = _stage_error_code(pending_kind, exc)
-                    _block(store, state, code, str(exc))
+                    _block(store, state, code, safe_exception_message(exc))
                     raise RunUnavailable(code) from exc
                 if state["status"] == "completed":
                     return state
@@ -250,7 +253,7 @@ def run(
                 result = handler(root, state, model)
             except Exception as exc:
                 code = _stage_error_code(stage, exc)
-                _block(store, state, code, str(exc))
+                _block(store, state, code, safe_exception_message(exc))
                 raise RunUnavailable(code) from exc
             if not isinstance(result, dict):
                 _block(store, state, "internal_error", "stage handler did not return run-state")

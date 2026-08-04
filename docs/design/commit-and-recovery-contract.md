@@ -24,9 +24,13 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 
 候補採用の一時保存は、採用する内容成果物、採用記録、後続選択だけを含みます。初期依頼採用では `request`、初期設計採用では `initial-design` と最初の `generation` も含みます。すでに不変確定した候補、確認記録、品質判定は移動・複写せず、その ID を参照します。
 
+候補採用の `input_selection_id` は候補recordの入力selectionと一致し、`output_selection_id` は現在selectionの祖先です。出力selectionは採用内容、採用record、対応品質判定を実際に参照し、candidateの`artifact_kind`と`payload`は選択された内容recordと完全一致しなければなりません。品質recordはcandidate・review群・採用recordの同じlineageだけを参照します。
+
 ## 5. 場面確定の詳細
 
 場面確定の一時保存は場面、後続の作品状態、確定記録、後続選択を含みます。すべてが同じ基準作品状態、場面座標、場面本文、継続性更新を参照しなければなりません。作品状態の更新は一度だけ適用します。
+
+recovery、workspace検証、巻公開は共通の決定的導出器で入力generationへ継続性更新を一度適用し、確定generationのcontentと完全一致することを確認します。`scene_commit.current_state_id`は最終selectionの現在状態またはそのgeneration lineageの祖先でなければなりません。
 
 ## 6. 巻公開の詳細
 

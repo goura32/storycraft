@@ -3,17 +3,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from copy import deepcopy
 from typing import Any
 
 from .artifact_ids import reserve_counter
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
+from .filesystem_security import atomic_write_text, assert_no_symlink_path
 from .llm_responses import review_response
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection, _validate_initial_design_content
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
+from .state_derivation import build_initial_state
 from .workspace import _validate_settings, validate_workspace
 
 
@@ -255,43 +256,7 @@ class InitialDesignStageService:
 
     @staticmethod
     def _build_initial_state(content: dict[str, Any]) -> dict[str, Any]:
-        """Construct the first current-state payload from adopted design intent."""
-        core = content["core"]
-        world = content["world"]
-        facts: list[dict[str, Any]] = [
-            {"fact_id": "fact-000001", "scope": "core", "value": deepcopy(core)},
-            {"fact_id": "fact-000002", "scope": "world", "value": deepcopy(world)},
-        ]
-        cast = content["cast"]
-        knowledge_model = content.get("knowledge_model")
-        character_knows = knowledge_model.get("character_knows", {}) if isinstance(knowledge_model, dict) else {}
-        character_knowledge: dict[str, Any] = {}
-        for index, person in enumerate(cast, start=1):
-            character_id = f"char-{index:06d}"
-            name = person.get("name") if isinstance(person, dict) else None
-            public_knowledge = character_knows.get(name, []) if isinstance(character_knows, dict) else []
-            if not isinstance(public_knowledge, list):
-                public_knowledge = []
-            character_knowledge[character_id] = deepcopy(public_knowledge)
-            facts.append({
-                "fact_id": f"fact-{index + 2:06d}",
-                "scope": "character",
-                "subject_id": character_id,
-                "value": deepcopy(person),
-            })
-
-        thread_states: dict[str, Any] = {}
-        for thread in content["unresolved_threads"]:
-            if not isinstance(thread, dict) or not isinstance(thread.get("name"), str):
-                raise ContractError("unresolved_threadのnameが不正です")
-            thread_states[thread["name"]] = {"status": "open"}
-        return {
-            "story_facts": facts,
-            "character_knowledge": character_knowledge,
-            "reader_disclosures": [],
-            "unresolved_thread_states": thread_states,
-            "timeline_position": 0,
-        }
+        return build_initial_state(content)
 
     def _target(self, artifact_id: str, artifact_kind: str, staging_root: str) -> dict[str, Any]:
         final_roots = {
@@ -304,9 +269,8 @@ class InitialDesignStageService:
     def _write_staged_record(self, relative_directory: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory
         directory.mkdir(parents=True)
-        (directory / "record.json").write_text(
-            json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-        )
+        assert_no_symlink_path(directory, require_directory=True)
+        atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")
 
 
     def _call_id(self, model: Any, operation: str) -> str:
@@ -329,6 +293,5 @@ class InitialDesignStageService:
                 return
             raise ContractError("不変audit recordを上書きできません")
         directory.mkdir(parents=True)
-        (directory / "record.json").write_text(
-            json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-        )
+        assert_no_symlink_path(directory, require_directory=True)
+        atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")

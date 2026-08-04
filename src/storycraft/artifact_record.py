@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 from .artifact_registry import artifact_spec
@@ -218,6 +219,8 @@ def _validate_quality_disposition(record: dict[str, Any], artifact_id: str) -> N
     for issue in issues:
         if not isinstance(issue, dict) or set(issue) != {"code", "message", "evidence_locations"} or not isinstance(issue["code"], str) or not issue["code"] or not isinstance(issue["message"], str) or not issue["message"] or not isinstance(issue["evidence_locations"], list) or not issue["evidence_locations"]:
             raise ContractError("quality-dispositionのremaining_major_issues要素が不正です")
+        if issue["code"] != "quality.critical":
+            raise ContractError("quality-dispositionのremaining_major_issues codeが不正です")
         for location in issue["evidence_locations"]:
             evidence_location_kind(location)
     if record["result"] == "accepted":
@@ -250,10 +253,15 @@ def validate_quality_evidence(
     if record["result"] != "accepted_with_notice":
         raise ContractError("quality-dispositionのresultが不正です")
     from .review_contracts import validate_critique_fields
-    critical_signatures: set[tuple[str, tuple[object, ...]]] = {
-        (issue["explanation"], tuple(issue["evidence_locations"]))
+    critical_signatures = Counter(
+        (
+            "quality.critical",
+            issue["explanation"],
+            tuple(issue["evidence_locations"]),
+        )
         for issue in critical_reviews
-    }
+    )
+    quality_signatures: list[tuple[str, str, tuple[object, ...]]] = []
     for issue in record["remaining_major_issues"]:
         response = {
             "schema_version": "review-response-v1",
@@ -265,8 +273,9 @@ def validate_quality_evidence(
             }],
         }
         validate_critique_fields(response, candidate_payload)
-        if (issue["message"], tuple(issue["evidence_locations"])) not in critical_signatures:
-            raise ContractError("quality-dispositionの重大指摘がreview記録に存在しません")
+        quality_signatures.append((issue["code"], issue["message"], tuple(issue["evidence_locations"])))
+    if Counter(quality_signatures) != critical_signatures:
+        raise ContractError("quality-dispositionの重大指摘集合がreview記録と一致しません")
 
 
 def _prefixed_id(value: object, prefix: str) -> bool:

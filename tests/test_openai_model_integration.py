@@ -139,7 +139,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                          "request_options": {}},
                     retry={"max_attempts": 1},
                     settings_id="settings-000001",
-                ), runtime / "raw_logs")
+                ), runtime / "raw_logs", Path(temporary))
                 self.assertEqual(model.generate_prose("scene_prose", {"scene": "context"}), "本文そのもの")
                 posts = [body for path, body in handler.requests if path == "/v1/chat/completions"]
                 self.assertEqual(len(posts), 1)
@@ -177,7 +177,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                          "request_options": {}},
                     retry={"max_attempts": 1},
                     settings_id="settings-000001",
-                ), runtime / "raw_logs")
+                ), runtime / "raw_logs", Path(temporary))
                 response = model.critique_prose("scene_prose", "本文", {"scene": "context"})
                 self.assertEqual(response["decision"], "pass")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in (runtime / "calls").glob("*/record.json")]
@@ -210,7 +210,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 counters = json.loads(counters_path.read_text(encoding="utf-8"))
                 counters["next_selection"] = 2
                 counters_path.write_text(json.dumps(counters) + "\n", encoding="utf-8")
-                model = OpenAIStoryModel(SimpleNamespace(llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint, "model": "fake-model", "api_key_env": None, "headers_env": {}, "thinking": True, "stream": False, "first_event_timeout_seconds": 5, "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5, "request_options": {}}, retry={"max_attempts": 1}), root / "runtime/raw_logs")
+                model = OpenAIStoryModel(SimpleNamespace(llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint, "model": "fake-model", "api_key_env": None, "headers_env": {}, "thinking": True, "stream": False, "first_event_timeout_seconds": 5, "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5, "request_options": {}}, retry={"max_attempts": 1}), root / "runtime/raw_logs", root)
                 runner = CandidateStageRunner(root, CandidateStageSpec(stage="request_intake", artifact_kind="request", next_stage="initial_design", next_target={}, content_id_factory=lambda _root, _target: "request-000002"))
 
                 result = runner.run(model, context={"request": "current"}, updated_at=NOW)

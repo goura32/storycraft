@@ -10,8 +10,9 @@ from typing import Any, Callable, Mapping
 
 import jsonschema
 
-from .artifact_record import validate_record
+from .artifact_record import validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS, artifact_directory, artifact_spec, validate_artifact_reference
+from .filesystem_security import read_text_nofollow
 from .input_normalization import normalize_request
 from .prompt_template import get_template_loader
 from .selection_snapshot import validate_selection_snapshot
@@ -449,6 +450,7 @@ def resolve_selection(
     cache = resolution_cache if resolution_cache is not None else {}
     resolved = _resolve_snapshot(root, snapshot, validators, set(), record_paths, cache)
     _validate_thread_lineage(resolved)
+    _validate_adoption_lineages(root, value, resolved, record_paths)
     _validate_quality_slot_lineage(root, value, resolved, record_paths)
     return resolved
 
@@ -478,10 +480,143 @@ def _validate_quality_slot_lineage(
             raise ContractError(f"{quality_slot}のadoption selection lineageが不正です")
         if adoption.get("quality_id") != quality.get("quality_id"):
             raise ContractError(f"{quality_slot}のquality IDがadoptionと一致しません")
+        candidate_id = adoption.get("candidate_id")
+        if not isinstance(candidate_id, str) or candidate_id != quality.get("candidate_id"):
+            raise ContractError(f"{quality_slot}のcandidate IDがqualityと一致しません")
+        candidate = _read_audit_record(workspace_root, "candidates", candidate_id)
+        validate_candidate_record(candidate_id, candidate)
+        expected_kind = "scene-prose" if stem == "scene_prose" else "continuity-update"
+        if candidate.get("artifact_kind") != expected_kind or candidate.get("payload") != content.get("content"):
+            raise ContractError(f"{quality_slot}のcandidate payloadが選択contentと一致しません")
         content_id = content.get("artifact_id")
         output_ids = adoption.get("output_content_artifact_ids")
         if not isinstance(content_id, str) or not isinstance(output_ids, list) or output_ids != [content_id]:
             raise ContractError(f"{quality_slot}のadoption content lineageが不正です")
+
+
+def _validate_adoption_lineages(
+    workspace_root: Path,
+    snapshot: dict[str, Any],
+    resolved: dict[str, dict[str, Any]],
+    record_paths: Mapping[tuple[str, str], Path] | None,
+) -> None:
+    """Validate every candidate adoption independently of workspace-wide scans."""
+    for adoption_slot, adoption in resolved.items():
+        if not isinstance(adoption_slot, str) or not adoption_slot.endswith("_adoption") and "_adoption." not in adoption_slot:
+            continue
+        if not isinstance(adoption, dict) or adoption.get("source_kind") != "candidate":
+            continue
+        content_slot = _content_slot_for_adoption(adoption_slot)
+        content = resolved.get(content_slot)
+        if not isinstance(content, dict):
+            raise ContractError(f"{adoption_slot}のcontent slotがありません")
+        candidate_id = adoption.get("candidate_id")
+        quality_id = adoption.get("quality_id")
+        if not isinstance(candidate_id, str) or not isinstance(quality_id, str):
+            raise ContractError(f"{adoption_slot}のcandidate/quality参照が不正です")
+        candidate = _read_audit_record(workspace_root, "candidates", candidate_id)
+        validate_candidate_record(candidate_id, candidate)
+        if candidate.get("artifact_kind") != content.get("artifact_kind") or candidate.get("payload") != content.get("content"):
+            raise ContractError(f"{adoption_slot}のcandidate payloadが選択contentと一致しません")
+        if candidate.get("input_selection_id") != adoption.get("input_selection_id"):
+            raise ContractError(f"{adoption_slot}のinput selectionがcandidateと一致しません")
+        quality = _read_audit_record(workspace_root, "quality", quality_id)
+        validate_record("quality-disposition", quality_id, quality)
+        if quality.get("candidate_id") != candidate_id:
+            raise ContractError(f"{adoption_slot}のquality candidateが一致しません")
+        review_records: dict[str, dict[str, Any]] = {}
+        for review_id in quality["review_record_ids"]:
+            review = _read_audit_record(workspace_root, "reviews", review_id)
+            validate_review_record(review_id, review)
+            if review.get("candidate_id") != candidate_id:
+                raise ContractError(f"{adoption_slot}のreview candidateが一致しません")
+            review_records[review_id] = review
+        validate_quality_evidence(quality, candidate["payload"], review_records)
+        _validate_adoption_selection_delta(
+            workspace_root, snapshot, adoption_slot, adoption, content, record_paths,
+        )
+
+
+def _content_slot_for_adoption(adoption_slot: str) -> str:
+    if adoption_slot == "initial_design_adoption":
+        return "initial_design"
+    prefix, coordinate = adoption_slot.split("_adoption.", 1)
+    if prefix == "continuity":
+        prefix = "continuity_update"
+    return f"{prefix}.{coordinate}"
+
+
+def _validate_adoption_selection_delta(
+    workspace_root: Path,
+    snapshot: dict[str, Any],
+    adoption_slot: str,
+    adoption: dict[str, Any],
+    content: dict[str, Any],
+    record_paths: Mapping[tuple[str, str], Path] | None,
+) -> None:
+    input_id = adoption.get("input_selection_id")
+    output_id = adoption.get("output_selection_id")
+    if not isinstance(input_id, str) or not isinstance(output_id, str):
+        raise ContractError(f"{adoption_slot}のselection参照が不正です")
+    if not _selection_is_ancestor(workspace_root, snapshot, output_id, record_paths):
+        raise ContractError(f"{adoption_slot}のoutput selectionがcurrent selectionの祖先ではありません")
+    output_snapshot = validate_selection_snapshot(_read_record(workspace_root, "selection", output_id, record_paths))
+    if not _selection_is_ancestor(workspace_root, output_snapshot, input_id, record_paths):
+        raise ContractError(f"{adoption_slot}のinput selectionがoutput selectionの祖先ではありません")
+    artifact_kind = content.get("artifact_kind")
+    content_id = content.get("artifact_id")
+    if not isinstance(artifact_kind, str) or not isinstance(content_id, str):
+        raise ContractError(f"{adoption_slot}のcontent参照が不正です")
+    content_slot = artifact_spec(artifact_kind).slot_for(content_id)
+    adoption_id = adoption.get("adoption_id")
+    if not isinstance(adoption_id, str):
+        raise ContractError(f"{adoption_slot}のadoption_idが不正です")
+    output_ids = adoption.get("output_content_artifact_ids")
+    if artifact_kind == "initial-design":
+        generation_ids = [item for item in output_ids if isinstance(item, str) and item.startswith("gen-")] if isinstance(output_ids, list) else []
+        if output_ids != [content_id, *generation_ids] or len(generation_ids) != 1:
+            raise ContractError(f"{adoption_slot}のoutput content参照が不正です")
+        if output_snapshot["slots"].get("current_state") != generation_ids[0]:
+            raise ContractError(f"{adoption_slot}のinitial generation slotが一致しません")
+    else:
+        if output_ids != [content_id]:
+            raise ContractError(f"{adoption_slot}のoutput content参照が不正です")
+
+    expected_slots = {content_slot: content_id, adoption_slot: adoption_id}
+    if "." in content_slot:
+        _, coordinate = content_slot.split(".", 1)
+        if artifact_kind == "scene-prose":
+            expected_slots[f"scene_prose_disposition.{coordinate}"] = adoption["quality_id"]
+        elif artifact_kind == "continuity-update":
+            expected_slots[f"continuity_disposition.{coordinate}"] = adoption["quality_id"]
+    for slot, value in expected_slots.items():
+        if output_snapshot["slots"].get(slot) != value:
+            raise ContractError(f"{adoption_slot}のoutput selectionが{slot}と一致しません")
+
+
+def _read_audit_record(workspace_root: Path, directory_name: str, artifact_id: str) -> dict[str, Any]:
+    """Read an audit record without allowing a directory or leaf symlink escape."""
+    patterns = {
+        "candidates": r"candidate-[0-9]{6}",
+        "quality": r"quality-[0-9]{6}",
+        "reviews": r"review-[0-9]{6}",
+    }
+    pattern = patterns.get(directory_name)
+    if pattern is None or not isinstance(artifact_id, str) or re.fullmatch(pattern, artifact_id) is None:
+        raise ContractError("audit record IDが不正です")
+    directory = workspace_root / directory_name / artifact_id
+    if directory.is_symlink() or not directory.is_dir():
+        raise ContractError("adoptionのcandidate record directoryが不正です")
+    record_path = directory / "record.json"
+    if record_path.is_symlink() or not record_path.is_file():
+        raise ContractError("adoptionのcandidate record.jsonが不正です")
+    try:
+        value = json.loads(read_text_nofollow(record_path))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError("adoptionのcandidate recordを読めません") from exc
+    if not isinstance(value, dict):
+        raise ContractError("adoptionのcandidate recordがobjectではありません")
+    return value
 
 
 def _selection_is_ancestor(
@@ -566,7 +701,7 @@ def _input_bundle(
     if snapshot_path.is_symlink() or not snapshot_path.is_file():
         raise ContractError("artifact input_selection_idのselectionがありません")
     try:
-        input_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        input_snapshot = json.loads(read_text_nofollow(snapshot_path))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError("artifact input selectionを読み込めません") from exc
     if input_snapshot.get("selection_id") != input_selection_id if isinstance(input_snapshot, dict) else True:
@@ -591,7 +726,7 @@ def _read_record(
     if record_path.is_symlink() or not record_path.is_file():
         raise ContractError("selectionのrecord.jsonが通常ファイルではありません")
     try:
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record = json.loads(read_text_nofollow(record_path))
     except (OSError, json.JSONDecodeError) as exc:
         raise ContractError("selectionのrecord.jsonを読み込めません") from exc
     if not isinstance(record, dict):

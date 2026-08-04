@@ -155,7 +155,7 @@ class SceneContinuityStageService:
             if not isinstance(change["path"], str):
                 raise ContractError("continuity_update pathが不正です")
             if change["target"] == "timeline_position":
-                if change["path"] not in {"$.timeline_position", "/timeline_position"} or not isinstance(change["value"], int) or isinstance(change["value"], bool) or change["value"] < timeline:
+                if change["path"] != "/timeline_position" or not isinstance(change["value"], int) or isinstance(change["value"], bool) or change["value"] < timeline:
                     raise ContractError("timeline_positionは非負整数のsetによる単調増加だけを許可します")
                 target_id, field = "timeline_position", "value"
             else:

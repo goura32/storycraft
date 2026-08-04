@@ -8,41 +8,32 @@ from .series_contracts import ContractError
 
 
 def path_tokens(target: str, path: object) -> list[str]:
-    """Parse canonical JSON Pointer and the legacy dotted root notation."""
+    """Parse the canonical JSON Pointer form."""
     if not isinstance(path, str):
         raise ContractError("continuity_update pathが不正です")
     pointer_prefix = f"/{target}"
-    dotted_prefix = f"$.{target}"
     if path == pointer_prefix:
         return [target]
-    if path.startswith(pointer_prefix + "/"):
-        raw = path[1:].split("/")
-        if raw[0] != target:
+    if not path.startswith(pointer_prefix + "/"):
+        raise ContractError("continuity_update pathが不正です")
+    raw = path[1:].split("/")
+    if raw[0] != target:
+        raise ContractError("continuity_update pathが不正です")
+    tokens: list[str] = []
+    for token in raw:
+        position = 0
+        while position < len(token):
+            if token[position] == "~":
+                if position + 1 >= len(token) or token[position + 1] not in {"0", "1"}:
+                    raise ContractError("continuity_update pathのJSON Pointer escapeが不正です")
+                position += 2
+            else:
+                position += 1
+        decoded = token.replace("~1", "/").replace("~0", "~")
+        if decoded == "":
             raise ContractError("continuity_update pathが不正です")
-        tokens: list[str] = []
-        for token in raw:
-            position = 0
-            while position < len(token):
-                if token[position] == "~":
-                    if position + 1 >= len(token) or token[position + 1] not in {"0", "1"}:
-                        raise ContractError("continuity_update pathのJSON Pointer escapeが不正です")
-                    position += 2
-                else:
-                    position += 1
-            decoded = token.replace("~1", "/").replace("~0", "~")
-            if decoded == "":
-                raise ContractError("continuity_update pathが不正です")
-            tokens.append(decoded)
-        return tokens
-    if path == dotted_prefix:
-        return [target]
-    if path.startswith(dotted_prefix + "."):
-        suffix = path[len(dotted_prefix) + 1 :]
-        parts = suffix.split(".")
-        if not parts or any(not part for part in parts):
-            raise ContractError("continuity_update pathが不正です")
-        return [target, *parts]
-    raise ContractError("continuity_update pathが不正です")
+        tokens.append(decoded)
+    return tokens
 
 
 def _list_index(values: list[Any], selector: str, *, allow_append: bool = False) -> int | None:

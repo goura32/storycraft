@@ -19,7 +19,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -31,7 +30,7 @@ from .error_sanitizer import (
     safe_exception_message,
     sanitize_text,
 )
-from .filesystem_security import assert_no_symlink_path, assert_within
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, assert_within, ensure_directory_nofollow, open_nofollow, unlink_nofollow
 from .log import logger
 from .ollama import OllamaResponseFormatError, OllamaTechnicalError, generate as ollama_generate
 from .series_contracts import ContractError
@@ -138,10 +137,14 @@ class LLMClient:
         raw_dir: Path,
         workspace_root: Path | None = None,
     ) -> None:
+        if workspace_root is None:
+            raise ContractError("LLMClientにはworkspace_rootが必要です")
+        root = assert_no_symlink_path(workspace_root, require_directory=True)
         self.settings = settings
         self.settings_id = getattr(settings, "settings_id", None)
-        self.raw_dir = Path(raw_dir)
-        self.workspace_root = Path(workspace_root) if workspace_root is not None else None
+        self.raw_dir = assert_no_symlink_path(raw_dir)
+        assert_within(root, self.raw_dir)
+        self.workspace_root = root
 
         llm = settings.llm
         # The Ollama HTTP boundary in storycraft.ollama performs
@@ -602,8 +605,7 @@ class LLMClient:
             workspace_root = getattr(self, "workspace_root", None)
             if workspace_root is not None:
                 assert_within(workspace_root, raw_dir)
-            raw_dir.mkdir(parents=True, exist_ok=True)
-            raw_dir = assert_no_symlink_path(raw_dir, require_directory=True)
+            raw_dir = ensure_directory_nofollow(raw_dir)
             idx = 0
             while True:
                 stem = _raw_filename(rec, idx)
@@ -611,13 +613,16 @@ class LLMClient:
                 markdown_path = json_path.with_suffix(".md")
                 reservation = raw_dir / f".{stem}.reserve"
                 try:
-                    with reservation.open("x", encoding="utf-8"):
-                        pass
+                    descriptor = open_nofollow(reservation, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+                    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                        handle.write(str(os.getpid()))
+                        handle.flush()
+                        os.fsync(handle.fileno())
                 except FileExistsError:
                     idx += 1
                     continue
                 if json_path.exists() or markdown_path.exists():
-                    reservation.unlink(missing_ok=True)
+                    unlink_nofollow(reservation, missing_ok=True)
                     idx += 1
                     continue
                 break
@@ -642,18 +647,15 @@ class LLMClient:
                 }
                 self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
                 self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
+            except Exception:
+                # A raw call is published only as a complete JSON/Markdown pair.
+                # Roll back the first rename when the second file cannot be made.
+                unlink_nofollow(json_path, missing_ok=True)
+                unlink_nofollow(markdown_path, missing_ok=True)
+                raise
             finally:
-                reservation.unlink(missing_ok=True)
+                unlink_nofollow(reservation, missing_ok=True)
 
     @staticmethod
     def _write_raw_file(path: Path, content: str) -> None:
-        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-        try:
-            with temporary.open("x", encoding="utf-8") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except OSError:
-            temporary.unlink(missing_ok=True)
-            raise
+        atomic_write_text(path, content)

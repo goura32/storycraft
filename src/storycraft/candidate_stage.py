@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_directory, canonical_slot
 from .commit_recovery import recover_pending_commit
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, read_text_nofollow
 from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
@@ -271,7 +272,7 @@ class CandidateStageRunner:
     def _quality_limit(self, settings_id: str) -> int:
         path = self.workspace_root / "runtime/settings" / settings_id / "record.json"
         try:
-            record = json.loads(path.read_text(encoding="utf-8"))
+            record = json.loads(read_text_nofollow(path))
             payload = record["payload"]
             limit = payload["quality_revision_limit"]
         except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
@@ -292,7 +293,7 @@ class CandidateStageRunner:
         if not isinstance(call_id, str) or not call_id.startswith("call-") or not path.is_file():
             raise ContractError(f"{operation}の物理call_idがmodelから得られません")
         try:
-            record = json.loads(path.read_text(encoding="utf-8"))
+            record = json.loads(read_text_nofollow(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"{operation}の物理call recordを読めません") from exc
         if record.get("call_id") != call_id:
@@ -343,7 +344,7 @@ class CandidateStageRunner:
 
     def _settings_payload(self, settings_id: str) -> dict[str, Any]:
         try:
-            value = json.loads((self.workspace_root / "runtime/settings" / settings_id / "record.json").read_text(encoding="utf-8"))["payload"]
+            value = json.loads(read_text_nofollow(self.workspace_root / "runtime/settings" / settings_id / "record.json"))["payload"]
         except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
             raise ContractError("settingsを読めません") from exc
         if not isinstance(value, dict):
@@ -374,7 +375,8 @@ class CandidateStageRunner:
         if directory.exists():
             raise ContractError("不変recordを上書きできません")
         directory.mkdir(parents=True)
-        (directory / "record.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        assert_no_symlink_path(directory, require_directory=True)
+        atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")
 
 
     @staticmethod

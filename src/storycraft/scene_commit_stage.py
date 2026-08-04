@@ -11,11 +11,12 @@ from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_directory
 from .artifact_record import validate_record
 from .commit_recovery import recover_pending_commit
-from .continuity_paths import apply_change, binding
+from .filesystem_security import atomic_write_text, assert_no_symlink_path
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError
+from .state_derivation import apply_continuity_state
 from .workspace import validate_workspace
 
 
@@ -150,7 +151,8 @@ class SceneCommitStageService:
     def _write_staged_record(self, relative_directory: str, record: dict[str, Any]) -> None:
         directory = self.workspace_root / relative_directory
         directory.mkdir(parents=True)
-        (directory / "record.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        assert_no_symlink_path(directory, require_directory=True)
+        atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")
 
     @staticmethod
     def _coordinate(target: object) -> tuple[int, int, int]:
@@ -193,47 +195,7 @@ class SceneCommitStageService:
 
     @staticmethod
     def _apply_continuity(old_state: object, continuity: object) -> dict[str, Any]:
-        required = {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"}
-        if not isinstance(old_state, dict) or set(old_state) != required:
-            raise ContractError("current_state contentが不正です")
-        if not isinstance(old_state["story_facts"], list) or not isinstance(old_state["character_knowledge"], dict) or not isinstance(old_state["reader_disclosures"], list):
-            raise ContractError("current_stateのcollectionが不正です")
-        thread_states = old_state.get("unresolved_thread_states")
-        if not isinstance(thread_states, dict) or any(
-            not isinstance(state, dict) or set(state) != {"status"} or state.get("status") not in {"open", "progressed", "resolved"}
-            for state in thread_states.values()
-        ):
-            raise ContractError("current_state unresolved_thread_statesが不正です")
-        canonical_thread_names = set(thread_states)
-        if not isinstance(continuity, dict) or not isinstance(continuity.get("changes"), list):
-            raise ContractError("continuity_update contentが不正です")
-        result = deepcopy(old_state)
-        for change in continuity["changes"]:
-            if not isinstance(change, dict) or set(change) != {"op", "target", "path", "value", "evidence_locations"}:
-                raise ContractError("continuity_update changeが不正です")
-            target, path, operation = change["target"], change["path"], change["op"]
-            if target not in required or not isinstance(path, str) or operation not in {"set", "add", "remove"}:
-                raise ContractError("continuity_update changeが不正です")
-            if not isinstance(change["evidence_locations"], list) or not change["evidence_locations"] or any(not isinstance(item, str) or not item for item in change["evidence_locations"]):
-                raise ContractError("continuity_update evidence_locationsが不正です")
-            if target == "timeline_position":
-                value = change["value"]
-                if operation != "set" or path not in {"$.timeline_position", "/timeline_position"} or not isinstance(value, int) or isinstance(value, bool) or value < result["timeline_position"]:
-                    raise ContractError("timeline_positionは非負整数のsetによる単調増加だけを許可します")
-            target_id, field, _tokens = binding(result, target, path, operation)
-            if target == "unresolved_thread_states" and (
-                operation != "set"
-                or target_id not in canonical_thread_names
-                or field != "status"
-                or change["value"] not in {"open", "progressed", "resolved"}
-            ):
-                raise ContractError("continuity_updateのthread targetがcanonical state外です")
-            apply_change(result, target, path, operation, change["value"])
-        if set(result) != required:
-            raise ContractError("continuity_update適用後のcurrent_stateが不正です")
-        if set(result["unresolved_thread_states"]) != canonical_thread_names:
-            raise ContractError("continuity_updateでcanonical thread_nameを追加・削除できません")
-        return result
+        return apply_continuity_state(old_state, continuity)
 
     @staticmethod
     def _numbers(content: object, field: str, number_field: str) -> list[int]:

@@ -34,14 +34,21 @@ _NAMED_SECRET_RE = re.compile(
     r"access[_-]?token|"
     r"refresh[_-]?token|"
     r"client[_-]?secret|"
+    r"password|passwd|passphrase|"
     r"token|secret"
     r")\s*[:=]\s*[^,;]+"
 )
 
 _QUOTED_SECRET_RE = re.compile(
     r"(?i)([\"'])(x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"client[_-]?secret|authorization|password|secret|token)\1"
+    r"client[_-]?secret|authorization|password|passwd|passphrase|secret|token)\1"
     r"(\s*:\s*)([\"'])((?:\\.|(?!\4).)*?)\4"
+)
+
+_ESCAPED_QUOTED_SECRET_RE = re.compile(
+    r"(?i)(\\[\"'](?:x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"client[_-]?secret|authorization|password|passwd|passphrase|secret|token)"
+    r"\\[\"']\s*:\s*\\[\"'])((?:\\\\.|[^\"\\])*)(\\[\"'])"
 )
 
 _BEARER_RE = re.compile(
@@ -80,6 +87,7 @@ def sanitize_text(
         text,
     )
     text = _QUOTED_SECRET_RE.sub(_redact_quoted_secret, text)
+    text = _ESCAPED_QUOTED_SECRET_RE.sub(_redact_escaped_quoted_secret, text)
     text = _AUTHORIZATION_RE.sub(
         r"\1: [REDACTED]",
         text,
@@ -116,6 +124,7 @@ def redact_secrets(value: object) -> str:
     text = _URL_USERINFO_RE.sub(r"\1[REDACTED]@", text)
     text = _QUERY_SECRET_RE.sub(r"\1[REDACTED]", text)
     text = _QUOTED_SECRET_RE.sub(_redact_quoted_secret, text)
+    text = _ESCAPED_QUOTED_SECRET_RE.sub(_redact_escaped_quoted_secret, text)
     text = _AUTHORIZATION_RE.sub(r"\1: [REDACTED]", text)
     text = _NAMED_SECRET_RE.sub(r"\1: [REDACTED]", text)
     text = _BEARER_RE.sub("Bearer [REDACTED]", text)
@@ -130,13 +139,17 @@ def _redact_quoted_secret(match: re.Match[str]) -> str:
     )
 
 
+def _redact_escaped_quoted_secret(match: re.Match[str]) -> str:
+    return f"{match.group(1)}[REDACTED]{match.group(3)}"
+
+
 def redact_value(value: object) -> object:
     """Recursively redact strings and secret-named mapping fields."""
     if isinstance(value, dict):
         result: dict[object, object] = {}
         for key, item in value.items():
             key_text = str(key).lower().replace("-", "_")
-            if any(token in key_text for token in ("api_key", "authorization", "access_token", "refresh_token", "client_secret", "secret", "token", "password")):
+            if any(token in key_text for token in ("api_key", "authorization", "access_token", "refresh_token", "client_secret", "secret", "token", "password", "passwd", "passphrase")):
                 result[key] = "[REDACTED]"
             else:
                 result[key] = redact_value(item)

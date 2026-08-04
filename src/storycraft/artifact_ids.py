@@ -7,7 +7,7 @@ from pathlib import Path
 import threading
 from typing import Final
 
-from .filesystem_security import assert_no_symlink_path
+from .filesystem_security import atomic_write_text, assert_no_symlink_file_path, assert_no_symlink_path, open_nofollow, read_text_nofollow
 from .series_contracts import ContractError
 
 _COUNTERS: Final[frozenset[str]] = frozenset({
@@ -33,17 +33,15 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
     lock_path = runtime / "counters.lock"
     try:
         with _COUNTER_LOCK:
-            if lock_path.is_symlink():
-                raise ContractError("counters.lockはsymlinkであってはなりません")
-            with lock_path.open("a+", encoding="utf-8") as lock_handle:
+            lock_descriptor = open_nofollow(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            with os.fdopen(lock_descriptor, "a+", encoding="utf-8") as lock_handle:
                 if os.name == "posix":
                     import fcntl
                     fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
                 try:
-                    if path.is_symlink() or not path.is_file():
-                        raise ContractError("counters.jsonは通常fileでなければなりません")
+                    assert_no_symlink_file_path(path, require_file=True)
                     try:
-                        value = json.loads(path.read_text(encoding="utf-8"))
+                        value = json.loads(read_text_nofollow(path))
                     except (OSError, json.JSONDecodeError) as exc:
                         raise ContractError("counters.jsonを読み込めません") from exc
                     if not isinstance(value, dict) or set(value) != _COUNTERS:
@@ -52,22 +50,9 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
                         raise ContractError("counters.jsonの値が不正です")
                     reserved = value[counter]
                     value[counter] = reserved + 1
-                    temporary = path.with_suffix(".json.tmp")
                     try:
-                        with temporary.open("x", encoding="utf-8") as handle:
-                            json.dump(value, handle, ensure_ascii=False, indent=2)
-                            handle.write("\n")
-                            handle.flush()
-                            os.fsync(handle.fileno())
-                        os.replace(temporary, path)
-                        if os.name == "posix":
-                            descriptor = os.open(path.parent, os.O_RDONLY)
-                            try:
-                                os.fsync(descriptor)
-                            finally:
-                                os.close(descriptor)
+                        atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
                     except OSError as exc:
-                        temporary.unlink(missing_ok=True)
                         raise ContractError("counters.jsonを原子的に保存できません") from exc
                     return reserved
                 finally:

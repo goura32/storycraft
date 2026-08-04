@@ -35,9 +35,9 @@ def write_content(root: Path, directory: str, artifact_id: str, kind: str, input
     write_json(root / directory / artifact_id / "record.json", content_record(artifact_id, kind, input_selection_id, content))
 
 
-def write_clean_quality(root: Path, quality_id: str, candidate_id: str, prose: dict) -> None:
+def write_clean_quality(root: Path, quality_id: str, candidate_id: str, prose: dict, *, artifact_kind: str = "scene-prose") -> None:
     write_json(root / "candidates" / candidate_id / "record.json", {
-        "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": "scene-prose",
+        "schema_version": 1, "candidate_id": candidate_id, "artifact_kind": artifact_kind,
         "input_selection_id": "selection-000001", "keywords_id": None, "settings_id": "settings-000001",
         "payload": prose, "parent_candidate_id": None, "review_record_id": None,
         "call_id": "call-000001", "created_at": NOW,
@@ -58,12 +58,14 @@ def write_clean_quality(root: Path, quality_id: str, candidate_id: str, prose: d
 def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
-    for relative in ("inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/calls", "runtime/adoptions", "runtime", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
+    for relative in ("inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/calls", "runtime/adoptions", "runtime/raw_logs", "runtime", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
         (root / relative).mkdir(parents=True, exist_ok=True)
     counters = initial_counters()
     counters["next_scene"] = 2  # prose already reserved scene-v...-000001
     counters["next_generation"] = 2  # current state is gen-000001
     write_json(root / "runtime/counters.json", counters)
+    (root / "runtime/lock").touch()
+    (root / "runtime/counters.lock").touch()
     write_json(root / "inputs/request-000001/record.json", {
         "schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request",
         "input_selection_id": None, "created_at": NOW,
@@ -134,7 +136,7 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     # Valid continuity-update content per closed schema
     continuity_content = {
         "coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1},
-        "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]
+        "changes": [{"op": "set", "target": "timeline_position", "path": "/timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]
     }
     
     # Valid generation content per closed schema
@@ -160,7 +162,7 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
     for directory, artifact_id, kind, content in records:
         write_content(root, directory, artifact_id, kind, base_id, content)
     write_clean_quality(root, "quality-000001", "candidate-000001", {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "text": "本文"})
-    write_clean_quality(root, "quality-000002", "candidate-000002", {"coordinate": {"volume_number": 1, "chapter_number": 1, "scene_number": 1}, "text": "本文"})
+    write_clean_quality(root, "quality-000002", "candidate-000002", continuity_content, artifact_kind="continuity-update")
     parent = selections.create(input_selection_id=base_id, created_at=NOW, slots={
         "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
         "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
@@ -183,6 +185,11 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         "scene_card.v01.c01.s01": "scene-card-v01-c01-s01-000001", "scene_prose.v01.c01.s01": "scene-prose-v01-c01-s01-000001",
         "current_state": "gen-000001",
     })
+    for candidate_id in ("candidate-000001", "candidate-000002"):
+        candidate_path = root / "candidates" / candidate_id / "record.json"
+        candidate_record = json.loads(candidate_path.read_text(encoding="utf-8"))
+        candidate_record["input_selection_id"] = scene_inputs["selection_id"]
+        write_json(candidate_path, candidate_record)
     current = selections.create(input_selection_id=scene_inputs["selection_id"], created_at=NOW, slots={
         "request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001",
         "series_plan": "series-plan-000001", "volume_plan.v01": "volume-plan-v01-000001",
@@ -222,10 +229,12 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
 class SceneCommitStageTests(unittest.TestCase):
     def test_timeline_position_is_monotonic_integer_set_only(self) -> None:
         old_state = {"story_facts": [], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {"塔の試練": {"status": "open"}}, "timeline_position": 2}
+        with self.assertRaises(ContractError):
+            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]})
         with self.assertRaisesRegex(ContractError, "timeline_position"):
-            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]})
+            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "set", "target": "timeline_position", "path": "/timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]})
         with self.assertRaisesRegex(ContractError, "timeline_position"):
-            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "add", "target": "timeline_position", "path": "$.timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]})
+            SceneCommitStageService._apply_continuity(old_state, {"changes": [{"op": "add", "target": "timeline_position", "path": "/timeline_position", "value": 3, "evidence_locations": ["prose:0"]}]})
 
     def test_slots_to_ids_preserves_canonical_record_ids(self) -> None:
         self.assertEqual(

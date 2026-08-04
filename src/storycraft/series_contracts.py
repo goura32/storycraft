@@ -8,3 +8,7 @@ class ContractError(ValueError):
 
 class LLMCallError(ContractError):
     """設定済みretry後もLLM呼び出しに成功しなかった。"""
+
+
+class EndpointResolutionError(LLMCallError):
+    """一時的なprovider endpoint名前解決失敗。"""

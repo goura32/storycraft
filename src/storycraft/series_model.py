@@ -18,7 +18,7 @@ from .stages import ACTIVE_TEMPLATE_STAGES
 class OpenAIStoryModel:
     """Jinjaテンプレートと工程別外部スキーマから実送信プロンプトを構築する。"""
 
-    def __init__(self, settings, raw_dir, workspace_root=None) -> None:
+    def __init__(self, settings, raw_dir, workspace_root) -> None:
         self.client = LLMClient(settings, raw_dir, workspace_root=workspace_root)
         self._seed_sequence = 0
         self._format_attempt = 1

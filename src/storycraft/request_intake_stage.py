@@ -16,6 +16,7 @@ from .artifact_record import validate_record
 from .artifact_registry import artifact_directory
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, read_text_nofollow
 from .input_normalization import normalize_request
 from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import validate_selection_snapshot
@@ -179,7 +180,7 @@ class RequestIntakeStageService:
             raise ContractError(f"request_intakeには一つだけの{kind}入力が必要です")
         artifact_id = entries[0].name
         try:
-            value = json.loads((entries[0] / "record.json").read_text(encoding="utf-8"))
+            value = json.loads(read_text_nofollow(entries[0] / "record.json"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"request_intakeの{kind}入力を読めません") from exc
         return artifact_id, validate_record(kind, artifact_id, value)
@@ -264,4 +265,5 @@ class RequestIntakeStageService:
         if directory.exists() or directory.is_symlink():
             raise ContractError("不変recordを上書きできません")
         directory.mkdir(parents=True)
-        (directory / "record.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        assert_no_symlink_path(directory, require_directory=True)
+        atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")

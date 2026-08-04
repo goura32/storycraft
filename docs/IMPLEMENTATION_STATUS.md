@@ -24,7 +24,7 @@
 - `scene` の基準状態は場面生成時の入力selectionから検証し、場面後に進んだ最終`current_state`と誤比較しない。場面確定と巻公開では継続性品質判定slotも必須にした。
 - `scene-plan` と `scene-card` の視点人物・参加者・場所はコードで一致を検証し、`scene-card` と継続性更新の状態更新列挙をcanonicalな作品状態項目へ統一した。
 - 初期設計の実LLM応答は `candidate-response-v1` envelope を検証して payload をunwrapする。review/revise prompt は正式依頼・候補・確認を固定ラベル付きJSONで渡す。本文のraw text境界はstructured JSONと分離し、空本文・形式不正は `invalid_response_limit` を消費する。
-- `timeline_position` は非負整数の単調値で、scene commitは `set $.timeline_position` 以外を拒否する。品質判定は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ 非空 + notice_type="編集"` を検証する。request intakeの `required_elements` と `avoid` は空配列を許可する。
+- `timeline_position` は非負整数の単調値で、scene commitは `set /timeline_position` 以外を拒否する。品質判定は `accepted ⇔ remaining_major_issues=[]`、`accepted_with_notice ⇔ 非空 + notice_type="編集"` を検証する。request intakeの `required_elements` と `avoid` は空配列を許可する。
 - `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`を使用する。構造化工程では`response_format: json_schema`を付け、scene-proseの生成・修正では付けずraw textを運ぶ。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
 - OllamaのHTTP 200 `error` envelope（モデル能力・completion）はHTTP/接続失敗と同じtechnical failureとしてcall recordへ保存し、形式不正再呼出しではなくtechnical retryへ送る。
 - 巻公開recordは `input_selection_id` を正本参照として持ち、公開時のsource evidenceはrecoveryでselectionから再導出する。内部検証用の入力ID群は公開recordへ保存しない。

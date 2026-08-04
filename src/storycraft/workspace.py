@@ -13,9 +13,10 @@ from urllib.parse import urlsplit
 
 from .artifact_ids import initial_counters
 from .artifact_record import validate_call_record, validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
+from .state_derivation import apply_continuity_state
 from .artifact_registry import ARTIFACT_SPECS
 from .endpoint_security import resolve_allowed_addresses
-from .filesystem_security import assert_no_symlink_path
+from .filesystem_security import _open_directory_chain, atomic_write_text, assert_no_symlink_file_path, assert_no_symlink_path, open_nofollow, read_text_nofollow, unlink_nofollow
 from .input_normalization import normalize_request, normalize_settings
 from .publication_builder import validate_volume_publication_files
 from .review_contracts import validate_critique_fields
@@ -28,7 +29,7 @@ from .series_contracts import ContractError
 _WORKSPACE_DIRECTORIES = (
     "inputs", "quality", "candidates", "reviews", "runtime", "runtime/settings",
     "runtime/staging", "runtime/selections", "runtime/calls",
-    "runtime/adoptions", "design", "design/initial", "design/series-plans",
+    "runtime/adoptions", "runtime/raw_logs", "design", "design/initial", "design/series-plans",
     "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations",
     "scenes", "publications",
 )
@@ -135,9 +136,19 @@ def create_workspace(
             "updated_at": created_at,
         }
         RunStateStore(staging).save(state)
-        (staging / "runtime/lock").touch(exist_ok=False)
+        for fixed_path in (staging / "runtime/lock", staging / "runtime/counters.lock"):
+            try:
+                descriptor = open_nofollow(fixed_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+                os.close(descriptor)
+            except FileExistsError:
+                assert_no_symlink_file_path(fixed_path, require_file=True)
         validate_workspace(staging)
-        os.rename(staging, root)
+        parent_descriptor = _open_directory_chain(parent)
+        try:
+            os.rename(staging.name, root.name, src_dir_fd=parent_descriptor, dst_dir_fd=parent_descriptor)
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
         return root
     except Exception:
         # staging はこの関数だけが作った未公開領域。失敗時に残さない。
@@ -155,6 +166,7 @@ def validate_workspace(workspace_root: Path) -> None:
     for relative in _WORKSPACE_DIRECTORIES:
         if not (root / relative).is_dir() or (root / relative).is_symlink():
             raise ContractError(f"workspace必須directoryがありません: {relative}")
+    _validate_runtime_fixed_paths(root)
     state = RunStateStore(root).load()
     selection_id = state["current_selection_id"]
     resolution_cache: dict[str, dict[str, dict[str, Any]]] = {}
@@ -187,6 +199,58 @@ def _validate_selection_ancestry(root: Path, selection_id: str, resolution_cache
         except ContractError as exc:
             raise ContractError("ancestor selectionが不正です") from exc
         current_id = snapshot["input_selection_id"]
+
+
+def _validate_runtime_fixed_paths(root: Path) -> None:
+    """Validate fixed runtime files and raw-log pair integrity before reads."""
+    for relative in ("runtime/counters.json", "runtime/lock", "runtime/counters.lock", "runtime/run-state.json"):
+        assert_no_symlink_file_path(root / relative, require_file=True)
+    raw_dir = assert_no_symlink_path(root / "runtime/raw_logs", require_directory=True)
+    _recover_stale_raw_log_transactions(raw_dir)
+    stems: dict[str, set[str]] = {}
+    for entry in raw_dir.iterdir():
+        if entry.is_symlink() or not entry.is_file():
+            raise ContractError("runtime/raw_logsに通常file以外のentryがあります")
+        if entry.name.startswith("."):
+            raise ContractError("runtime/raw_logsに未確定temporary entryがあります")
+        if entry.suffix not in {".json", ".md"}:
+            raise ContractError("runtime/raw_logsに未定義のfileがあります")
+        stems.setdefault(entry.stem, set()).add(entry.suffix)
+    if any(suffixes != {".json", ".md"} for suffixes in stems.values()):
+        raise ContractError("runtime/raw_logsのJSON/Markdown pairが不完全です")
+
+
+def _recover_stale_raw_log_transactions(raw_dir: Path) -> None:
+    for reservation in raw_dir.iterdir():
+        if reservation.is_symlink() or not reservation.is_file():
+            continue
+        if not (reservation.name.startswith(".") and reservation.name.endswith(".reserve")):
+            continue
+        try:
+            owner = read_text_nofollow(reservation).strip()
+            pid = int(owner) if owner else 0
+        except (OSError, ValueError):
+            raise ContractError("runtime/raw_logsのreservationが不正です")
+        if pid > 0:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                raise ContractError("runtime/raw_logsのreservation所有者を確認できません")
+            else:
+                raise ContractError("runtime/raw_logsで別processのtransactionが実行中です")
+        stem = reservation.name[1:-len(".reserve")]
+        json_path = raw_dir / f"{stem}.json"
+        markdown_path = raw_dir / f"{stem}.md"
+        for temporary in raw_dir.glob(f".{stem}.*.tmp"):
+            unlink_nofollow(temporary)
+        json_exists = json_path.exists() and not json_path.is_symlink()
+        markdown_exists = markdown_path.exists() and not markdown_path.is_symlink()
+        if json_exists != markdown_exists:
+            unlink_nofollow(json_path, missing_ok=True)
+            unlink_nofollow(markdown_path, missing_ok=True)
+        unlink_nofollow(reservation, missing_ok=True)
 
 
 def _validate_selection_scene_commit_lineage(root: Path, snapshot: dict[str, Any], resolved: dict[str, dict[str, Any]]) -> None:
@@ -223,6 +287,25 @@ def _validate_selection_scene_commit_lineage(root: Path, snapshot: dict[str, Any
             )
         ):
             raise ContractError(f"{slot}のscene参照束がselectionと一致しません")
+        input_state_id = typed_references["scene"].get("content", {}).get("current_state_id")
+        output_state_id = commit.get("current_state_id")
+        if not isinstance(input_state_id, str) or not isinstance(output_state_id, str):
+            raise ContractError(f"{slot}のgeneration参照が不正です")
+        input_state = _read_artifact_record(root, "generation", input_state_id)
+        output_state = _read_artifact_record(root, "generation", output_state_id)
+        expected_state = apply_continuity_state(input_state.get("content"), typed_references["continuity_update"].get("content"))
+        if output_state.get("content") != expected_state:
+            raise ContractError(f"{slot}のgeneration contentが派生状態と一致しません")
+
+
+def _read_artifact_record(root: Path, kind: str, artifact_id: str) -> dict[str, Any]:
+    path = root / ARTIFACT_SPECS[kind].directory_for(artifact_id) / "record.json"
+    assert_no_symlink_path(path.parent, require_directory=True)
+    value = json.loads(read_text_nofollow(path))
+    if not isinstance(value, dict):
+        raise ContractError("lineage recordはobjectでなければなりません")
+    validate_record(kind, artifact_id, value)
+    return value
 
 
 def _state_is_current_or_ancestor(root: Path, snapshot: dict[str, Any], commit_state_id: object, current_state_id: object) -> bool:
@@ -417,7 +500,7 @@ def _records(directory: Path, label: str) -> list[tuple[str, dict[str, Any]]]:
         path = child / "record.json"
         if path.is_symlink() or not path.is_file():
             raise ContractError(f"{label}の配置が不正です")
-        try: value = json.loads(path.read_text(encoding="utf-8"))
+        try: value = json.loads(read_text_nofollow(path))
         except (OSError, json.JSONDecodeError) as exc: raise ContractError(f"{label}を読めません") from exc
         if not isinstance(value, dict): raise ContractError(f"{label}はobjectでなければなりません")
         result.append((child.name, value))
@@ -472,7 +555,7 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
         manuscript_path = directory / "manuscript.md"
         if any(path.is_symlink() or not path.is_file() for path in (record_path, manuscript_path)):
             raise ContractError("published publicationのleaf fileは通常fileでなければなりません")
-        try: files = {"record.json": json.loads(record_path.read_text(encoding="utf-8")), "manuscript.md": manuscript_path.read_text(encoding="utf-8")}
+        try: files = {"record.json": json.loads(read_text_nofollow(record_path)), "manuscript.md": read_text_nofollow(manuscript_path)}
         except (OSError, json.JSONDecodeError) as exc: raise ContractError("published publicationを読めません") from exc
         validate_volume_publication_files(files)
         from .commit_recovery import _validate_publication_source_evidence
@@ -598,5 +681,7 @@ def _validate_request_options(options: object) -> None:
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    parent = assert_no_symlink_path(path.parent)
+    parent.mkdir(parents=True, exist_ok=True)
+    assert_no_symlink_path(parent, require_directory=True)
+    atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")

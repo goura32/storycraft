@@ -6,7 +6,7 @@ import socket
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request
 
-from .series_contracts import ContractError
+from .series_contracts import ContractError, EndpointResolutionError
 
 
 def is_private_lan_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -30,7 +30,7 @@ def resolve_allowed_addresses(host: str, port: int | None = None) -> tuple[ipadd
                 for entry in socket.getaddrinfo(host, port or 0, type=socket.SOCK_STREAM)
             }
         except (OSError, ValueError) as exc:
-            raise ContractError("endpointのhostを解決できません") from exc
+            raise EndpointResolutionError("endpointのhostを一時的に解決できません") from exc
     if not addresses or any(not (address.is_loopback or is_private_lan_address(address)) for address in addresses):
         raise ContractError("endpointはloopbackまたはプライベートLANのhostだけ許可されます")
     return tuple(sorted(addresses, key=lambda value: (value.version, int(value))))

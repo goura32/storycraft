@@ -5,6 +5,7 @@ from collections.abc import Callable
 import os
 from pathlib import Path
 
+from .filesystem_security import _open_directory_chain, assert_no_symlink_path
 from .series_contracts import ContractError
 
 
@@ -15,7 +16,7 @@ def fsync_directory(path: Path) -> None:
     """POSIX環境でdirectory entryを同期する。"""
     if os.name != "posix":
         return
-    descriptor = os.open(path, os.O_RDONLY)
+    descriptor = _open_directory_chain(path)
     try:
         os.fsync(descriptor)
     finally:
@@ -75,14 +76,21 @@ def finalize_immutable_directory(
             "stagingとfinalは同一filesystem上に存在する必要があります"
         )
 
+    assert_no_symlink_path(staging.parent, require_directory=True)
+    assert_no_symlink_path(final_parent, require_directory=True)
+    staging_parent_fd = _open_directory_chain(staging.parent)
+    final_parent_fd = _open_directory_chain(final_parent)
     try:
-        os.rename(staging, final)
-        fsync_directory(final_parent)
+        os.rename(staging.name, final.name, src_dir_fd=staging_parent_fd, dst_dir_fd=final_parent_fd)
+        os.fsync(final_parent_fd)
     except OSError as exc:
         raise ContractError(
             "immutable directoryをfinalizeできません: "
             f"{staging} -> {final}"
         ) from exc
+    finally:
+        os.close(staging_parent_fd)
+        os.close(final_parent_fd)
 
     # ここで失敗してもfinalを削除・巻戻ししない。
     # Recoveryが確定済みdirectoryを再検証して前進する。

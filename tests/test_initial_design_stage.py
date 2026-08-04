@@ -94,12 +94,14 @@ def _write_json(path: Path, value: object) -> None:
 def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for relative in (
         "inputs", "quality", "candidates", "reviews", "runtime/settings", "runtime/selections",
-        "runtime/staging", "runtime/calls", "runtime/adoptions",
+        "runtime/staging", "runtime/calls", "runtime/adoptions", "runtime/raw_logs",
         "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans",
         "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications",
     ):
         (root / relative).mkdir(parents=True)
     _write_json(root / "runtime/counters.json", initial_counters())
+    (root / "runtime/lock").touch()
+    (root / "runtime/counters.lock").touch()
     request = {
         "title": "現在の依頼", "genre": ["fantasy"], "premise": "選択の物語",
         "required_elements": ["灯台"], "avoid": ["宇宙"],

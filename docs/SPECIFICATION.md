@@ -101,6 +101,8 @@ flowchart TD
 
 **継続性更新**（`scene_continuity`）は本文の根拠を引用し、カードで許可された作品状態の更新だけを提案します。初期設計で結末に解決必須とした未解決事項を解決するときは、継続性更新がその canonical `thread_name`、解決済みへの状態更新、本文根拠を必ず持ちます。
 
+継続性更新の`path`は対象rootから始まるJSON Pointer（例: `/story_facts/0/value`）だけを使用します。dotted pathや`$` root表記は受理しません。配列要素は決定的なindexまたはcanonical IDで解決し、存在しない要素・先頭ゼロのindex・許可されていない対象は停止します。
+
 **場面の確定**（`scene_commit`）は本文、検証済み更新、新しい作品状態（`generation`）を一つの単位として扱います。
 
 **巻公開**（`volume_publication`）は、採用済みの巻を読者向け原稿へ決定的に組み立て、検証して確定します。
@@ -112,6 +114,8 @@ flowchart TD
 **品質判定の重要度は二段階**（`critical` / `notice`）。`critical` のみ修正トリガーと上限判定に影響し、`notice` は採用可否に影響せず注意記録のみ。`reference`（参考）は許可しません。
 
 品質修正上限 `quality_revision_limit` は 1 以上の整数です。`init` コマンドの `--config` オプションでのみ設定し、以降は選択スナップショットの `settings` スロットからのみ参照します。正の上限を必ず持たせ、重大指摘が解消されない場合も有限回で注意付き採用または停止へ収束させます。
+
+`accepted_with_notice` の`remaining_major_issues`は、参照した全reviewの`critical`指摘集合と、指摘本文・根拠位置の重複を含めて完全一致しなければなりません。品質判定、candidate、adoption、選択本文のlineageは、candidate ID、quality ID、adoption出力content ID、candidate payload、選択contentを相互に一致させます。この検証は工程実行時だけでなく、直接の公開・復旧経路でも同じ規則で再実行します。
 
 - `quality_revision_limit` は正の値だけを受け付けます。重大な指摘に対する修正を最大 `quality_revision_limit` 回許可し、修正回数が上限に達した時点で重大指摘が残っていれば、最後の形式有効候補を `accepted_with_notice` として採用します。
 
@@ -139,7 +143,7 @@ flowchart TD
 
 長い根拠は、必要な範囲の正本成果物を直接読む。機械的な切詰めや、次工程の正本として保存する引継ぎ要約は使わない。すべての LLM 入力は固定 selection のスロットと工程契約が列挙する明示的な成果物 ID だけから組み立てる。ただし最初の selection 前の `request_intake` だけは、不変 `keywords` 記録と不変 `settings` を直接入力権限にします。全巻・全場面本文の自動投入、固定パス・最新探索による補完をしない。ローカル LLM の選択モデルが公開する最大コンテキストを使い、トークン量・文字数・費用のために入力を配分、切詰め、停止する設定は持たない。入力の受理は完走を保証しません。要求全体がモデルの実際のコンテキストを超えた場合は、提供者のコンテキスト超過を技術的失敗として再試行し、上限到達後は `blocked` にします。
 
-外部入力はデータとして区切り、命令として実行しません。自動ウェブ取得、外部操作、秘密情報の保存・出力を禁止します。
+外部入力はデータとして区切り、命令として実行しません。自動ウェブ取得、外部操作、秘密情報の保存・出力を禁止します。例外メッセージ、CLI JSON error、run-stateの`last_error`、LLM呼出しrecord、raw logではcredential-shaped文字列を`[REDACTED]`へ置換し、workspace外のpathへ保存しません。
 
 ## 8. LLM 呼出しと失敗
 LLM 提供者は、構造化工程でCandidateResponseまたはReviewResponseを扱い、場面本文工程では生成・修正のraw textとReviewResponseを扱う9工程（依頼取り込み、初期設計、シリーズ計画、巻計画、章計画、場面計画、場面カード、場面本文、継続性更新）でだけ初期化します。場面本文の生成・修正呼出しには `response_format` を付けません。`status`、`validate`、保留中確定の収束、採用、場面確定、巻公開では初期化しません。

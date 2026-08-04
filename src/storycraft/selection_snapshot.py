@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import re
 from typing import Any
 
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_spec
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, read_text_nofollow
 from .series_contracts import ContractError
 from .time_contract import parse_utc_timestamp
 
@@ -76,13 +76,12 @@ class SelectionSnapshotStore:
         record = directory / "record.json"
         if directory.exists() or directory.is_symlink():
             raise ContractError("selection snapshotは不変で上書きできません")
+        assert_no_symlink_path(self.root)
+        self.root.mkdir(parents=True, exist_ok=True)
+        assert_no_symlink_path(self.root, require_directory=True)
         directory.mkdir(parents=True)
         try:
-            with record.open("x", encoding="utf-8") as handle:
-                json.dump(value, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
+            atomic_write_text(record, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
         except OSError as exc:
             raise ContractError("selection snapshotを保存できません") from exc
         return value
@@ -91,7 +90,7 @@ class SelectionSnapshotStore:
         _require_id(selection_id, "selection-", "selection_id")
         path = self.root / selection_id / "record.json"
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            value = json.loads(read_text_nofollow(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError("selection snapshotを読み込めません") from exc
         validated = validate_selection_snapshot(value)

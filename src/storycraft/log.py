@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
+
+from .filesystem_security import assert_no_symlink_path, assert_within, ensure_directory_nofollow, open_nofollow
 
 
 def get_logger() -> logging.Logger:
@@ -20,9 +23,14 @@ def get_logger() -> logging.Logger:
 logger = get_logger()
 
 
-def add_file_handler(log_file: Path) -> None:
-    """作業ディレクトリのログファイルへも出力する。"""
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    fh = logging.FileHandler(log_file, encoding="utf-8")
+def add_file_handler(log_file: Path, *, workspace_root: Path) -> None:
+    """作業workspace内のログファイルへnofollowで出力する。"""
+    root = assert_no_symlink_path(workspace_root, require_directory=True)
+    path = Path(log_file).absolute()
+    assert_within(root, path)
+    ensure_directory_nofollow(path.parent)
+    descriptor = open_nofollow(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    stream = os.fdopen(descriptor, "a", encoding="utf-8")
+    fh = logging.StreamHandler(stream)
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(fh)

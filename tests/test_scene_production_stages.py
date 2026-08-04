@@ -60,7 +60,7 @@ class Model:
         self.contexts[stage] = context
         payloads = {
             "scene_card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "展開", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
-            "scene_continuity": {"coordinate": COORDINATE, "changes": [{"op": "set", "target": "timeline_position", "path": "$.timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]},
+            "scene_continuity": {"coordinate": COORDINATE, "changes": [{"op": "set", "target": "timeline_position", "path": "/timeline_position", "value": 1, "evidence_locations": ["prose:0"]}]},
         }
         if stage == "scene_card":
             payloads[stage]["purpose"] = context["scene_plan"]["purpose"]
@@ -97,9 +97,11 @@ class Model:
 
 class SceneProductionStagesTests(unittest.TestCase):
     def _workspace(self, root: Path) -> None:
-        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
+        for directory in ("inputs", "runtime/settings", "runtime/selections", "runtime/staging", "runtime/adoptions", "runtime/calls", "runtime/raw_logs", "candidates", "reviews", "quality", "design/initial", "design/series-plans", "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations", "scenes", "publications"):
             (root / directory).mkdir(parents=True, exist_ok=True)
         write_json(root / "runtime/counters.json", initial_counters())
+        (root / "runtime/lock").touch()
+        (root / "runtime/counters.lock").touch()
         write_json(root / "inputs/request-000001/record.json", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": {"title": "題", "genre": ["fantasy"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}})
         write_json(root / "runtime/settings/settings-000001/record.json", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]}, "created_at": NOW})
         selections = SelectionSnapshotStore(root)

@@ -3,13 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-import os
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
 from .artifact_registry import artifact_directory, artifact_spec
-from .filesystem_security import assert_no_symlink_path
+from .filesystem_security import atomic_write_text, assert_no_symlink_file_path, assert_no_symlink_path, read_text_nofollow
 from .series_contracts import ContractError
 from .time_contract import parse_utc_timestamp
 
@@ -397,7 +396,8 @@ class RunStateStore:
         if not self.exists():
             raise ContractError("run-stateがありません")
         try:
-            return json.loads(self.path.read_text(encoding="utf-8"))
+            assert_no_symlink_file_path(self.path, require_file=True)
+            return json.loads(read_text_nofollow(self.path))
         except json.JSONDecodeError as exc:
             raise ContractError("run-stateがJSONとして読めません") from exc
         except OSError as exc:
@@ -414,23 +414,8 @@ class RunStateStore:
         assert_no_symlink_path(self.runtime_root)
         self.runtime_root.mkdir(parents=True, exist_ok=True)
         assert_no_symlink_path(self.runtime_root, require_directory=True)
-        if self.path.is_symlink():
-            raise ContractError("run-stateはsymlinkであってはなりません")
-        temporary = self.path.with_suffix(".json.tmp")
         try:
-            with temporary.open("x", encoding="utf-8") as handle:
-                json.dump(state, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            validate_run_state(json.loads(temporary.read_text(encoding="utf-8")))
-            os.replace(temporary, self.path)
-            if os.name == "posix":
-                descriptor = os.open(self.runtime_root, os.O_RDONLY)
-                try:
-                    os.fsync(descriptor)
-                finally:
-                    os.close(descriptor)
-        except (OSError, json.JSONDecodeError) as exc:
-            temporary.unlink(missing_ok=True)
+            assert_no_symlink_file_path(self.path)
+            atomic_write_text(self.path, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+        except OSError as exc:
             raise ContractError("run-stateを原子的に保存できません") from exc
