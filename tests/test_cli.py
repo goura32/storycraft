@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 
+from storycraft.workspace import create_workspace
 from storycraft.workflow import _model_settings_from_payload
 
 
@@ -93,6 +94,37 @@ class CliV2AcceptanceTests(unittest.TestCase):
                 self.assertEqual(json.loads(result.stderr)["code"], "invalid_argument")
                 self.assertIn(f"#/config/{key}", json.loads(result.stderr)["message"])
                 self.assertFalse(root.exists())
+
+    def test_run_malformed_run_state_uses_invalid_argument_envelope_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "novel"
+            request = {
+                "title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [],
+                "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja",
+            }
+            settings = {
+                "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test",
+                "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1,
+                "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1],
+                "scene_text_char_range": [1000, 1000],
+            }
+            create_workspace(root, workspace_id="ws-000001", request=request, settings=settings, created_at="2026-08-04T00:00:00Z")
+            run_state = root / "runtime" / "run-state.json"
+            run_state.write_text('{"schema_version":3}\n', encoding="utf-8")
+            before = run_state.read_text(encoding="utf-8")
+
+            result = subprocess.run(
+                ["uv", "run", "storycraft", "run", "--workspace", str(root), "--json"],
+                text=True, capture_output=True, check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, "")
+            error = json.loads(result.stderr)
+            self.assertEqual(set(error), {"ok", "code", "message"})
+            self.assertEqual(error["code"], "invalid_argument")
+            self.assertIn("run-state", error["message"])
+            self.assertEqual(run_state.read_text(encoding="utf-8"), before)
 
     def test_init_status_and_validate_are_provider_free_json_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

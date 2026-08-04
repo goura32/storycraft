@@ -258,10 +258,7 @@ def _validate_persisted_records(root: Path, resolution_cache: dict[str, dict[str
             validate_record(kind, identifier, record)
             if kind == "settings":
                 payload = record["payload"]
-                # Unit-stage fixtures use the explicit injected transport sentinel
-                # and intentionally omit production provider configuration.
-                if not (isinstance(payload, dict) and payload.get("endpoint") == "injected"):
-                    _validate_settings(payload)
+                _validate_settings(payload)
             elif kind == "keywords":
                 persisted = {"keywords": record["keywords"], "language": record["language"]}
                 if _normalize_keywords(persisted) != persisted:

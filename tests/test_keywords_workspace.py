@@ -40,3 +40,14 @@ class KeywordsWorkspaceTests(unittest.TestCase):
       settings_path.write_text(json.dumps(settings_record, ensure_ascii=False))
       with self.assertRaises(Exception):
           validate_workspace(root)
+
+ def test_validate_rejects_injected_sentinel_settings_payload(self):
+  with tempfile.TemporaryDirectory() as temp:
+      root = Path(temp) / 'ws'
+      create_workspace(root, workspace_id='ws-000001', request=None, keywords={'keywords':['霧'],'language':'ja'}, settings=SETTINGS, created_at='2026-07-29T00:00:00Z')
+      settings_path = root/'runtime/settings/settings-000001/record.json'
+      settings_record = json.loads(settings_path.read_text())
+      settings_record['payload'] = {'endpoint': 'injected'}
+      settings_path.write_text(json.dumps(settings_record, ensure_ascii=False))
+      with self.assertRaises(Exception):
+          validate_workspace(root)

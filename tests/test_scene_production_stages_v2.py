@@ -101,7 +101,7 @@ class SceneProductionStagesV2Tests(unittest.TestCase):
             (root / directory).mkdir(parents=True, exist_ok=True)
         write_json(root / "runtime/counters.json", initial_counters())
         write_json(root / "inputs/request-000001/record.json", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": {"title": "題", "genre": ["fantasy"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}})
-        write_json(root / "runtime/settings/settings-000001/record.json", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"endpoint": "injected", "model": "test", "quality_revision_limit": 1, "invalid_response_limit": 5, "scene_text_char_range": [1, 100]}, "created_at": NOW})
+        write_json(root / "runtime/settings/settings-000001/record.json", {"schema_version": 1, "settings_id": "settings-000001", "payload": {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]}, "created_at": NOW})
         selections = SelectionSnapshotStore(root)
         base = selections.create(input_selection_id=None, created_at=NOW, slots={"request": "request-000001", "settings": "settings-000001"})
         

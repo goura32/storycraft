@@ -191,7 +191,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
         write_json(root / "runtime/settings/settings-000001/record.json", {
             "schema_version": 1,
             "settings_id": "settings-000001",
-            "payload": {"endpoint": "injected", "model": "fake", "quality_revision_limit": 1, "invalid_response_limit": 5},
+            "payload": {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "fake", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]},
             "created_at": NOW
         })
 

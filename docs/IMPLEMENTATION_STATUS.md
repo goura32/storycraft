@@ -34,6 +34,6 @@
 - scene-proseの再生成は同一座標のcontinuity slotsだけを無効化し、確定済み過去sceneのcontinuity lineageを保持する。scene commit recoveryはinput selectionにsceneを要求せず、output scene contentの全参照・座標・selection lineageを移動前に検証する。
 - quality dispositionはclosed issue object（code/message/evidence_locations）とreview/candidate payloadの証拠到達性を再検証し、selection authorityは祖先selectionの解決結果を1回のresolve処理内でmemoizeする。
 
-**確認時点で192テスト、116 subtestsが通過しています。**
+**確認時点で194テスト、116 subtestsが通過しています。**
 
 これらは実装修正が完了した時点の記録です。実装の公開判断は、現在の仕様、実装、試験、配布物を確認して行います。
