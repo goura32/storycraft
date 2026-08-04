@@ -146,6 +146,9 @@ class SceneContinuityStageService:
         timeline = current_state.get("timeline_position")
         if not isinstance(timeline, int) or isinstance(timeline, bool) or timeline < 0:
             raise ContractError("current_state timeline_positionが不正です")
+        thread_states = current_state.get("unresolved_thread_states")
+        if not isinstance(thread_states, dict):
+            raise ContractError("current_state unresolved_thread_statesが不正です")
         text = prose.get("text")
         if not isinstance(text, str) or not text:
             raise ContractError("scene_prose本文が不正です")
@@ -165,6 +168,14 @@ class SceneContinuityStageService:
                 target_id, field = "timeline_position", "value"
             else:
                 target_id, field = SceneContinuityStageService._path_binding(change["target"], change["path"])
+                if change["target"] == "unresolved_thread_states":
+                    if (
+                        target_id not in thread_states
+                        or change["op"] != "set"
+                        or field != "status"
+                        or change["value"] not in {"open", "progressed", "resolved"}
+                    ):
+                        raise ContractError("continuity_updateのthread targetがcanonical state外です")
             matching_updates = [
                 update for update in allowed_updates
                 if isinstance(update, dict)

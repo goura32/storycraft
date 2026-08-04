@@ -14,7 +14,7 @@ from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection, _validate_initial_design_content
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
-from .workspace import validate_workspace
+from .workspace import _validate_settings, validate_workspace
 
 
 def create_initial_design_stage_service(workspace_root: Path) -> "InitialDesignStageService":
@@ -59,6 +59,7 @@ class InitialDesignStageService:
         settings = inputs["settings"]["payload"]
         if not isinstance(request, dict) or not isinstance(settings, dict):
             raise ContractError("initial_design入力recordが不正です")
+        _validate_settings(settings)
         context = {"request": request, "settings": settings}
         invalid_limit = settings.get("invalid_response_limit")
         if not isinstance(invalid_limit, int) or isinstance(invalid_limit, bool) or invalid_limit < 1:

@@ -96,11 +96,20 @@ class SelectionAuthorityTests(unittest.TestCase):
         invalid = dict(card, pov_character_id="char-other")
         with self.assertRaisesRegex(ContractError, "pov_character_id"):
             DEFAULT_CONTENT_VALIDATORS["scene-card"](invalid, inputs)
+        invalid_thread = dict(
+            card,
+            allowed_updates=[{"target_type": "unresolved_thread_states", "target_id": "未知のthread", "allowed_fields": ["status"]}],
+        )
+        with self.assertRaisesRegex(ContractError, "canonical thread_name"):
+            DEFAULT_CONTENT_VALIDATORS["scene-card"](
+                invalid_thread,
+                {**inputs, "current_state": {"content": {"unresolved_thread_states": {"塔の試練": {"status": "open"}}}}},
+            )
 
     def test_continuity_candidate_enforces_timeline_allowed_update_and_evidence(self) -> None:
         target = {"volume_number": 1, "chapter_number": 1, "scene_number": 1}
         inputs = {
-            "current_state": {"content": {"story_facts": [{}], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {}, "timeline_position": 2}},
+            "current_state": {"content": {"story_facts": [{}], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {"塔の試練": {"status": "open"}}, "timeline_position": 2}},
             "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}]}},
             "scene_prose.v01.c01.s01": {"content": {"text": "本文"}},
         }
@@ -114,6 +123,62 @@ class SelectionAuthorityTests(unittest.TestCase):
             SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "target": "reader_disclosures", "path": "$.reader_disclosures.item", "value": "x"}]}, target, inputs)
         with self.assertRaisesRegex(ContractError, "evidence"):
             SceneContinuityStageService._validate_content({**valid, "changes": [{**valid["changes"][0], "evidence_locations": ["prose:99"]}]}, target, inputs)
+
+        thread_inputs = {
+            "current_state": {"content": {"story_facts": [{}], "character_knowledge": {}, "reader_disclosures": [], "unresolved_thread_states": {"塔の試練": {"status": "open"}}, "timeline_position": 2}},
+            "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "unresolved_thread_states", "target_id": "未知のthread", "allowed_fields": ["status"]}]}},
+            "scene_prose.v01.c01.s01": {"content": {"text": "本文"}},
+        }
+        invalid_thread = {"coordinate": target, "changes": [{"op": "set", "target": "unresolved_thread_states", "path": "$.unresolved_thread_states.未知のthread.status", "value": "resolved", "evidence_locations": ["prose:0"]}]}
+        with self.assertRaisesRegex(ContractError, "canonical"):
+            SceneContinuityStageService._validate_content(invalid_thread, target, thread_inputs)
+        canonical_thread_inputs = {
+            **thread_inputs,
+            "scene_card.v01.c01.s01": {"content": {"allowed_updates": [{"target_type": "unresolved_thread_states", "target_id": "塔の試練", "allowed_fields": ["status"]}]}},
+        }
+        for operation, value in (("add", "progressed"), ("remove", None), ("set", "invalid")):
+            bad_change = {"op": operation, "target": "unresolved_thread_states", "path": "$.unresolved_thread_states.塔の試練.status", "value": value, "evidence_locations": ["prose:0"]}
+            with self.assertRaisesRegex(ContractError, "canonical"):
+                SceneContinuityStageService._validate_content({"coordinate": target, "changes": [bad_change]}, target, canonical_thread_inputs)
+
+    def test_rejects_generation_thread_aliases_against_initial_design(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            write_record(root, "inputs", "request-000001", {"schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request", "input_selection_id": None, "created_at": NOW, "content": REQUEST})
+            settings = {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]}
+            write_record(root, "runtime/settings", "settings-000001", {"schema_version": 1, "settings_id": "settings-000001", "payload": settings, "created_at": NOW})
+            parent = snapshot("selection-000001", {"request": "request-000001", "settings": "settings-000001"})
+            write_record(root, "runtime/selections", "selection-000001", parent)
+            initial_design = {
+                "schema_version": 1,
+                "core": {"logline": "英雄の旅", "premise": "選択の物語", "central_question": "何を守るのか", "themes": ["選択"], "dramatic_engine": "選択が障害を生む", "tone": ["希望"], "reader_promise": "人物の選択が結末を変える", "ending_direction": "責任を引き受ける"},
+                "cast": [{"name": "主人公", "role": "英雄", "description": "選択を迫られる", "relationships": []}],
+                "world": {"settings": ["剣と魔法"], "constraints": ["契約を破れない"], "institutions": ["王国"]},
+                "knowledge_model": {"author_knows": ["秘密"], "character_knows": {"主人公": ["目的"]}, "reader_knows": ["目的"]},
+                "unresolved_threads": [{"name": "塔の試練", "type": "goal", "required_for_ending": True, "description": "塔を登頂する"}],
+                "ending_conditions": [{"thread_name": "塔の試練", "condition": "塔を登頂する"}],
+            }
+            write_record(root, "design/initial", "initial-design-000001", {"schema_version": 1, "artifact_id": "initial-design-000001", "artifact_kind": "initial-design", "input_selection_id": "selection-000001", "created_at": NOW, "content": initial_design})
+            generation = {"story_facts": [{"fact_id": "fact-000001", "value": "開始"}], "character_knowledge": {"char-main": []}, "reader_disclosures": [], "unresolved_thread_states": {"未知のthread": {"status": "open"}}, "timeline_position": 0}
+            write_record(root, "generations", "gen-000001", {"schema_version": 1, "artifact_id": "gen-000001", "artifact_kind": "generation", "input_selection_id": "selection-000001", "created_at": NOW, "content": generation})
+            child = snapshot("selection-000002", {"request": "request-000001", "settings": "settings-000001", "initial_design": "initial-design-000001", "current_state": "gen-000001"}, "selection-000001")
+            with self.assertRaisesRegex(ContractError, "canonical thread_name"):
+                resolve_selection(root, child)
+
+    def test_rejects_volume_thread_goal_not_allocated_by_series_plan(self) -> None:
+        series = {
+            "volume_count": 4, "series_objectives": ["完結"],
+            "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
+            "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1]},
+            "revelation_schedule": [], "ending_path": "完結", "global_constraints": [],
+        }
+        volume = {
+            "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
+            "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"未知のthread": "進展"}, "revelations": [],
+            "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}], "required_end_state": "終了", "handoff_expectations": [],
+        }
+        with self.assertRaisesRegex(ContractError, "canonical thread_name"):
+            DEFAULT_CONTENT_VALIDATORS["volume-plan"](volume, {"__current_slot__": "volume_plan.v01", "series_plan": {"content": series}})
 
     def test_resolves_bootstrap_enveloped_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

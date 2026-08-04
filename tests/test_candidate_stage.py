@@ -10,6 +10,7 @@ from storycraft.artifact_ids import initial_counters
 from storycraft.candidate_stage import CandidateStageRunner, CandidateStageSpec
 from storycraft.run_state import RunStateStore
 from storycraft.selection_snapshot import SelectionSnapshotStore
+from storycraft.series_contracts import ContractError
 
 NOW = "2026-07-31T00:00:00Z"
 
@@ -30,7 +31,7 @@ def workspace(root: Path, *, stage: str = "series_plan") -> None:
     })
     write_json(root / "runtime/settings/settings-000001/record.json", {
         "schema_version": 1, "settings_id": "settings-000001",
-        "payload": {"endpoint": "http://127.0.0.1:11434", "model": "fake", "quality_revision_limit": 1, "invalid_response_limit": 5}, "created_at": NOW,
+        "payload": {"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "fake", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 5, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100]}, "created_at": NOW,
     })
     # Valid initial-design content per closed schema
     initial_design_content = {
@@ -52,7 +53,7 @@ def workspace(root: Path, *, stage: str = "series_plan") -> None:
         "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
         "character_knowledge": {"char-main": []},
         "reader_disclosures": [],
-        "unresolved_thread_states": {},
+        "unresolved_thread_states": {"塔の試練": {"status": "open"}},
         "timeline_position": 0,
     }
     write_json(root / "design/scene-cards/scene-card-v01-c01-s01/record.json", {
@@ -82,7 +83,7 @@ class FakeModel:
     def generate(self, stage: str, context: dict[str, object]) -> dict[str, object]:
         self.calls.append("generate")
         self._record_physical_call("generate")
-        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
+        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
 
     def review(self, stage: str, context: dict[str, object], candidate: dict[str, object]) -> dict[str, object]:
         self.calls.append("review")
@@ -92,7 +93,7 @@ class FakeModel:
     def revise(self, stage: str, context: dict[str, object], candidate: dict[str, object], review: dict[str, object]) -> dict[str, object]:
         self.calls.append("revise")
         self._record_physical_call("revise")
-        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
+        return {"schema_version": "candidate-response-v1", "artifact_kind": "series-plan", "payload": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []}}
 
 
 def spec() -> CandidateStageSpec:
@@ -100,6 +101,21 @@ def spec() -> CandidateStageSpec:
 
 
 class CandidateStageTests(unittest.TestCase):
+    def test_rejects_malformed_settings_before_candidate_model_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace(root)
+            settings_path = root / "runtime/settings/settings-000001/record.json"
+            persisted = json.loads(settings_path.read_text(encoding="utf-8"))
+            persisted["payload"]["endpoint"] = "injected"
+            settings_path.write_text(json.dumps(persisted, ensure_ascii=False) + "\n", encoding="utf-8")
+            model = FakeModel(root, [{"schema_version": "review-response-v1", "decision": "pass", "issues": []}])
+            before = RunStateStore(root).load()
+            with self.assertRaises(ContractError):
+                CandidateStageRunner(root, spec()).run(model, context={}, updated_at=NOW)
+            self.assertEqual(model.calls, [])
+            self.assertEqual(RunStateStore(root).load(), before)
+
     def test_reserves_audit_ids_from_runtime_counters_not_existing_directories(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

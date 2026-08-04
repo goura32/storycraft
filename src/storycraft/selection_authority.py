@@ -133,6 +133,7 @@ def _validate_volume_plan(content: dict[str, Any], inputs: dict[str, dict[str, A
     parent = next((item for item in volume_summaries if isinstance(item, dict) and item.get("volume_number") == volume), None) if isinstance(volume_summaries, list) else None
     if not isinstance(parent, dict):
         raise ContractError("volume-planの対象巻がseries-planにありません")
+    _validate_volume_thread_goals(value, series_plan, volume)
 
     settings = inputs.get("settings", {})
     settings_payload = settings.get("payload") if isinstance(settings, dict) else None
@@ -188,6 +189,67 @@ def _record_for_prefix(inputs: dict[str, Any], prefix: str) -> dict[str, Any] | 
 def _record_content(record: dict[str, Any] | None) -> dict[str, Any] | None:
     value = record.get("content") if isinstance(record, dict) else None
     return value if isinstance(value, dict) else None
+
+
+def _canonical_thread_names(initial_design: dict[str, Any]) -> set[str]:
+    threads = initial_design.get("unresolved_threads")
+    if not isinstance(threads, list) or not threads:
+        raise ContractError("initial-designのcanonical thread_nameが不正です")
+    names: set[str] = set()
+    for thread in threads:
+        if not isinstance(thread, dict) or not isinstance(thread.get("name"), str) or not thread["name"]:
+            raise ContractError("initial-designのcanonical thread_nameが不正です")
+        names.add(thread["name"])
+    if len(names) != len(threads):
+        raise ContractError("initial-designのcanonical thread_nameが不正です")
+    return names
+
+
+def _validate_generation_thread_names(
+    thread_states: dict[str, Any], initial_design: dict[str, Any],
+) -> None:
+    if set(thread_states) != _canonical_thread_names(initial_design):
+        raise ContractError("generationのunresolved_thread_statesがinitial-designのcanonical thread_nameと一致しません")
+
+
+def _validate_volume_thread_goals(
+    volume_plan: dict[str, Any], series_plan: dict[str, Any], volume: int,
+) -> None:
+    progression = series_plan.get("thread_progression")
+    goals = volume_plan.get("thread_goals")
+    if not isinstance(progression, dict) or not isinstance(goals, dict):
+        raise ContractError("volume-planのthread_goalsまたはseries-planのthread_progressionが不正です")
+    expected = {
+        name
+        for name, volumes in progression.items()
+        if isinstance(name, str) and name and isinstance(volumes, list) and volume in volumes
+    }
+    if set(goals) != expected:
+        raise ContractError("volume-planのthread_goalsがseries-planのcanonical thread_name割当と一致しません")
+
+
+def _validate_thread_lineage(resolved: dict[str, dict[str, Any]]) -> None:
+    initial_design = _record_content(resolved.get("initial_design"))
+    current_state = _record_content(resolved.get("current_state"))
+    if isinstance(initial_design, dict) and isinstance(current_state, dict):
+        thread_states = current_state.get("unresolved_thread_states")
+        if isinstance(thread_states, dict):
+            _validate_generation_thread_names(thread_states, initial_design)
+
+    series_plan = _record_content(resolved.get("series_plan"))
+    if not isinstance(series_plan, dict):
+        return
+    if isinstance(initial_design, dict):
+        progression = series_plan.get("thread_progression")
+        if not isinstance(progression, dict) or set(progression) != _canonical_thread_names(initial_design):
+            raise ContractError("series-planのthread_progressionがinitial-designのcanonical thread_nameと一致しません")
+    for slot, record in resolved.items():
+        match = re.fullmatch(r"volume_plan\.v(\d+)", slot)
+        if match is None:
+            continue
+        volume_plan = _record_content(record)
+        if isinstance(volume_plan, dict):
+            _validate_volume_thread_goals(volume_plan, series_plan, int(match.group(1)))
 
 
 def _current_slot(inputs: dict[str, Any]) -> str:
@@ -250,6 +312,16 @@ def _validate_scene_card(content: dict[str, Any], inputs: dict[str, Any]) -> Non
     plan_content = _record_content(_record_for_prefix(inputs, f"scene_plan.v{volume:02d}.c{chapter:02d}.s{scene:02d}"))
     if not isinstance(plan_content, dict):
         raise ContractError("scene-cardの親scene-planが入力selectionにありません")
+    current_state = _record_content(inputs.get("current_state"))
+    thread_states = current_state.get("unresolved_thread_states") if isinstance(current_state, dict) else None
+    if isinstance(thread_states, dict):
+        for update in value.get("allowed_updates", []):
+            if (
+                isinstance(update, dict)
+                and update.get("target_type") == "unresolved_thread_states"
+                and update.get("target_id") not in thread_states
+            ):
+                raise ContractError("scene-cardのallowed_updatesがcanonical thread_name外です")
     for field in ("pov_character_id", "participant_ids", "location_id"):
         if value.get(field) != plan_content.get(field):
             raise ContractError(f"scene-cardの{field}がscene-planと一致しません")
@@ -296,7 +368,6 @@ def _validate_continuity_update(content: dict[str, Any], inputs: dict[str, Any])
 
 
 def _validate_generation(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:
-    del inputs
     value = _require_object(content, "generation")
     _reject_unknown(value, "generation", {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"})
     if not isinstance(value.get("story_facts"), list) or not value["story_facts"]:
@@ -308,6 +379,9 @@ def _validate_generation(content: dict[str, Any], inputs: dict[str, dict[str, An
     thread_states = value.get("unresolved_thread_states")
     if not isinstance(thread_states, dict):
         raise ContractError("generation unresolved_thread_states")
+    initial_design = _record_content(inputs.get("initial_design"))
+    if isinstance(initial_design, dict):
+        _validate_generation_thread_names(thread_states, initial_design)
     for thread_name, thread_state in thread_states.items():
         if not isinstance(thread_name, str) or not thread_name or not isinstance(thread_state, dict) or set(thread_state) != {"status"} or thread_state.get("status") not in {"open", "progressed", "resolved"}:
             raise ContractError("generation unresolved_thread_statesの状態が不正です")
@@ -374,6 +448,7 @@ def resolve_selection(
     root = workspace_root.expanduser()
     cache = resolution_cache if resolution_cache is not None else {}
     resolved = _resolve_snapshot(root, snapshot, validators, set(), record_paths, cache)
+    _validate_thread_lineage(resolved)
     _validate_quality_slot_lineage(root, value, resolved, record_paths)
     return resolved
 

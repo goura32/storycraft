@@ -90,8 +90,8 @@ class Model:
     def generate(self, stage: str, context: dict[str, Any]) -> dict[str, Any]:
         self.contexts.append(context)
         payloads = {
-            "series-plan": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []},
-            "volume-plan": {"title": "巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}], "required_end_state": "終了", "handoff_expectations": []},
+            "series-plan": {"volume_count": 4, "series_objectives": ["完結"], "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)], "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1, 2, 3]}, "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []},
+            "volume-plan": {"title": "巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立", "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [], "chapter_summaries": [{"chapter_number": 1, "purpose": "章"}], "required_end_state": "終了", "handoff_expectations": []},
             "chapter-plan": {"title": "章", "chapter_purpose": "目的", "starting_conditions": ["開始"], "ending_changes": ["変化"], "scene_summaries": [{"scene_number": 1, "purpose": "展開"}], "required_revelations": [], "constraints": []},
             "scene-plan": {"purpose": "場面4", "pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "starting_conditions": ["開始"], "intended_beats": ["展開"], "intended_revelations": [], "intended_changes": ["変化"], "prohibited_disclosures": []},
             "scene-card": {"pov_character_id": "char-main", "participant_ids": ["char-main"], "location_id": "loc-main", "story_time": "夜", "purpose": "場面4", "opening_state": "開始", "required_beats": [{"beat_id": "beat-01", "description": "展開", "required": True, "order_hint": 1}], "conflict": "対立", "allowed_revelations": [], "required_revelations": [], "forbidden_revelations": [], "allowed_updates": [{"target_type": "timeline_position", "target_id": "timeline_position", "allowed_fields": ["value"]}], "ending_state_targets": ["変化"], "style_constraints": ["簡潔"]},
@@ -133,7 +133,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
             "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
             "character_knowledge": {"char-main": []},
             "reader_disclosures": [],
-            "unresolved_thread_states": {},
+            "unresolved_thread_states": {"塔の試練": {"status": "open"}},
             "timeline_position": 0,
         }
         series_plan_content = {
@@ -142,7 +142,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
             "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
             "character_arc_map": {"char-main": [1]},
             "relationship_arc_map": {"rel-main": [1]},
-            "thread_progression": {"thread-main": [1]},
+            "thread_progression": {"塔の試練": [1, 2, 3]},
             "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}],
             "ending_path": "完結",
             "global_constraints": []
@@ -150,7 +150,7 @@ class PlanningStagesV2Tests(unittest.TestCase):
         volume_plan_v03_content = {
             "title": "第三巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
             "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"},
-            "thread_goals": {"thread-main": "進展"}, "revelations": [],
+            "thread_goals": {"塔の試練": "進展"}, "revelations": [],
             "chapter_summaries": [{"chapter_number": n, "purpose": f"章{n}"} for n in range(1, 4)],
             "required_end_state": "次へ", "handoff_expectations": []
         }

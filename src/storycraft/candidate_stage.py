@@ -20,6 +20,7 @@ from .run_state import RunStateStore, make_pending_target
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
 from .series_contracts import ContractError, LLMCallError
 from .review_contracts import evidence_location_kind, field_tokens
+from .workspace import _validate_settings
 
 
 class InvalidResponseLimitError(ContractError):
@@ -347,6 +348,7 @@ class CandidateStageRunner:
             raise ContractError("settingsを読めません") from exc
         if not isinstance(value, dict):
             raise ContractError("settings payloadが不正です")
+        _validate_settings(value)
         return value
 
     def _reserve(self, relative_root: str, prefix: str) -> str:

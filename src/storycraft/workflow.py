@@ -209,13 +209,15 @@ def run(
         state = store.load()
         if state["status"] == "blocked":
             raise RunUnavailable("blocked")
-        if state["status"] == "completed":
-            return state
         try:
             validate_workspace(root)
         except ContractError as exc:
+            if state["status"] == "completed":
+                raise RunUnavailable("authority_inconsistency") from exc
             _block(store, state, "authority_inconsistency", str(exc))
             raise RunUnavailable("authority_inconsistency") from exc
+        if state["status"] == "completed":
+            return state
 
         while True:
             if state["status"] == "completed":

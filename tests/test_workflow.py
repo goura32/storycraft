@@ -58,6 +58,20 @@ class WorkflowDispatcherTests(unittest.TestCase):
         ), patch.object(workflow, "validate_workspace", side_effect=validate):
             return workflow.run(Path("/workspace"), **kwargs), store
 
+    def test_completed_run_revalidates_workspace_before_returning(self) -> None:
+        from storycraft.workflow import RunUnavailable
+
+        state = dict(
+            running("volume_publication"),
+            status="completed", current_stage=None, current_target=None,
+            pending_commit=None, last_error=None,
+            published_volumes=[{"volume_number": 1, "publication_id": "volume-pub-v01-000001"}],
+        )
+        with self.assertRaisesRegex(RunUnavailable, "authority_inconsistency"):
+            self._run(state, _validate=lambda root: (_ for _ in ()).throw(ContractError("tampered workspace")))
+        self.assertEqual(self.last_store.saved, [])
+        self.assertEqual(self.last_store.state, state)
+
     def test_validates_then_recovers_pending_commit_before_constructing_a_model(self) -> None:
         from storycraft import workflow
 

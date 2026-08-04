@@ -11,6 +11,7 @@ from storycraft.artifact_ids import initial_counters
 from storycraft.initial_design_stage import InitialDesignStageService
 from storycraft.run_state import RunStateStore
 from storycraft.selection_snapshot import SelectionSnapshotStore
+from storycraft.series_contracts import ContractError
 from storycraft.workspace import create_workspace, validate_workspace
 
 
@@ -133,6 +134,25 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 class InitialDesignStageV2Tests(unittest.TestCase):
+    def test_revalidates_persisted_settings_when_workspace_validation_is_skipped(self) -> None:
+        for mutation in ("injected_endpoint", "missing_model"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                _workspace(root)
+                settings_path = root / "runtime/settings/settings-000001/record.json"
+                persisted = json.loads(settings_path.read_text(encoding="utf-8"))
+                if mutation == "injected_endpoint":
+                    persisted["payload"]["endpoint"] = "injected"
+                else:
+                    del persisted["payload"]["model"]
+                settings_path.write_text(json.dumps(persisted, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                model = FakeInitialDesignModel()
+                before = RunStateStore(root).load()
+                with self.assertRaises(ContractError):
+                    InitialDesignStageService(root).run(model, workspace_already_validated=True, updated_at=TIMESTAMP)
+                self.assertEqual(model.calls, [])
+                self.assertEqual(RunStateStore(root).load(), before)
+
     def test_initial_design_unwraps_the_live_candidate_response_envelope(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -206,13 +206,13 @@ class WorkspaceV2Tests(unittest.TestCase):
             series_plan_content = {
                 "volume_count": 4, "series_objectives": ["完結"],
                 "volume_summaries": [{"volume_number": n, "purpose": f"巻{n}", "ending_change": "変化"} for n in range(1, 5)],
-                "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"thread-main": [1]},
+                "character_arc_map": {"char-main": [1]}, "relationship_arc_map": {"rel-main": [1]}, "thread_progression": {"塔の試練": [1]},
                 "revelation_schedule": [{"volume_number": 1, "knowledge_id": "know-main"}], "ending_path": "完結", "global_constraints": []
             }
 
             volume_plan_content = {
                 "title": "第一巻", "starting_state_summary": "開始", "volume_purpose": "目的", "central_conflict": "対立",
-                "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"thread-main": "進展"}, "revelations": [],
+                "character_changes": {"char-main": "変化"}, "relationship_changes": {"rel-main": "変化"}, "thread_goals": {"塔の試練": "進展"}, "revelations": [],
                 "chapter_summaries": [{"chapter_number": 1, "purpose": "章1"}], "required_end_state": "次へ", "handoff_expectations": []
             }
 
@@ -327,7 +327,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 "story_facts": [{"fact_id": "fact-000001", "value": "開始"}],
                 "character_knowledge": {"char-main": []},
                 "reader_disclosures": [],
-                "unresolved_thread_states": {},
+                "unresolved_thread_states": {"塔の試練": {"status": "open"}},
                 "timeline_position": 0,
             }
             self._write_json(root / "generations/gen-000001/record.json", {

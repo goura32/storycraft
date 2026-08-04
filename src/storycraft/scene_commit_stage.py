@@ -194,6 +194,13 @@ class SceneCommitStageService:
         required = {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"}
         if not isinstance(old_state, dict) or set(old_state) != required:
             raise ContractError("current_state contentが不正です")
+        thread_states = old_state.get("unresolved_thread_states")
+        if not isinstance(thread_states, dict) or any(
+            not isinstance(state, dict) or set(state) != {"status"} or state.get("status") not in {"open", "progressed", "resolved"}
+            for state in thread_states.values()
+        ):
+            raise ContractError("current_state unresolved_thread_statesが不正です")
+        canonical_thread_names = set(thread_states)
         if not isinstance(continuity, dict) or not isinstance(continuity.get("changes"), list):
             raise ContractError("continuity_update contentが不正です")
         result = deepcopy(old_state)
@@ -210,6 +217,14 @@ class SceneCommitStageService:
             keys = path[2:].split(".")
             if any(not key for key in keys):
                 raise ContractError("continuity_update pathが不正です")
+            if target == "unresolved_thread_states" and (
+                operation != "set"
+                or len(keys) != 3
+                or keys[1] not in canonical_thread_names
+                or keys[2] != "status"
+                or change["value"] not in {"open", "progressed", "resolved"}
+            ):
+                raise ContractError("continuity_updateのthread targetがcanonical state外です")
             parent: Any = result
             for key in keys[:-1]:
                 if not isinstance(parent, dict) or key not in parent:
@@ -233,6 +248,8 @@ class SceneCommitStageService:
                 del parent[key]
         if set(result) != required:
             raise ContractError("continuity_update適用後のcurrent_stateが不正です")
+        if set(result["unresolved_thread_states"]) != canonical_thread_names:
+            raise ContractError("continuity_updateでcanonical thread_nameを追加・削除できません")
         return result
 
     @staticmethod
