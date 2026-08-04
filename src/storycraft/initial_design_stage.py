@@ -8,7 +8,7 @@ from typing import Any
 from .artifact_ids import reserve_counter
 from .candidate_stage import InvalidResponseLimitError
 from .commit_recovery import recover_pending_commit
-from .filesystem_security import atomic_write_text, assert_no_symlink_path
+from .filesystem_security import atomic_write_text, assert_no_symlink_path, read_text_nofollow
 from .llm_responses import review_response
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection, _validate_initial_design_content
@@ -115,11 +115,12 @@ class InitialDesignStageService:
         adoption_id = f"adoption-{reserve_counter(self.workspace_root, 'next_adoption'):06d}"
         output_selection_id = f"selection-{reserve_counter(self.workspace_root, 'next_selection'):06d}"
         generate_call_id = self._call_id(model, "generate")
+        generate_seed = self._call_seed(generate_call_id)
         self._write_audit_record("runtime/calls", generate_call_id, {
             "schema_version": 1, "call_id": generate_call_id, "operation": "generate",
             "role": "initial_design", "target_candidate_id": None,
             "input_refs": [input_selection_id], "technical_attempt": 1, "format_attempt": 1,
-            "seed": 1, "endpoint": settings["endpoint"],
+            "seed": generate_seed, "endpoint": settings["endpoint"],
             "model": settings["model"], "settings_id": inputs["settings"]["settings_id"],
             "request": json.dumps({"stage": "initial_design", "operation": "generate"}, ensure_ascii=False, sort_keys=True),
             "response": json.dumps(content, ensure_ascii=False, sort_keys=True), "transport": "success",
@@ -140,11 +141,12 @@ class InitialDesignStageService:
             review = call_valid("review", "initial_design", context, content, validator=lambda value: CandidateStageRunner._review_with_evidence(value, content))
             review_id = f"review-{reserve_counter(self.workspace_root, 'next_review'):06d}"
             review_call_id = self._call_id(model, "review")
+            review_seed = self._call_seed(review_call_id)
             self._write_audit_record("runtime/calls", review_call_id, {
                 "schema_version": 1, "call_id": review_call_id, "operation": "review",
                 "role": "initial_design", "target_candidate_id": candidate_id,
                 "input_refs": [input_selection_id, candidate_id], "technical_attempt": 1, "format_attempt": 1,
-                "seed": 1, "endpoint": settings["endpoint"],
+                "seed": review_seed, "endpoint": settings["endpoint"],
                 "model": settings["model"], "settings_id": inputs["settings"]["settings_id"],
                 "request": json.dumps({"stage": "initial_design", "operation": "review"}, ensure_ascii=False, sort_keys=True),
                 "response": json.dumps(review, ensure_ascii=False, sort_keys=True), "transport": "success",
@@ -162,11 +164,12 @@ class InitialDesignStageService:
             revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call_id = self._call_id(model, "revise")
+            revise_seed = self._call_seed(revise_call_id)
             self._write_audit_record("runtime/calls", revise_call_id, {
                 "schema_version": 1, "call_id": revise_call_id, "operation": "revise",
                 "role": "initial_design", "target_candidate_id": candidate_id,
                 "input_refs": [input_selection_id, candidate_id, review_id], "technical_attempt": 1, "format_attempt": 1,
-                "seed": 1, "endpoint": settings["endpoint"],
+                "seed": revise_seed, "endpoint": settings["endpoint"],
                 "model": settings["model"], "settings_id": inputs["settings"]["settings_id"],
                 "request": json.dumps({"stage": "initial_design", "operation": "revise"}, ensure_ascii=False, sort_keys=True),
                 "response": json.dumps(revised, ensure_ascii=False, sort_keys=True), "transport": "success",
@@ -272,6 +275,21 @@ class InitialDesignStageService:
         assert_no_symlink_path(directory, require_directory=True)
         atomic_write_text(directory / "record.json", json.dumps(record, ensure_ascii=False, indent=2) + "\n")
 
+
+    def _call_seed(self, call_id: str) -> int:
+        path = self.workspace_root / "runtime/calls" / call_id / "record.json"
+        if path.is_file():
+            try:
+                record = json.loads(read_text_nofollow(path))
+                seed = record.get("seed") if isinstance(record, dict) else None
+                if isinstance(seed, int) and not isinstance(seed, bool):
+                    return seed
+            except (OSError, json.JSONDecodeError):
+                pass
+        try:
+            return int(call_id.rsplit("-", 1)[1])
+        except (ValueError, IndexError) as exc:
+            raise ContractError(f"{call_id}からcall seedを導出できません") from exc
 
     def _call_id(self, model: Any, operation: str) -> str:
         physical_id = getattr(model, "last_call_id", None)

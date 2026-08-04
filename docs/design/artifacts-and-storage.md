@@ -72,7 +72,7 @@ workspace/
 
 ID は採番後に変更しません。
 
-`runtime/raw_logs` は同じstemのJSON/Markdownを必ず一組で保存します。片方だけのpair、temporary entry、symlink、未定義の追加fileはworkspace検証で拒否します。record、run-state、counter、raw logはtemporary fileをfsyncしてから同一directory-handle内でatomic renameします。JSONの公開後にMarkdown書込みが失敗した場合はJSONもrollbackします。プロセス中断でreservationと不完全pairが残った場合は、次回検証でreservation所有PIDを確認し、終了済みtransactionだけをrollbackしてからpair検証します。実行中PIDのtransactionはfail-closedで停止します。
+`runtime/raw_logs` は同じstemのJSON/Markdownを必ず一組で保存します。片方だけのpair、temporary entry、symlink、未定義の追加fileはworkspace検証で拒否します。record、run-state、counter、raw logはtemporary fileをfsyncしてから同一directory-handle内でatomic renameします。raw logのJSON/Markdown公開は既存targetを置換しないため、reservation後に同名entryが作られた場合も上書きせずfail-closedで停止します。公開後にも各leafのidentityを同じdirectory FDから再検証し、差替えを検知した場合は競合者を削除せず不完全transactionとして停止します。JSONの公開後にMarkdown書込みが失敗した場合は、当該処理が自分で公開したJSONだけをrollbackします。プロセス中断でreservationと不完全pairが残った場合も、`validate` は削除・rollbackを行わず、証跡を保持したまま不完全transactionとして拒否します。
 
 | 種類 | 形式 | カウンタ |
 |---|---|---|
@@ -105,7 +105,7 @@ V1 の workspace には、未定義の巻間要約、シリーズ完結成果物
 
 複数ファイル成果物は必ずディレクトリ単位で staging に作り、`pending_commit` の `targets` manifest で複数の最終配置を管理します。workspace初期化のstaging作成・内容書込み・最終renameは、検証済みparent directory handleとstaging directory handleを基準に行い、parent pathのsymlink置換やTOCTOUを検出した場合は外部pathへ書かずfail-closedで停止します。
 
-workspaceの公開後に利用するroot pathも、初期化時に開いた最終directory descriptorを保持するFD-backed pathです。したがって、初期化の最終identity検査直後にparent pathが別directoryへ置換されても、返却rootからの相対操作は元の公開workspaceへ固定されます。公開renameは既存targetを置換しない`RENAME_NOREPLACE`相当で行い、検査後に同名file・directory・symlinkが作られた場合もstagingを公開せず停止します。providerのcall record directoryはcanonicalな`runtime/calls`だけを許可し、workspace rootと対象directoryのdescriptorをHTTP呼出し・raw pair作成より前に開き、`dir_fd`相対のmkdir・atomic rename・読み書きだけを使います。保存前後のpath/descriptor identityが一致しない場合はfail-closedで停止し、検証後のsymlinkや外部directoryへ書きません。reservationの復旧読み込みはnon-blocking descriptorで通常fileかを確認してから行うため、FIFOで処理を停止しません。
+workspaceの公開後に利用するroot pathも、初期化時に開いた最終directory descriptorを保持するFD-backed pathです。したがって、初期化の最終identity検査直後にparent pathが別directoryへ置換されても、返却rootからの相対操作は元の公開workspaceへ固定されます。公開renameは既存targetを置換しない`RENAME_NOREPLACE`相当で行い、検査後に同名file・directory・symlinkが作られた場合もstagingを公開せず停止します。providerのcall record directoryはcanonicalな`runtime/calls`だけを許可し、workspace rootと対象directoryのdescriptorをHTTP呼出し・raw pair作成より前に開きます。初回path検査で取得したdirectory identityと、実際に開いたdescriptorのidentityを比較し、以後は`dir_fd`相対のmkdir・atomic rename・読み書きだけを使います。保存前後のpath/descriptor identityが一致しない場合はfail-closedで停止し、検証後のsymlinkや外部directoryへ書きません。raw transactionの一時entry検証はnon-blocking descriptorで通常fileかを確認してから行うため、FIFOで処理を停止しません。
 
 1. ID を予約し、現在の選択スナップショットと必要な入力スロットを固定する。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。

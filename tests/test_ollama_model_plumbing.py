@@ -29,8 +29,10 @@ class ModelPlumbingTests(unittest.TestCase):
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
             client.settings_id = "settings-000001"
-            client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
-            client.workspace_root = Path(temporary)
+            root = Path(temporary)
+            (root / "runtime/calls").mkdir(parents=True)
+            client.raw_dir = root / "runtime" / "raw_logs"
+            client.workspace_root = root
             client.settings = SimpleNamespace(llm={
                 "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
@@ -51,8 +53,10 @@ class ModelPlumbingTests(unittest.TestCase):
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
             client.settings_id = "settings-000001"
-            client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
-            client.workspace_root = Path(temporary)
+            root = Path(temporary)
+            (root / "runtime/calls").mkdir(parents=True)
+            client.raw_dir = root / "runtime" / "raw_logs"
+            client.workspace_root = root
             client.settings = SimpleNamespace(llm={
                 "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
@@ -78,8 +82,10 @@ class ModelPlumbingTests(unittest.TestCase):
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
             client.settings_id = "settings-000001"
-            client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
-            client.workspace_root = Path(temporary)
+            root = Path(temporary)
+            (root / "runtime/calls").mkdir(parents=True)
+            client.raw_dir = root / "runtime" / "raw_logs"
+            client.workspace_root = root
             client.settings = SimpleNamespace(llm={
                 "ollama_http_boundary": True,
                 "base_url": "http://127.0.0.1:11434/v1",
@@ -101,27 +107,37 @@ class ModelPlumbingTests(unittest.TestCase):
         args, kwargs = generate.call_args
         self.assertEqual(args, ("http://127.0.0.1:11434/v1", "m", "user", {"type": "object"}))
         root_descriptor = client._workspace_root_descriptor
+        call_descriptor = client._call_directory_descriptor
+        runtime_descriptor = client._runtime_directory_descriptor
         assert isinstance(root_descriptor, int)
+        assert isinstance(call_descriptor, int)
+        assert isinstance(runtime_descriptor, int)
         anchored_root = directory_fd_path(root_descriptor)
+        anchored_call_dir = directory_fd_path(call_descriptor)
         self.assertEqual(kwargs | {"call_id_sink": None}, {
             "request_options": {"temperature": 0.4},
             "messages": [{"role": "system", "content": "system"}, {"role": "user", "content": "user"}],
-            "call_record_dir": anchored_root / "runtime/calls",
+            "call_record_dir": anchored_call_dir,
             "workspace_root": anchored_root,
             "technical_attempt": 2, "format_attempt": 1, "seed": 17, "operation": "generate",
             "settings_id": "settings-000001", "input_refs": [], "target_candidate_id": None,
+            "runtime_directory_descriptor": runtime_descriptor,
+            "call_record_descriptor": call_descriptor,
             "call_id_sink": None,
         })
 
     def test_call_once_propagates_provider_format_error_instead_of_marking_it_transport(self) -> None:
-        client = LLMClient.__new__(LLMClient)
-        client.settings_id = "settings-000001"
-        client.raw_dir = Path(tempfile.gettempdir()) / "storycraft-test-raw"
-        client.workspace_root = client.raw_dir.parent
-        client.settings = SimpleNamespace(llm={"ollama_http_boundary": True, "base_url": "http://127.0.0.1:11434/v1", "model": "m"})
-        with patch("storycraft.llm.ollama_generate", side_effect=OllamaResponseFormatError("bad response")):
-            with self.assertRaisesRegex(OllamaResponseFormatError, "bad response"):
-                client.call_once([{"role": "user", "content": "user"}], {"type": "json_schema", "json_schema": {"schema": {}}}, 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            client = LLMClient.__new__(LLMClient)
+            root = Path(temporary)
+            (root / "runtime/calls").mkdir(parents=True)
+            client.settings_id = "settings-000001"
+            client.raw_dir = root / "runtime/raw_logs"
+            client.workspace_root = root
+            client.settings = SimpleNamespace(llm={"ollama_http_boundary": True, "base_url": "http://127.0.0.1:11434/v1", "model": "m"})
+            with patch("storycraft.llm.ollama_generate", side_effect=OllamaResponseFormatError("bad response")):
+                with self.assertRaisesRegex(OllamaResponseFormatError, "bad response"):
+                    client.call_once([{"role": "user", "content": "user"}], {"type": "json_schema", "json_schema": {"schema": {}}}, 1)
 
 
 if __name__ == "__main__":

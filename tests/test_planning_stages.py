@@ -76,7 +76,7 @@ class Model:
             "input_refs": [selection_id, *([candidate_id] if operation in {"review", "revise"} else [])],
             "technical_attempt": 1,
             "format_attempt": 1,
-            "seed": 1,
+            "seed": int(call_id.split("-")[1]),
             "endpoint": "injected",
             "model": "fake",
             "settings_id": "settings-000001",

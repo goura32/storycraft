@@ -1,18 +1,12 @@
-"""OpenAI互換Provider呼び出し層。
+"""Provider HTTP boundary呼び出し層。
 
-- POST /v1/chat/completions をストリームで呼ぶ
-- thinking と streaming を常に有効 (extra_body={"think": true})
-- 各試行で attempt_seed を変える
-- delta.content だけを本文/JSONとして連結
-- 無応答の判定: 初回受信まで first_event_timeout, その後は idle_timeout
-- 生データを保存 (thinking本文は除く: 時刻/種別/文字数メタのみ)
+Ollamaの非ストリーミングHTTP応答を受け、各物理呼出しのcall recordとraw logを
+FD anchorへ保存する。SDK client、stream fallback、別provider transportは持たない。
 """
 from __future__ import annotations
 
 import json
-import math
 import os
-from queue import Empty, Queue
 import re
 import stat
 import threading
@@ -22,8 +16,6 @@ from pathlib import Path
 from typing import Any
 import weakref
 
-from openai.types.chat import ChatCompletionMessageParam
-
 from .error_sanitizer import (
     redact_secrets,
     redact_value,
@@ -32,9 +24,15 @@ from .error_sanitizer import (
 )
 from .filesystem_security import (
     assert_directory_fd_identity,
+    assert_file_identity_at,
     assert_no_symlink_path,
-    atomic_write_text,
+    atomic_write_text_noreplace,
+    directory_identity,
+    directory_entry_identity,
     directory_fd_path,
+    open_directory_at,
+    read_text_at,
+    unlink_if_identity_at,
     open_workspace_directory,
 )
 from .log import logger
@@ -70,26 +68,6 @@ def _unlink_at(directory_fd: int, name: str) -> None:
         os.unlink(name, dir_fd=directory_fd)
     except FileNotFoundError:
         pass
-
-
-def _positive_seconds(
-    settings: dict[str, Any],
-    field: str,
-    default: float,
-) -> float:
-    value = settings.get(field, default)
-
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or float(value) <= 0
-    ):
-        raise ContractError(
-            f"llm.{field}は0より大きい有限数が必要です"
-        )
-
-    return float(value)
 
 
 def _raw_filename_component(value: str) -> str:
@@ -174,33 +152,93 @@ class LLMClient:
             raise ContractError("LLMClientにはworkspace_rootが必要です")
         root = assert_no_symlink_path(workspace_root, require_directory=True)
         raw_path = assert_no_symlink_path(raw_dir)
-        root_descriptor, raw_descriptor = open_workspace_directory(root, raw_path, create=True)
+        expected_root_identity = directory_identity(root)
+        expected_raw_identity = directory_identity(raw_path, missing_ok=True)
+        root_descriptor, raw_descriptor = open_workspace_directory(
+            root,
+            raw_path,
+            create=True,
+            expected_root_identity=expected_root_identity,
+            expected_child_identity=expected_raw_identity,
+        )
+        runtime_descriptor: int | None = None
+        call_descriptor: int | None = None
+        try:
+            expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
+            runtime_descriptor = open_directory_at(
+                root_descriptor,
+                ("runtime",),
+                expected_identity=expected_runtime_identity,
+            )
+            expected_call_identity = directory_entry_identity(runtime_descriptor, "calls")
+            call_descriptor = open_directory_at(
+                runtime_descriptor,
+                ("calls",),
+                expected_identity=expected_call_identity,
+            )
+        except Exception:
+            _close_descriptors(*(descriptor for descriptor in (call_descriptor, runtime_descriptor, raw_descriptor, root_descriptor) if isinstance(descriptor, int)))
+            raise
         self.settings = settings
         self.settings_id = getattr(settings, "settings_id", None)
         self.raw_dir = raw_path
         self.workspace_root = root
         self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
         self._workspace_root_descriptor = root_descriptor
+        self._runtime_directory_descriptor = runtime_descriptor
+        self._call_directory_descriptor = call_descriptor
         self._raw_directory_descriptor = raw_descriptor
-        self._directory_finalizer = weakref.finalize(self, _close_descriptors, root_descriptor, raw_descriptor)
+        self._directory_finalizer = weakref.finalize(
+            self,
+            _close_descriptors,
+            call_descriptor,
+            runtime_descriptor,
+            raw_descriptor,
+            root_descriptor,
+        )
 
-        # The Ollama HTTP boundary in storycraft.ollama performs
-        # the documented capability and completion calls and persists their
-        # audit records.  No SDK health probe or alternate transport is allowed.
-        self.client: Any = None
 
     def close(self) -> None:
         finalizer = getattr(self, "_directory_finalizer", None)
         if finalizer is not None and finalizer.alive:
             finalizer()
         self._workspace_root_descriptor = None
+        self._runtime_directory_descriptor = None
+        self._call_directory_descriptor = None
         self._raw_directory_descriptor = None
         self._workspace_root_anchor_path = None
+
+    def persisted_seed_ceiling(self) -> int:
+        """Return the largest seed already persisted in canonical call records."""
+        calls_descriptor = getattr(self, "_call_directory_descriptor", None)
+        if not isinstance(calls_descriptor, int):
+            raise ContractError("provider callにはcanonical calls descriptorが必要です")
+        ceiling = 0
+        for entry in os.listdir(calls_descriptor):
+            if not re.fullmatch(r"call-[0-9]{6}", entry):
+                continue
+            descriptor = os.open(
+                entry,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=calls_descriptor,
+            )
+            try:
+                record = json.loads(read_text_at(descriptor, Path("record.json")))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ContractError("既存call recordのseedを検証できません") from exc
+            finally:
+                os.close(descriptor)
+            if not isinstance(record, dict) or not isinstance(record.get("seed"), int) or isinstance(record.get("seed"), bool):
+                raise ContractError("既存call recordのseedが不正です")
+            ceiling = max(ceiling, record["seed"])
+        return ceiling
 
     def _ensure_directory_anchors(self) -> None:
         """Initialize anchors for narrowly-scoped low-level test/adaptor objects."""
         if isinstance(getattr(self, "_workspace_root_descriptor", None), int) and isinstance(
             getattr(self, "_raw_directory_descriptor", None), int
+        ) and isinstance(getattr(self, "_runtime_directory_descriptor", None), int) and isinstance(
+            getattr(self, "_call_directory_descriptor", None), int
         ):
             return
         workspace_root = getattr(self, "workspace_root", None)
@@ -209,334 +247,44 @@ class LLMClient:
             raise ContractError("provider callにはworkspace_rootとraw_dirが必要です")
         root = assert_no_symlink_path(Path(workspace_root), require_directory=True)
         raw_path = assert_no_symlink_path(Path(raw_dir))
-        root_descriptor, raw_descriptor = open_workspace_directory(root, raw_path, create=True)
+        expected_root_identity = directory_identity(root)
+        expected_raw_identity = directory_identity(raw_path, missing_ok=True)
+        root_descriptor, raw_descriptor = open_workspace_directory(
+            root,
+            raw_path,
+            create=True,
+            expected_root_identity=expected_root_identity,
+            expected_child_identity=expected_raw_identity,
+        )
+        runtime_descriptor: int | None = None
+        call_descriptor: int | None = None
+        try:
+            expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
+            runtime_descriptor = open_directory_at(root_descriptor, ("runtime",), expected_identity=expected_runtime_identity)
+            expected_call_identity = directory_entry_identity(runtime_descriptor, "calls")
+            call_descriptor = open_directory_at(runtime_descriptor, ("calls",), expected_identity=expected_call_identity)
+        except Exception:
+            _close_descriptors(*(descriptor for descriptor in (call_descriptor, runtime_descriptor, raw_descriptor, root_descriptor) if isinstance(descriptor, int)))
+            raise
         self.workspace_root = root
         self.raw_dir = raw_path
         self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
         self._workspace_root_descriptor = root_descriptor
+        self._runtime_directory_descriptor = runtime_descriptor
+        self._call_directory_descriptor = call_descriptor
         self._raw_directory_descriptor = raw_descriptor
-        self._directory_finalizer = weakref.finalize(self, _close_descriptors, root_descriptor, raw_descriptor)
-
-    @staticmethod
-    def _request_stream_close(
-        stream: object,
-    ) -> None:
-        """stream closeが停止しても呼出し元を塞がない。"""
-        close = getattr(stream, "close", None)
-        if not callable(close):
-            return
-
-        def close_safely() -> None:
-            try:
-                close()
-            except Exception:
-                pass
-
-        closer = threading.Thread(
-            target=close_safely,
-            name="llm-stream-close",
-            daemon=True,
+        self._directory_finalizer = weakref.finalize(
+            self,
+            _close_descriptors,
+            call_descriptor,
+            runtime_descriptor,
+            raw_descriptor,
+            root_descriptor,
         )
-        closer.start()
-        closer.join(timeout=0.2)
-
-    def _consume_stream(
-        self,
-        stream: object,
-        rec: CallRecord,
-        *,
-        first_event_timeout: float,
-        idle_timeout: float,
-        progress_interval: float,
-    ) -> tuple[int, int, int]:
-        """blocking iteratorをworkerへ隔離して監視する。"""
-        events: Queue[tuple[str, object]] = Queue()
-        stop_requested = threading.Event()
-
-        def read_stream() -> None:
-            try:
-                for chunk in stream:
-                    if stop_requested.is_set():
-                        break
-                    events.put(("chunk", chunk))
-            except BaseException as error:
-                events.put(("error", error))
-            finally:
-                events.put(("done", None))
-
-        worker = threading.Thread(
-            target=read_stream,
-            name=f"llm-stream-{rec.phase}",
-            daemon=True,
-        )
-        worker.start()
-
-        started = time.monotonic()
-        deadline = started + first_event_timeout
-        next_progress = started + progress_interval
-
-        received_event = False
-        received_chunks = 0
-        thinking_chars = 0
-        content_chars = 0
-
-        try:
-            while True:
-                now = time.monotonic()
-                wait_until = min(
-                    deadline,
-                    next_progress,
-                )
-                wait_seconds = max(
-                    wait_until - now,
-                    0.0,
-                )
-
-                try:
-                    event_kind, payload = events.get(
-                        timeout=wait_seconds,
-                    )
-                except Empty:
-                    now = time.monotonic()
-
-                    if now >= deadline:
-                        timeout_kind = (
-                            "idle_timeout"
-                            if received_event
-                            else "first_event_timeout"
-                        )
-                        raise TimeoutError(
-                            f"{timeout_kind} exceeded"
-                        )
-
-                    if now >= next_progress:
-                        logger.info(
-                            "LLM待機: %s 経過=%.2fs "
-                            "chunks=%s thinking=%s "
-                            "content=%s",
-                            rec.log_identity(),
-                            now - started,
-                            received_chunks,
-                            thinking_chars,
-                            content_chars,
-                        )
-                        next_progress = (
-                            now + progress_interval
-                        )
-
-                    continue
-
-                now = time.monotonic()
-
-                if event_kind == "done":
-                    break
-
-                if event_kind == "error":
-                    if isinstance(
-                        payload,
-                        BaseException,
-                    ):
-                        raise payload
-                    raise RuntimeError(
-                        "stream worker error"
-                    )
-
-                if event_kind != "chunk":
-                    raise RuntimeError(
-                        "unknown stream worker event"
-                    )
-
-                received_event = True
-                received_chunks += 1
-                deadline = now + idle_timeout
-
-                chunk = payload
-                choices = getattr(
-                    chunk,
-                    "choices",
-                    None,
-                )
-                if not choices:
-                    continue
-
-                delta = choices[0].delta
-
-                reasoning = getattr(
-                    delta,
-                    "reasoning",
-                    None,
-                )
-                if reasoning:
-                    reasoning = str(reasoning)
-                    thinking_chars += len(reasoning)
-                    rec.meta_chunks.append({
-                        "t": round(
-                            now - started,
-                            2,
-                        ),
-                        "kind": STATUS_THINKING,
-                        "chars": len(reasoning),
-                    })
-
-                content = getattr(
-                    delta,
-                    "content",
-                    None,
-                )
-                if content:
-                    content = str(content)
-                    rec.content += content
-                    content_chars += len(content)
-                    rec.meta_chunks.append({
-                        "t": round(
-                            now - started,
-                            2,
-                        ),
-                        "kind": STATUS_CONTENT,
-                        "chars": len(content),
-                    })
-        finally:
-            stop_requested.set()
-            self._request_stream_close(stream)
-            worker.join(timeout=0.2)
-
-        return (
-            received_chunks,
-            thinking_chars,
-            content_chars,
-        )
-
-    def _make_call(
-        self,
-        messages: list[ChatCompletionMessageParam],
-        response_format,
-        seed: int,
-    ) -> CallRecord:
-        llm = self.settings.llm
-        meta = {}
-
-        if (
-            messages
-            and isinstance(messages[-1], dict)
-            and "__" in "".join(messages[-1].keys())
-        ):
-            meta = messages[-1]  # type: ignore[assignment]
-
-        rec = CallRecord(
-            kind=meta.get("__kind", "gen"),
-            phase=meta.get("__phase", ""),
-            ref=meta.get("__ref", ""),
-            attempt=meta.get("__attempt", 1),
-            seed=seed,
-            retry_total=meta.get(
-                "__retry_total",
-                1,
-            ),
-            quality_pass=meta.get(
-                "__quality_pass",
-                "",
-            ),
-        )
-
-        logger.info(
-            "LLM開始: %s",
-            rec.log_identity(),
-        )
-
-        try:
-            first_event_timeout = _positive_seconds(
-                llm,
-                "first_event_timeout_seconds",
-                3600,
-            )
-            idle_timeout = _positive_seconds(
-                llm,
-                "idle_timeout_seconds",
-                600,
-            )
-            progress_interval = _positive_seconds(
-                llm,
-                "stream_progress_log_interval_seconds",
-                60,
-            )
-
-            request = {
-                "model": llm["model"],
-                "messages": [
-                    message
-                    for message in messages
-                    if not (
-                        isinstance(message, dict)
-                        and "__"
-                        in "".join(message.keys())
-                    )
-                ],
-                "stream": True,
-                "extra_body": {
-                    "think": bool(
-                        llm.get("thinking", True)
-                    ),
-                    "seed": seed,
-                },
-            }
-
-            if response_format is not None:
-                request["response_format"] = (
-                    response_format
-                )
-
-            stream = (
-                self.client
-                .chat
-                .completions
-                .create(
-                    **request,
-                    timeout=first_event_timeout,
-                )
-            )
-
-            (
-                _received_chunks,
-                _thinking_chars,
-                content_chars,
-            ) = self._consume_stream(
-                stream,
-                rec,
-                first_event_timeout=(
-                    first_event_timeout
-                ),
-                idle_timeout=idle_timeout,
-                progress_interval=(
-                    progress_interval
-                ),
-            )
-
-            rec.finished_at = time.time()
-            duration = round(
-                rec.finished_at - rec.started_at,
-                2,
-            )
-
-            logger.info(
-                "LLM終了: %s 所要時間=%ss "
-                "content_chars=%s",
-                rec.log_identity(),
-                duration,
-                content_chars,
-            )
-        except ContractError:
-            raise
-        except Exception as error:
-            rec.error = safe_exception_message(
-                error
-            )
-            rec.finished_at = time.time()
-
-        return rec
 
     def call_once(self, messages, response_format, seed: int) -> CallRecord:
-        if not self.settings.llm.get("ollama_http_boundary", False):
-            return self._make_call(messages, response_format, seed)
+        if self.settings.llm.get("ollama_http_boundary") is not True:
+            raise ContractError("Ollama providerはHTTP boundary経由でなければなりません")
         meta = messages[-1] if messages and isinstance(messages[-1], dict) else {}
         bound_settings_id = meta.get("settings_id") or self.settings_id or getattr(self.settings, "settings_id", None)
         if not isinstance(bound_settings_id, str) or re.fullmatch(r"settings-[0-9]{6}", bound_settings_id) is None:
@@ -556,10 +304,12 @@ class LLMClient:
             schema = response_format.get("json_schema", {}).get("schema", {"type": "object"})
         self._ensure_directory_anchors()
         root_descriptor = getattr(self, "_workspace_root_descriptor", None)
-        if not isinstance(root_descriptor, int):
+        runtime_descriptor = getattr(self, "_runtime_directory_descriptor", None)
+        call_descriptor = getattr(self, "_call_directory_descriptor", None)
+        if not isinstance(root_descriptor, int) or not isinstance(runtime_descriptor, int) or not isinstance(call_descriptor, int):
             raise ContractError("provider callにはworkspace root descriptorが必要です")
         anchored_root = directory_fd_path(root_descriptor)
-        anchored_call_dir = anchored_root / "runtime/calls"
+        anchored_call_dir = directory_fd_path(call_descriptor)
         try:
             value = ollama_generate(
                 self.settings.llm["base_url"], self.settings.llm["model"],
@@ -571,6 +321,8 @@ class LLMClient:
                 operation=rec.kind, call_id_sink=lambda call_id: setattr(rec, "call_id", call_id),
                 settings_id=bound_settings_id, input_refs=meta.get("input_refs", []),
                 target_candidate_id=meta.get("target_candidate_id"),
+                runtime_directory_descriptor=runtime_descriptor,
+                call_record_descriptor=call_descriptor,
             )
             rec.content = value if schema is None and isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         except OllamaResponseFormatError:
@@ -580,10 +332,6 @@ class LLMClient:
             rec.error = safe_exception_message(error)
         except ContractError:
             raise
-        except Exception as error:
-            if self.settings.llm.get("ollama_http_boundary", False):
-                raise
-            rec.error = safe_exception_message(error)
         rec.finished_at = time.time()
         return rec
 
@@ -613,7 +361,13 @@ class LLMClient:
                 workspace_root = getattr(self, "workspace_root", None)
                 if workspace_root is None:
                     raise ContractError("raw log保存にはworkspace_rootが必要です")
-                root_descriptor, raw_descriptor = open_workspace_directory(workspace_root, raw_path, create=True)
+                root_descriptor, raw_descriptor = open_workspace_directory(
+                    workspace_root,
+                    raw_path,
+                    create=True,
+                    expected_root_identity=directory_identity(workspace_root),
+                    expected_child_identity=directory_identity(raw_path, missing_ok=True),
+                )
                 temporary_anchor = True
             try:
                 assert_directory_fd_identity(
@@ -653,6 +407,10 @@ class LLMClient:
                         _unlink_at(raw_descriptor, reservation_name)
                         raise
 
+                json_published = False
+                markdown_published = False
+                json_identity: tuple[int, int] | None = None
+                markdown_identity: tuple[int, int] | None = None
                 try:
                     sent_messages_value = redact_value([
                         m for m in prompt_messages
@@ -671,14 +429,32 @@ class LLMClient:
                         "received": received,
                         "content": content,
                     }
-                    self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
-                    self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
+                    try:
+                        json_identity = self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
+                        json_published = True
+                    except Exception as error:
+                        json_published = bool(getattr(error, "_storycraft_published_target", False))
+                        json_identity = getattr(error, "_storycraft_published_identity", None)
+                        raise
+                    try:
+                        markdown_identity = self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
+                        markdown_published = True
+                    except Exception as error:
+                        markdown_published = bool(getattr(error, "_storycraft_published_target", False))
+                        markdown_identity = getattr(error, "_storycraft_published_identity", None)
+                        raise
+                    if json_identity is None or markdown_identity is None:
+                        raise ContractError("raw log公開identityがありません")
+                    assert_file_identity_at(raw_descriptor, json_name, json_identity)
+                    assert_file_identity_at(raw_descriptor, markdown_name, markdown_identity)
                     assert_directory_fd_identity(self.raw_dir, raw_descriptor)
                 except Exception:
                     # A raw call is published only as a complete JSON/Markdown pair.
                     # Roll back the first rename when the second file cannot be made.
-                    _unlink_at(raw_descriptor, json_name)
-                    _unlink_at(raw_descriptor, markdown_name)
+                    if json_published and json_identity is not None:
+                        unlink_if_identity_at(raw_descriptor, json_name, json_identity)
+                    if markdown_published and markdown_identity is not None:
+                        unlink_if_identity_at(raw_descriptor, markdown_name, markdown_identity)
                     raise
                 finally:
                     _unlink_at(raw_descriptor, reservation_name)
@@ -687,5 +463,5 @@ class LLMClient:
                     _close_descriptors(raw_descriptor, root_descriptor)
 
     @staticmethod
-    def _write_raw_file(path: Path, content: str) -> None:
-        atomic_write_text(path, content)
+    def _write_raw_file(path: Path, content: str) -> tuple[int, int]:
+        return atomic_write_text_noreplace(path, content)

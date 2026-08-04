@@ -25,13 +25,19 @@ from .artifact_ids import reserve_counter_at
 from .endpoint_security import pinned_http_request
 from .error_sanitizer import redact_value
 from .filesystem_security import (
+    _open_directory_chain,
     absolute_without_resolving,
     assert_directory_fd_identity,
+    assert_file_identity_at,
     assert_no_symlink_path,
     assert_within,
-    atomic_write_text,
+    atomic_write_text_noreplace,
+    directory_identity,
+    directory_entry_identity,
     directory_fd_path,
+    open_directory_at,
     open_workspace_directory,
+    read_text_at,
     remove_directory_at,
 )
 from .series_contracts import ContractError, EndpointResolutionError, LLMCallError
@@ -75,6 +81,8 @@ def normalized_v1_base_url(endpoint: str) -> str:
     except (TypeError, ValueError) as exc:
         raise ContractError("provider endpointのURLが不正です") from exc
     path = parsed.path.rstrip("/")
+    while path.endswith("/v1/v1"):
+        path = path[:-3]
     if not path.endswith("/v1"):
         path = f"{path}/v1" if path else "/v1"
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
@@ -95,48 +103,109 @@ class _RecordAnchor:
     directory_path: Path
     relative_parts: tuple[str, ...]
     root_descriptor: int
+    runtime_descriptor: int
     directory_descriptor: int
 
     @classmethod
-    def open(cls, workspace_root: Path, directory: Path) -> "_RecordAnchor":
-        root_path = assert_no_symlink_path(Path(workspace_root), require_directory=True)
+    def open(
+        cls,
+        workspace_root: Path,
+        directory: Path,
+        *,
+        runtime_descriptor: int | None = None,
+        directory_descriptor: int | None = None,
+    ) -> "_RecordAnchor":
+        root_candidate = absolute_without_resolving(Path(workspace_root))
+        expected_root_identity = directory_identity(root_candidate)
+        root_path = assert_no_symlink_path(root_candidate, require_directory=True)
         directory_path = Path(directory)
-        assert_within(root_path, directory_path)
-        root_descriptor, directory_descriptor = open_workspace_directory(root_path, directory_path, create=True)
+        root_descriptor: int | None = None
+        owned_runtime_descriptor: int | None = None
+        owned_directory_descriptor: int | None = None
         try:
-            relative_parts = absolute_without_resolving(directory_path).relative_to(absolute_without_resolving(root_path)).parts
-            if relative_parts != ("runtime", "calls"):
-                raise ContractError("call record directoryはworkspace/runtime/callsでなければなりません")
-            runtime_descriptor = os.open(
-                "runtime",
-                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-                dir_fd=root_descriptor,
-            )
+            if runtime_descriptor is not None or directory_descriptor is not None:
+                if runtime_descriptor is None or directory_descriptor is None:
+                    raise ContractError("runtime/calls descriptorは一組で必要です")
+                root_descriptor = _open_directory_chain(root_path, expected_identity=expected_root_identity)
+                owned_runtime_descriptor = os.dup(runtime_descriptor)
+                owned_directory_descriptor = os.dup(directory_descriptor)
+                directory_path = directory_fd_path(root_descriptor) / "runtime/calls"
+                assert_directory_fd_identity(directory_fd_path(root_descriptor) / "runtime", owned_runtime_descriptor)
+                assert_directory_fd_identity(directory_path, owned_directory_descriptor)
+            else:
+                assert_within(root_path, directory_path)
+                candidate_relative = absolute_without_resolving(directory_path).relative_to(absolute_without_resolving(root_path)).parts
+                if candidate_relative != ("runtime", "calls"):
+                    raise ContractError("call record directoryはworkspace/runtime/callsでなければなりません")
+                expected_directory_identity = directory_identity(directory_path, missing_ok=True)
+                root_descriptor, owned_directory_descriptor = open_workspace_directory(
+                    root_path,
+                    directory_path,
+                    create=True,
+                    expected_root_identity=expected_root_identity,
+                    expected_child_identity=expected_directory_identity,
+                )
+                expected_runtime_identity = directory_entry_identity(root_descriptor, "runtime")
+                owned_runtime_descriptor = open_directory_at(
+                    root_descriptor,
+                    ("runtime",),
+                    expected_identity=expected_runtime_identity,
+                )
+                directory_path = absolute_without_resolving(directory_path)
+            relative_parts = ("runtime", "calls")
             try:
-                try:
-                    counter_stat = os.stat("counters.json", dir_fd=runtime_descriptor, follow_symlinks=False)
-                except FileNotFoundError as exc:
-                    raise ContractError("runtime/counters.jsonがありません") from exc
-                if stat.S_ISLNK(counter_stat.st_mode) or not stat.S_ISREG(counter_stat.st_mode):
-                    raise ContractError("runtime/counters.jsonが通常fileではありません")
-            finally:
-                os.close(runtime_descriptor)
-            return cls(root_path, absolute_without_resolving(directory_path), relative_parts, root_descriptor, directory_descriptor)
+                counter_stat = os.stat("counters.json", dir_fd=owned_runtime_descriptor, follow_symlinks=False)
+            except FileNotFoundError as exc:
+                raise ContractError("runtime/counters.jsonがありません") from exc
+            if stat.S_ISLNK(counter_stat.st_mode) or not stat.S_ISREG(counter_stat.st_mode):
+                raise ContractError("runtime/counters.jsonが通常fileではありません")
+            assert_directory_fd_identity(directory_path, owned_directory_descriptor)
+            return cls(root_path, directory_path, relative_parts, root_descriptor, owned_runtime_descriptor, owned_directory_descriptor)
         except Exception:
-            os.close(directory_descriptor)
-            os.close(root_descriptor)
+            for descriptor in (owned_directory_descriptor, owned_runtime_descriptor, root_descriptor):
+                if isinstance(descriptor, int):
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
             raise
 
     def assert_current(self) -> None:
         assert_directory_fd_identity(self.root_path, self.root_descriptor)
+        assert_directory_fd_identity(directory_fd_path(self.root_descriptor) / "runtime", self.runtime_descriptor)
         assert_directory_fd_identity(self.directory_path, self.directory_descriptor)
 
     def close(self) -> None:
-        for descriptor in (self.directory_descriptor, self.root_descriptor):
+        for descriptor in (self.directory_descriptor, self.runtime_descriptor, self.root_descriptor):
             try:
                 os.close(descriptor)
             except OSError:
                 pass
+
+
+def _assert_seed_available(directory_fd: int, seed: int) -> None:
+    """Reject a physical provider call seed already persisted in this workspace."""
+    try:
+        entries = os.listdir(directory_fd)
+    except OSError as exc:
+        raise ContractError("call record directoryを列挙できません") from exc
+    for name in entries:
+        if re.fullmatch(r"call-[0-9]{6}", name) is None:
+            continue
+        try:
+            call_descriptor = os.open(
+                name,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=directory_fd,
+            )
+            try:
+                record = json.loads(read_text_at(call_descriptor, Path("record.json")))
+            finally:
+                os.close(call_descriptor)
+        except (OSError, json.JSONDecodeError, ContractError) as exc:
+            raise ContractError("既存call recordのseedを検証できません") from exc
+        if isinstance(record, dict) and record.get("seed") == seed:
+            raise ContractError("provider callのseedが既存物理callと重複しています")
 
 
 def _write_record(
@@ -155,6 +224,8 @@ def _write_record(
     settings_id: str | None = None,
     workspace_root: Path | None = None,
     record_anchor: _RecordAnchor | None = None,
+    runtime_descriptor: int | None = None,
+    directory_descriptor: int | None = None,
     role: str = "provider",
     input_refs: list[str] | None = None,
     target_candidate_id: str | None = None,
@@ -165,15 +236,21 @@ def _write_record(
     if workspace_root is None:
         raise ContractError("call recordを保存するにはworkspace_rootが必要です")
     owns_anchor = record_anchor is None
-    anchor = record_anchor or _RecordAnchor.open(Path(workspace_root), Path(directory))
+    anchor = record_anchor or _RecordAnchor.open(
+        Path(workspace_root),
+        Path(directory),
+        runtime_descriptor=runtime_descriptor,
+        directory_descriptor=directory_descriptor,
+    )
     try:
         anchor.assert_current()
-        call_id = f"call-{reserve_counter_at(anchor.root_descriptor, 'next_call'):06d}"
+        call_id = f"call-{reserve_counter_at(anchor.root_descriptor, 'next_call', runtime_descriptor=anchor.runtime_descriptor):06d}"
         try:
             os.mkdir(call_id, 0o700, dir_fd=anchor.directory_descriptor)
         except FileExistsError as exc:
             raise ContractError("call counterのrecord directoryが既に存在します") from exc
         target_name = call_id
+        record_identity: tuple[int, int] | None = None
         try:
             target_descriptor = os.open(
                 target_name,
@@ -201,16 +278,51 @@ def _write_record(
                     "transport": transport,
                     "validation": validation,
                 }
-                atomic_write_text(directory_fd_path(target_descriptor) / "record.json", _canonical_json(record) + "\n")
+                record_identity = atomic_write_text_noreplace(
+                    directory_fd_path(target_descriptor) / "record.json",
+                    _canonical_json(record) + "\n",
+                )
+                assert_file_identity_at(target_descriptor, "record.json", record_identity)
+                assert_directory_fd_identity(directory_fd_path(anchor.directory_descriptor) / target_name, target_descriptor)
             finally:
                 os.close(target_descriptor)
             anchor.assert_current()
             return call_id
-        except Exception:
-            try:
-                remove_directory_at(anchor.directory_descriptor, target_name)
-            except OSError:
-                pass
+        except Exception as error:
+            record_identity = getattr(error, "_storycraft_published_identity", record_identity)
+            remove_target = False
+            if record_identity is None:
+                try:
+                    probe_descriptor = os.open(
+                        target_name,
+                        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=anchor.directory_descriptor,
+                    )
+                    try:
+                        remove_target = not os.listdir(probe_descriptor)
+                    finally:
+                        os.close(probe_descriptor)
+                except OSError:
+                    remove_target = False
+            else:
+                try:
+                    probe_descriptor = os.open(
+                        target_name,
+                        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=anchor.directory_descriptor,
+                    )
+                    try:
+                        assert_file_identity_at(probe_descriptor, "record.json", record_identity)
+                        remove_target = True
+                    finally:
+                        os.close(probe_descriptor)
+                except (OSError, ContractError):
+                    remove_target = False
+            if remove_target:
+                try:
+                    remove_directory_at(anchor.directory_descriptor, target_name)
+                except OSError:
+                    pass
             raise
     finally:
         if owns_anchor:
@@ -292,8 +404,11 @@ def _generate_with_anchor(
 ) -> dict[str, Any] | str:
     """Invoke the non-streaming OpenAI-compatible structured or prose endpoint."""
     base_url = normalized_v1_base_url(endpoint)
+    capability_seed = seed + 1
+    _assert_seed_available(record_anchor.directory_descriptor, capability_seed)
+    _assert_seed_available(record_anchor.directory_descriptor, seed)
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
-                                 technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
+                                 technical_attempt=technical_attempt, format_attempt=format_attempt, seed=capability_seed,
                                  settings_id=settings_id, workspace_root=workspace_root, record_anchor=record_anchor)
     # Use model's max context from capability, not settings
     options = {"num_ctx": context_length, "seed": seed}
@@ -395,6 +510,8 @@ def generate(
     settings_id: str | None = None,
     input_refs: list[str] | None = None,
     target_candidate_id: str | None = None,
+    runtime_directory_descriptor: int | None = None,
+    call_record_descriptor: int | None = None,
 ) -> dict[str, Any] | str:
     """Invoke the provider only with an FD-anchored audit record destination."""
     if call_record_dir is None:
@@ -402,7 +519,12 @@ def generate(
     if workspace_root is None:
         raise ContractError("call recordを保存するにはworkspace_rootが必要です")
     _require_settings_id(settings_id)
-    anchor = _RecordAnchor.open(Path(workspace_root), Path(call_record_dir))
+    anchor = _RecordAnchor.open(
+        Path(workspace_root),
+        Path(call_record_dir),
+        runtime_descriptor=runtime_directory_descriptor,
+        directory_descriptor=call_record_descriptor,
+    )
     try:
         return _generate_with_anchor(
             endpoint,

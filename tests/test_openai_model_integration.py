@@ -72,6 +72,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 endpoint = f"http://127.0.0.1:{server.server_port}"
                 runtime = Path(temporary) / "runtime"
                 runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "calls").mkdir()
                 call_dir = runtime / "calls"
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 with self.assertRaises(OllamaTechnicalError):
@@ -102,6 +103,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 endpoint = f"http://127.0.0.1:{server.server_port}"
                 runtime = Path(temporary) / "runtime"
                 runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "calls").mkdir()
                 call_dir = runtime / "calls"
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 with self.assertRaises(OllamaTechnicalError):
@@ -130,6 +132,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 endpoint = f"http://127.0.0.1:{server.server_port}"
                 runtime = Path(temporary) / "runtime"
                 runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "calls").mkdir()
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
                     llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
@@ -168,6 +171,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 endpoint = f"http://127.0.0.1:{server.server_port}"
                 runtime = Path(temporary) / "runtime"
                 runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "calls").mkdir()
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
                     llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
@@ -224,7 +228,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 self.assertEqual(posts[2]["response_format"]["json_schema"]["schema"]["properties"]["schema_version"]["const"], "candidate-response-v1")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted((root / "runtime/calls").glob("*/record.json"))]
                 self.assertEqual(len(calls), 8)
-                self.assertEqual([call["seed"] for call in calls], [1, 1, 3, 3, 5, 5, 7, 7])
+                self.assertEqual([call["seed"] for call in calls], [2, 1, 4, 3, 6, 5, 8, 7])
                 generated = next(call for call in calls if call["operation"] == "generate")
                 reviewed = next(call for call in calls if call["operation"] == "review")
                 self.assertEqual(generated["settings_id"], "settings-000001")

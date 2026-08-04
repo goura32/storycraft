@@ -12,6 +12,8 @@ from .filesystem_security import (
     atomic_write_text,
     assert_no_symlink_path,
     directory_fd_path,
+    directory_identity,
+    open_directory_at,
     read_text_at,
 )
 from .series_contracts import ContractError
@@ -33,7 +35,7 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
         raise ContractError(f"未知のartifact counterです: {counter}")
     root = workspace_root.expanduser()
     assert_no_symlink_path(root, require_directory=True)
-    root_descriptor = _open_directory_chain(root)
+    root_descriptor = _open_directory_chain(root, expected_identity=directory_identity(root))
     try:
         return reserve_counter_at(root_descriptor, counter)
     except OSError as exc:
@@ -42,15 +44,23 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
         os.close(root_descriptor)
 
 
-def reserve_counter_at(root_descriptor: int, counter: str) -> int:
+def reserve_counter_at(
+    root_descriptor: int,
+    counter: str,
+    *,
+    runtime_descriptor: int | None = None,
+) -> int:
     """Reserve a counter relative to an already opened workspace root FD."""
     if counter not in _COUNTERS:
         raise ContractError(f"未知のartifact counterです: {counter}")
-    runtime_descriptor = os.open(
-        "runtime",
-        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        dir_fd=root_descriptor,
-    )
+    if runtime_descriptor is None:
+        runtime_descriptor = open_directory_at(
+            root_descriptor,
+            ("runtime",),
+            expected_identity=directory_identity(directory_fd_path(root_descriptor) / "runtime"),
+        )
+    else:
+        runtime_descriptor = os.dup(runtime_descriptor)
     try:
         with _COUNTER_LOCK:
             lock_descriptor = os.open(

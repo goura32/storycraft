@@ -38,7 +38,14 @@ def _open_relative_directory(directory_fd: int, parts: tuple[str, ...]) -> int:
         for part in parts:
             if part in {"", ".", ".."}:
                 raise ContractError("directory fd相対pathが不正です")
+            expected = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+            if stat.S_ISLNK(expected.st_mode) or not stat.S_ISDIR(expected.st_mode):
+                raise ContractError("directory fd相対pathが通常directoryではありません")
             next_fd = os.open(part, flags, dir_fd=current_fd)
+            actual = os.fstat(next_fd)
+            if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                os.close(next_fd)
+                raise ContractError("directory fd相対pathがopen前に置換されました")
             os.close(current_fd)
             current_fd = next_fd
         return current_fd
@@ -144,6 +151,29 @@ def assert_directory_fd_identity(path: Path, descriptor: int) -> None:
         raise ContractError("directoryが検証後に置換されました")
 
 
+def directory_identity(path: Path, *, missing_ok: bool = False) -> tuple[int, int] | None:
+    """Capture the identity of a directory before handing its path to an opener."""
+    absolute = absolute_without_resolving(path)
+    try:
+        assert_no_symlink_path(absolute, require_directory=not missing_ok)
+        anchored = _directory_fd_anchor(absolute)
+        if anchored is not None:
+            descriptor = _open_relative_directory(anchored[0], anchored[1])
+            try:
+                descriptor_stat = os.fstat(descriptor)
+            finally:
+                os.close(descriptor)
+        else:
+            descriptor_stat = os.stat(absolute, follow_symlinks=False)
+    except FileNotFoundError:
+        if missing_ok:
+            return None
+        raise ContractError("directoryが存在しません")
+    if stat.S_ISLNK(descriptor_stat.st_mode) or not stat.S_ISDIR(descriptor_stat.st_mode):
+        raise ContractError("pathは通常directoryでなければなりません")
+    return descriptor_stat.st_dev, descriptor_stat.st_ino
+
+
 def is_directory_fd_path(path: Path) -> bool:
     return _directory_fd_anchor(path) is not None
 
@@ -192,34 +222,29 @@ def assert_no_symlink_file_path(path: Path, *, require_file: bool = False) -> Pa
     return absolute
 
 
-def ensure_directory_nofollow(path: Path, *, exist_ok: bool = True) -> Path:
-    target = Path(path).absolute()
-    assert_no_symlink_path(target.parent, require_directory=True)
-    directory_fd = _open_directory_chain(target.parent)
-    try:
-        try:
-            os.mkdir(target.name, 0o755, dir_fd=directory_fd)
-        except FileExistsError:
-            if not exist_ok:
-                raise
-            assert_no_symlink_path(target, require_directory=True)
-    finally:
-        os.close(directory_fd)
-    return assert_no_symlink_path(target, require_directory=True)
-
-
-def ensure_directory_chain_nofollow(path: Path) -> Path:
-    """Create every component of a directory chain without following symlinks."""
+def ensure_directory_chain_nofollow_fd(path: Path) -> tuple[Path, int]:
+    """Create a directory chain and retain the identity-checked final FD."""
     target = absolute_without_resolving(path)
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(os.fspath(Path(target.anchor)), flags)
     try:
         for part in target.parts[1:]:
+            expected = None
             try:
-                os.mkdir(part, 0o755, dir_fd=descriptor)
-            except FileExistsError:
-                pass
+                expected = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
+                if stat.S_ISLNK(expected.st_mode) or not stat.S_ISDIR(expected.st_mode):
+                    raise ContractError("directory chainに通常directoryでないentryがあります")
+            except FileNotFoundError:
+                try:
+                    os.mkdir(part, 0o755, dir_fd=descriptor)
+                except FileExistsError as exc:
+                    raise ContractError("directory chainがopen前に競合しました") from exc
+                expected = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
             next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            actual = os.fstat(next_descriptor)
+            if expected is None or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                os.close(next_descriptor)
+                raise ContractError("directory chainがopen前に置換されました")
             os.close(descriptor)
             descriptor = next_descriptor
     except OSError as exc:
@@ -228,8 +253,7 @@ def ensure_directory_chain_nofollow(path: Path) -> Path:
     except Exception:
         os.close(descriptor)
         raise
-    os.close(descriptor)
-    return assert_no_symlink_path(target, require_directory=True)
+    return target, descriptor
 
 
 def create_unique_directory_at(directory_fd: int, prefix: str) -> str:
@@ -244,26 +268,79 @@ def create_unique_directory_at(directory_fd: int, prefix: str) -> str:
     raise ContractError("一時directory名を確保できません")
 
 
-def ensure_directory_at(directory_fd: int, parts: tuple[str, ...], *, exist_ok: bool = True) -> int:
+def ensure_directory_at(
+    directory_fd: int,
+    parts: tuple[str, ...],
+    *,
+    exist_ok: bool = True,
+    reject_existing_final: bool = False,
+) -> int:
     """Create/open a relative directory chain while retaining its final FD."""
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     current_fd = os.dup(directory_fd)
     try:
-        for part in parts:
+        for index, part in enumerate(parts):
             if part in {"", ".", ".."}:
                 raise ContractError("directory相対pathが不正です")
-            if exist_ok:
+            expected = None
+            try:
+                expected = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+                if stat.S_ISLNK(expected.st_mode) or not stat.S_ISDIR(expected.st_mode):
+                    raise ContractError("directory相対pathに通常directoryでないentryがあります")
+            except FileNotFoundError:
+                if not exist_ok:
+                    raise
                 try:
                     os.mkdir(part, 0o755, dir_fd=current_fd)
-                except FileExistsError:
-                    pass
+                except FileExistsError as exc:
+                    raise ContractError("directory相対pathがopen前に競合しました") from exc
+                expected = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+            else:
+                if not exist_ok:
+                    raise FileExistsError(part)
+                if reject_existing_final and index == len(parts) - 1:
+                    raise ContractError("directory相対pathが作成前に競合しました")
             next_fd = os.open(part, flags, dir_fd=current_fd)
+            actual = os.fstat(next_fd)
+            if expected is None or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                os.close(next_fd)
+                raise ContractError("directory相対pathがopen前に置換されました")
             os.close(current_fd)
             current_fd = next_fd
         return current_fd
     except Exception:
         os.close(current_fd)
         raise
+
+
+def directory_entry_identity(directory_fd: int, name: str, *, require_directory: bool = True) -> tuple[int, int]:
+    """Read one no-follow directory entry identity from an already-held FD."""
+    try:
+        entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise ContractError(f"directory entryを検証できません: {name}") from exc
+    if stat.S_ISLNK(entry.st_mode) or (require_directory and not stat.S_ISDIR(entry.st_mode)):
+        raise ContractError(f"directory entryが通常directoryではありません: {name}")
+    return entry.st_dev, entry.st_ino
+
+
+def open_directory_at(
+    directory_fd: int,
+    parts: tuple[str, ...],
+    *,
+    expected_identity: tuple[int, int] | None = None,
+) -> int:
+    """Open an existing relative directory chain with stat/open identity checks."""
+    descriptor = _open_relative_directory(directory_fd, parts)
+    if expected_identity is not None:
+        try:
+            descriptor_stat = os.fstat(descriptor)
+            if expected_identity != (descriptor_stat.st_dev, descriptor_stat.st_ino):
+                raise ContractError("directory fdが検査後に置換されました")
+        except Exception:
+            os.close(descriptor)
+            raise
+    return descriptor
 
 
 def _workspace_relative_parts(root: Path, child: Path) -> tuple[str, ...]:
@@ -280,16 +357,35 @@ def _workspace_relative_parts(root: Path, child: Path) -> tuple[str, ...]:
         raise ContractError("workspace childがroot外を参照しています") from exc
 
 
-def open_workspace_directory(root: Path, child: Path, *, create: bool = True) -> tuple[int, int]:
+def open_workspace_directory(
+    root: Path,
+    child: Path,
+    *,
+    create: bool = True,
+    expected_root_identity: tuple[int, int] | None = None,
+    expected_child_identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
     """Open workspace root and child directory FDs before pathname races occur."""
     root_abs = assert_no_symlink_path(root, require_directory=True)
     child_abs = absolute_without_resolving(child)
     assert_within(root_abs, child_abs)
-    root_fd = _open_directory_chain(root_abs)
+    if expected_root_identity is None:
+        expected_root_identity = directory_identity(root_abs)
+    if expected_child_identity is None:
+        expected_child_identity = directory_identity(child_abs, missing_ok=create)
+    root_fd = _open_directory_chain(root_abs, expected_identity=expected_root_identity)
     try:
-        assert_directory_fd_identity(root_abs, root_fd)
-        child_fd = ensure_directory_at(root_fd, _workspace_relative_parts(root_abs, child_abs), exist_ok=create)
-        assert_directory_fd_identity(child_abs, child_fd)
+        relative_parts = _workspace_relative_parts(root_abs, child_abs)
+        child_fd = ensure_directory_at(
+            root_fd,
+            relative_parts,
+            exist_ok=create,
+            reject_existing_final=create and expected_child_identity is None,
+        )
+        child_stat = os.fstat(child_fd)
+        if expected_child_identity is not None and expected_child_identity != (child_stat.st_dev, child_stat.st_ino):
+            os.close(child_fd)
+            raise ContractError("workspace childがopen前に置換されました")
         return root_fd, child_fd
     except Exception:
         os.close(root_fd)
@@ -341,13 +437,23 @@ def remove_directory_at(parent_fd: int, name: str) -> None:
     os.rmdir(name, dir_fd=parent_fd)
 
 
-def _open_directory_chain(directory: Path) -> int:
+def _open_directory_chain(
+    directory: Path,
+    *,
+    expected_identity: tuple[int, int] | None = None,
+) -> int:
     """Open every directory component without following symlinks."""
     anchored = _directory_fd_anchor(directory)
     if anchored is not None:
         descriptor, parts = anchored
         try:
-            return _open_relative_directory(descriptor, parts)
+            opened = _open_relative_directory(descriptor, parts)
+            if expected_identity is not None:
+                opened_stat = os.fstat(opened)
+                if expected_identity != (opened_stat.st_dev, opened_stat.st_ino):
+                    os.close(opened)
+                    raise ContractError("directoryがopen前に置換されました")
+            return opened
         except OSError as exc:
             raise ContractError("directory fd相対pathが通常directoryではありません") from exc
     absolute = absolute_without_resolving(directory)
@@ -355,9 +461,20 @@ def _open_directory_chain(directory: Path) -> int:
     descriptor = os.open(os.fspath(Path(absolute.anchor)), flags)
     try:
         for part in absolute.parts[1:]:
+            expected = os.stat(part, dir_fd=descriptor, follow_symlinks=False)
+            if stat.S_ISLNK(expected.st_mode) or not stat.S_ISDIR(expected.st_mode):
+                raise ContractError("directory pathに通常directoryでないentryがあります")
             next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            actual = os.fstat(next_descriptor)
+            if (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino):
+                os.close(next_descriptor)
+                raise ContractError("directoryがopen中に置換されました")
             os.close(descriptor)
             descriptor = next_descriptor
+        if expected_identity is not None:
+            opened_stat = os.fstat(descriptor)
+            if expected_identity != (opened_stat.st_dev, opened_stat.st_ino):
+                raise ContractError("directoryがopen前に置換されました")
         return descriptor
     except Exception:
         os.close(descriptor)
@@ -367,7 +484,7 @@ def _open_directory_chain(directory: Path) -> int:
 def atomic_write_text(path: Path, content: str) -> None:
     """Publish one file with fsync and a directory-handle anchored rename."""
     target = assert_no_symlink_file_path(path)
-    directory_fd = _open_directory_chain(target.parent)
+    directory_fd = _open_directory_chain(target.parent, expected_identity=directory_identity(target.parent))
     temporary_name = f".{target.name}.{uuid4().hex}.tmp"
     temporary_fd: int | None = None
     try:
@@ -392,10 +509,77 @@ def atomic_write_text(path: Path, content: str) -> None:
         os.close(directory_fd)
 
 
+def atomic_write_text_noreplace(path: Path, content: str) -> tuple[int, int]:
+    """Publish one file atomically without replacing a competitor."""
+    target = assert_no_symlink_file_path(path)
+    directory_fd = _open_directory_chain(
+        target.parent,
+        expected_identity=directory_identity(target.parent),
+    )
+    temporary_name = f".{target.name}.{uuid4().hex}.tmp"
+    temporary_fd: int | None = None
+    published = False
+    published_identity: tuple[int, int] | None = None
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        temporary_fd = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
+            temporary_fd = None
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        rename_noreplace_at(directory_fd, temporary_name, directory_fd, target.name)
+        target_stat = os.stat(target.name, dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISREG(target_stat.st_mode):
+            raise ContractError("atomic公開targetが通常fileではありません")
+        published_identity = (target_stat.st_dev, target_stat.st_ino)
+        published = True
+        os.fsync(directory_fd)
+        return published_identity
+    except Exception as exc:
+        if published:
+            setattr(exc, "_storycraft_published_target", True)
+            setattr(exc, "_storycraft_published_identity", published_identity)
+        if temporary_fd is not None:
+            os.close(temporary_fd)
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        os.close(directory_fd)
+
+
+def assert_file_identity_at(directory_fd: int, name: str, expected_identity: tuple[int, int]) -> None:
+    """Fail closed when a published regular file leaf changed after publication."""
+    try:
+        target_stat = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise ContractError("公開後のfile identityを検証できません") from exc
+    if not stat.S_ISREG(target_stat.st_mode) or (target_stat.st_dev, target_stat.st_ino) != expected_identity:
+        raise ContractError("公開後のfileが置換されました")
+
+
+def unlink_if_identity_at(directory_fd: int, name: str, expected_identity: tuple[int, int]) -> bool:
+    """Unlink a regular file only while its inode is still the published inode."""
+    try:
+        target_stat = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    if not stat.S_ISREG(target_stat.st_mode) or (target_stat.st_dev, target_stat.st_ino) != expected_identity:
+        return False
+    try:
+        os.unlink(name, dir_fd=directory_fd)
+    except OSError:
+        return False
+    return True
+
+
 def open_nofollow(path: Path, flags: int, mode: int = 0o600) -> int:
     """Open a leaf relative to an already verified no-symlink directory chain."""
     target = assert_no_symlink_file_path(path)
-    directory_fd = _open_directory_chain(target.parent)
+    directory_fd = _open_directory_chain(target.parent, expected_identity=directory_identity(target.parent))
     try:
         return os.open(
             target.name,
@@ -421,7 +605,13 @@ def read_text_nofollow(path: Path, *, encoding: str = "utf-8") -> str:
             os.close(descriptor)
 
 
-def read_text_at(directory_fd: int, relative: Path, *, encoding: str = "utf-8") -> str:
+def read_text_at(
+    directory_fd: int,
+    relative: Path,
+    *,
+    encoding: str = "utf-8",
+    expected_identity: tuple[int, int] | None = None,
+) -> str:
     """Read a relative regular file through a directory-fd anchored chain."""
     relative = Path(relative)
     if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
@@ -445,8 +635,11 @@ def read_text_at(directory_fd: int, relative: Path, *, encoding: str = "utf-8") 
             dir_fd=current_fd,
         )
         try:
-            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            leaf_stat = os.fstat(descriptor)
+            if not stat.S_ISREG(leaf_stat.st_mode):
                 raise ContractError("directory fdから読むleafは通常fileでなければなりません")
+            if expected_identity is not None and expected_identity != (leaf_stat.st_dev, leaf_stat.st_ino):
+                raise ContractError("prompt assetが検査後に置換されました")
             with os.fdopen(descriptor, "r", encoding=encoding) as handle:
                 descriptor = -1
                 return handle.read()
@@ -460,7 +653,7 @@ def read_text_at(directory_fd: int, relative: Path, *, encoding: str = "utf-8") 
 def unlink_nofollow(path: Path, *, missing_ok: bool = False) -> None:
     """Remove one leaf through a no-follow directory descriptor."""
     target = assert_no_symlink_file_path(path)
-    directory_fd = _open_directory_chain(target.parent)
+    directory_fd = _open_directory_chain(target.parent, expected_identity=directory_identity(target.parent))
     try:
         try:
             os.unlink(target.name, dir_fd=directory_fd)

@@ -248,7 +248,7 @@ class RequestIntakeStageService:
                 "schema_version": 1, "call_id": call_id, "operation": operation,
                 "role": "test-double", "target_candidate_id": target_candidate_id,
                 "input_refs": input_refs, "technical_attempt": 1, "format_attempt": 1,
-                "seed": 1, "endpoint": "test-double", "model": "test-double",
+                "seed": int(call_id.rsplit("-", 1)[1]), "endpoint": "test-double", "model": "test-double",
                 "settings_id": settings_id,
                 "request": json.dumps({"stage": "request_intake", "operation": operation}, sort_keys=True),
                 "response": json.dumps(response, ensure_ascii=False, sort_keys=True),

@@ -19,6 +19,7 @@ from storycraft.selection_authority import resolve_selection
 from storycraft.selection_snapshot import SelectionSnapshotStore
 from tests.test_volume_publication_service import workspace as publication_workspace, write_json
 from storycraft.commit_recovery import recover_pending_commit
+import storycraft.workspace as workspace_module
 
 
 class DeferredAuditRegressionTests(unittest.TestCase):
@@ -122,12 +123,12 @@ class DeferredAuditRegressionTests(unittest.TestCase):
             original_writer = LLMClient._write_raw_file
             call_count = 0
 
-            def write_pair_file(path: Path, content: str) -> None:
+            def write_pair_file(path: Path, content: str) -> tuple[int, int]:
                 nonlocal call_count
                 if call_count == 1:
                     raise OSError("markdown write failed")
                 call_count += 1
-                original_writer(path, content)
+                return original_writer(path, content)
 
             with patch.object(LLMClient, "_write_raw_file", side_effect=write_pair_file):
                 with self.assertRaises(OSError):
@@ -249,14 +250,19 @@ class DeferredAuditRegressionTests(unittest.TestCase):
             backup = base / "raw-logs-original"
             outside = base / "outside"
             outside.mkdir()
-            original_recover = __import__("storycraft.workspace", fromlist=["_recover_stale_raw_log_transactions"])._recover_stale_raw_log_transactions
+            original_check = workspace_module._assert_directory_fd_identity
+            checks = 0
 
             def swap_raw_logs(path: Path, descriptor: int) -> None:
-                raw_dir.rename(backup)
-                raw_dir.symlink_to(outside, target_is_directory=True)
-                original_recover(path, descriptor)
+                nonlocal checks
+                original_check(path, descriptor)
+                if path == raw_dir:
+                    checks += 1
+                    if checks == 1:
+                        raw_dir.rename(backup)
+                        raw_dir.symlink_to(outside, target_is_directory=True)
 
-            with patch("storycraft.workspace._recover_stale_raw_log_transactions", side_effect=swap_raw_logs):
+            with patch.object(workspace_module, "_assert_directory_fd_identity", side_effect=swap_raw_logs):
                 with self.assertRaises(ContractError):
                     validate_workspace(root)
             raw_dir.unlink()

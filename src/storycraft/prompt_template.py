@@ -13,7 +13,7 @@ import weakref
 from jinja2 import BaseLoader, Environment, StrictUndefined
 from jsonschema import Draft202012Validator
 
-from .filesystem_security import _open_directory_chain, assert_no_symlink_path, read_text_at
+from .filesystem_security import _open_directory_chain, assert_no_symlink_path, directory_identity, read_text_at
 from .series_contracts import ContractError
 
 
@@ -26,9 +26,14 @@ class _NoFollowPromptLoader(BaseLoader):
     def get_source(self, environment: Environment, template: str):
         del environment
         relative = Path(template)
-        path = self.owner._asset_path(relative, "template")
+        reference = self.owner._asset_references.pop(relative, None)
+        if reference is None:
+            path = self.owner._asset_path(relative, "template")
+            expected_identity = self.owner._asset_identities.get(path)
+        else:
+            path, expected_identity = reference
         try:
-            source = self.owner._read_asset_text(path)
+            source = self.owner._read_asset_text(path, expected_identity=expected_identity)
         except OSError as exc:
             raise ContractError("templateを安全に読み込めません") from exc
         return source, str(path), lambda: False
@@ -39,7 +44,10 @@ class PromptTemplate:
 
     def __init__(self, template_dir: Path):
         self.template_dir = assert_no_symlink_path(template_dir.expanduser(), require_directory=True)
-        self._root_descriptor = _open_directory_chain(self.template_dir)
+        self._root_descriptor = _open_directory_chain(
+            self.template_dir,
+            expected_identity=directory_identity(self.template_dir),
+        )
         self._root_finalizer = weakref.finalize(self, os.close, self._root_descriptor)
         self.env = Environment(
             loader=_NoFollowPromptLoader(self),
@@ -55,6 +63,8 @@ class PromptTemplate:
             "separators": (",", ":"),
         }
         self._schema_cache: dict[Path, dict[str, object]] = {}
+        self._asset_identities: dict[Path, tuple[int, int]] = {}
+        self._asset_references: dict[Path, tuple[Path, tuple[int, int]]] = {}
 
     @staticmethod
     def _component(value: object, label: str) -> str:
@@ -75,6 +85,12 @@ class PromptTemplate:
             raise ContractError(f"{label}がprompt root外を参照します") from exc
         if resolved.is_symlink() or not resolved.is_file():
             raise ContractError(f"{label}が通常fileではありません")
+        file_stat = os.stat(resolved, follow_symlinks=False)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ContractError(f"{label}が通常fileではありません")
+        identity = (file_stat.st_dev, file_stat.st_ino)
+        self._asset_identities[resolved] = identity
+        self._asset_references[Path(relative)] = (resolved, identity)
         return resolved
 
     def _assert_root_descriptor(self) -> None:
@@ -86,13 +102,22 @@ class PromptTemplate:
         if not stat.S_ISDIR(path_stat.st_mode) or (path_stat.st_dev, path_stat.st_ino) != (fd_stat.st_dev, fd_stat.st_ino):
             raise ContractError("prompt rootが初期化時のdirectoryから置換されています")
 
-    def _read_asset_text(self, path: Path) -> str:
+    def _read_asset_text(self, path: Path, *, expected_identity: tuple[int, int] | None = None) -> str:
         self._assert_root_descriptor()
         try:
             relative = path.relative_to(self.template_dir)
         except ValueError as exc:
             raise ContractError("prompt assetがroot外を参照します") from exc
-        return read_text_at(self._root_descriptor, relative)
+        if expected_identity is None:
+            expected_identity = self._asset_identities.pop(path, None)
+        else:
+            self._asset_identities.pop(path, None)
+        for key, reference in list(self._asset_references.items()):
+            if reference[0] == path:
+                self._asset_references.pop(key, None)
+        if expected_identity is None:
+            raise ContractError("prompt assetの検証済みidentityがありません")
+        return read_text_at(self._root_descriptor, relative, expected_identity=expected_identity)
 
     def close(self) -> None:
         finalizer = getattr(self, "_root_finalizer", None)
@@ -114,6 +139,7 @@ class PromptTemplate:
         cached = self._schema_cache.get(cache_key)
         if cached is not None:
             self._assert_root_descriptor()
+            self._asset_identities.pop(cache_key, None)
             return cached
 
         try:

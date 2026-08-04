@@ -7,7 +7,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from storycraft.ollama import ContractError, OllamaResponseFormatError, generate
+from storycraft.ollama import ContractError, OllamaResponseFormatError, generate, normalized_v1_base_url
 from storycraft.artifact_ids import initial_counters
 
 
@@ -66,6 +66,12 @@ class OllamaTests(unittest.TestCase):
         runtime.mkdir(parents=True)
         (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
         return runtime / "calls", workspace
+
+    def test_normalized_v1_base_url_collapses_duplicate_suffix(self) -> None:
+        self.assertEqual(
+            normalized_v1_base_url("http://127.0.0.1:11434/v1/v1/"),
+            "http://127.0.0.1:11434/v1",
+        )
 
     def test_rejects_unrecorded_provider_call_before_http(self):
         with self.assertRaisesRegex(ContractError, "call record"):
@@ -184,6 +190,46 @@ class OllamaTests(unittest.TestCase):
                     call_record_dir=records, settings_id="settings-000001",
                 )
             self.assertFalse(records.exists())
+
+    def test_rejects_noncanonical_call_record_directory_before_http(self) -> None:
+        other = self.workspace_root / "runtime/other-calls"
+        with self.assertRaisesRegex(ContractError, "runtime/calls"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=other,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+            )
+        self.assertFalse(other.exists())
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_reused_physical_seed_before_http(self) -> None:
+        generate(
+            self.endpoint,
+            "m",
+            "p",
+            {"type": "object"},
+            call_record_dir=self.records,
+            workspace_root=self.workspace_root,
+            settings_id="settings-000001",
+            seed=1,
+        )
+        Handler.paths = []
+        with self.assertRaisesRegex(ContractError, "seed"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                seed=1,
+            )
+        self.assertEqual(Handler.paths, [])
 
     def test_rejects_call_records_outside_workspace_root_before_http(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

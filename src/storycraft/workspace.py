@@ -22,9 +22,10 @@ from .filesystem_security import (
     assert_no_symlink_file_path,
     assert_no_symlink_path,
     create_unique_directory_at,
+    directory_identity,
     directory_fd_path,
     ensure_directory_at,
-    ensure_directory_chain_nofollow,
+    ensure_directory_chain_nofollow_fd,
     is_directory_fd_path,
     open_nofollow,
     owned_directory_fd_path,
@@ -89,8 +90,7 @@ def create_workspace(
     _validate_settings(settings)
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
-    parent = ensure_directory_chain_nofollow(root.parent)
-    parent_descriptor = _open_directory_chain(parent)
+    parent, parent_descriptor = ensure_directory_chain_nofollow_fd(root.parent)
     try:
         staging_name = create_unique_directory_at(parent_descriptor, f".{root.name}.staging-")
     except Exception:
@@ -256,10 +256,8 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
     for relative in ("runtime/counters.json", "runtime/lock", "runtime/counters.lock", "runtime/run-state.json"):
         assert_no_symlink_file_path(root / relative, require_file=True)
     raw_dir = assert_no_symlink_path(root / "runtime/raw_logs", require_directory=True)
-    raw_descriptor = _open_directory_chain(raw_dir)
+    raw_descriptor = _open_directory_chain(raw_dir, expected_identity=directory_identity(raw_dir))
     try:
-        _assert_directory_fd_identity(raw_dir, raw_descriptor)
-        _recover_stale_raw_log_transactions(raw_dir, raw_descriptor)
         _assert_directory_fd_identity(raw_dir, raw_descriptor)
         stems: dict[str, set[str]] = {}
         for name in os.listdir(raw_descriptor):
@@ -280,73 +278,6 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
         _assert_directory_fd_identity(raw_dir, raw_descriptor)
     finally:
         os.close(raw_descriptor)
-
-
-def _raw_log_read_text(directory_fd: int, name: str) -> str:
-    descriptor = os.open(
-        name,
-        os.O_RDONLY
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_NONBLOCK", 0),
-        dir_fd=directory_fd,
-    )
-    try:
-        entry_stat = os.fstat(descriptor)
-        if not stat.S_ISREG(entry_stat.st_mode):
-            raise ContractError("runtime/raw_logsのreservationが通常fileではありません")
-        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
-            descriptor = -1
-            return handle.read()
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-
-
-def _raw_log_unlink(directory_fd: int, name: str) -> None:
-    try:
-        os.unlink(name, dir_fd=directory_fd)
-    except FileNotFoundError:
-        pass
-
-
-def _recover_stale_raw_log_transactions(raw_dir: Path, raw_descriptor: int) -> None:
-    del raw_dir
-    for reservation in os.listdir(raw_descriptor):
-        if not (reservation.startswith(".") and reservation.endswith(".reserve")):
-            continue
-        try:
-            owner = _raw_log_read_text(raw_descriptor, reservation).strip()
-            pid = int(owner) if owner else 0
-        except (OSError, ValueError):
-            raise ContractError("runtime/raw_logsのreservationが不正です")
-        if pid > 0:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                raise ContractError("runtime/raw_logsのreservation所有者を確認できません")
-            else:
-                raise ContractError("runtime/raw_logsで別processのtransactionが実行中です")
-        stem = reservation[1:-len(".reserve")]
-        json_name = f"{stem}.json"
-        markdown_name = f"{stem}.md"
-        for name in os.listdir(raw_descriptor):
-            if name.startswith(f".{stem}.") and name.endswith(".tmp"):
-                _raw_log_unlink(raw_descriptor, name)
-        def is_regular(name: str) -> bool:
-            try:
-                entry_stat = os.stat(name, dir_fd=raw_descriptor, follow_symlinks=False)
-            except FileNotFoundError:
-                return False
-            return stat.S_ISREG(entry_stat.st_mode)
-        json_exists = is_regular(json_name)
-        markdown_exists = is_regular(markdown_name)
-        if json_exists != markdown_exists:
-            _raw_log_unlink(raw_descriptor, json_name)
-            _raw_log_unlink(raw_descriptor, markdown_name)
-        _raw_log_unlink(raw_descriptor, reservation)
 
 
 def _validate_selection_scene_commit_lineage(root: Path, snapshot: dict[str, Any], resolved: dict[str, dict[str, Any]]) -> None:
@@ -467,7 +398,13 @@ def _validate_persisted_records(root: Path, resolution_cache: dict[str, dict[str
         review_records = {review_id: _reference(review_id, reviews, f"quality {identifier} review_record_ids") for review_id in record["review_record_ids"]}
         validate_quality_evidence(record, candidate["payload"], review_records)
     for identifier, record in adoptions.items(): validate_record("adoption", identifier, record)
-    for identifier, record in calls.items(): validate_call_record(identifier, record)
+    seen_call_seeds: set[int] = set()
+    for identifier, record in calls.items():
+        validate_call_record(identifier, record)
+        seed = record["seed"]
+        if seed in seen_call_seeds:
+            raise ContractError(f"call {identifier}のseedが既存物理callと重複しています")
+        seen_call_seeds.add(seed)
     known = set(records) | set(selections) | set(candidates) | set(reviews) | set(qualities) | set(adoptions) | set(calls)
     for identifier, record in calls.items():
         _require_references(record["input_refs"], known, f"call {identifier} input_refs")

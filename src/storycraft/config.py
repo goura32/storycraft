@@ -1,9 +1,7 @@
 """Provider-boundary credential validation.
 
 The public Storycraft settings contract is the flat JSON payload validated by
-``workspace._validate_settings``.  This module intentionally has no YAML loader,
-default settings object, or public Settings class.  The remaining helper adapts
-only an internal provider-client mapping when the optional SDK boundary is used.
+``workspace._validate_settings``.  The remaining helpers validate and adapt only the internal HTTP-boundary mapping; no SDK client boundary is exposed.
 """
 from __future__ import annotations
 

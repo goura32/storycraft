@@ -5,7 +5,7 @@ from collections.abc import Callable
 import os
 from pathlib import Path
 
-from .filesystem_security import _open_directory_chain, assert_no_symlink_path
+from .filesystem_security import _open_directory_chain, assert_no_symlink_path, directory_identity, rename_noreplace_at
 from .series_contracts import ContractError
 
 
@@ -16,7 +16,7 @@ def fsync_directory(path: Path) -> None:
     """POSIX環境でdirectory entryを同期する。"""
     if os.name != "posix":
         return
-    descriptor = _open_directory_chain(path)
+    descriptor = _open_directory_chain(path, expected_identity=directory_identity(path))
     try:
         os.fsync(descriptor)
     finally:
@@ -76,12 +76,14 @@ def finalize_immutable_directory(
             "stagingとfinalは同一filesystem上に存在する必要があります"
         )
 
+    staging_parent_identity = directory_identity(staging.parent)
+    final_parent_identity = directory_identity(final_parent)
     assert_no_symlink_path(staging.parent, require_directory=True)
     assert_no_symlink_path(final_parent, require_directory=True)
-    staging_parent_fd = _open_directory_chain(staging.parent)
-    final_parent_fd = _open_directory_chain(final_parent)
+    staging_parent_fd = _open_directory_chain(staging.parent, expected_identity=staging_parent_identity)
+    final_parent_fd = _open_directory_chain(final_parent, expected_identity=final_parent_identity)
     try:
-        os.rename(staging.name, final.name, src_dir_fd=staging_parent_fd, dst_dir_fd=final_parent_fd)
+        rename_noreplace_at(staging_parent_fd, staging.name, final_parent_fd, final.name)
         os.fsync(final_parent_fd)
     except OSError as exc:
         raise ContractError(

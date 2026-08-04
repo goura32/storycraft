@@ -25,6 +25,10 @@ from storycraft.ollama import OllamaTechnicalError, _HTTP_OPENER, generate, urlo
 from storycraft.prompt_template import PromptTemplate
 from storycraft.series_contracts import ContractError
 from storycraft.workspace import create_workspace
+from storycraft.workspace import validate_workspace
+import storycraft.filesystem_security as filesystem_module
+import storycraft.llm as llm_module
+import storycraft.ollama as ollama_module
 import storycraft.workspace as workspace_module
 
 
@@ -115,6 +119,45 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
                 if backup.exists():
                     backup.rename(calls)
             self.assertEqual(list(external.iterdir()), [])
+
+    def test_llm_call_rejects_runtime_replacement_before_provider_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            client = LLMClient(
+                SimpleNamespace(
+                    settings_id="settings-000001",
+                    llm={
+                        "ollama_http_boundary": True,
+                        "base_url": "http://127.0.0.1:1/v1",
+                        "model": "probe-model",
+                    },
+                ),
+                root / "runtime/raw_logs",
+                workspace_root=root,
+            )
+            runtime = root / "runtime"
+            backup = base / "runtime-original"
+            replacement = base / "runtime-replacement"
+            (replacement / "calls").mkdir(parents=True)
+            (replacement / "raw_logs").mkdir()
+            (replacement / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+            runtime.rename(backup)
+            replacement.rename(runtime)
+            try:
+                with self.assertRaises(ContractError):
+                    client.call_once(
+                        [{"role": "user", "content": "probe"}, {"settings_id": "settings-000001"}],
+                        None,
+                        1,
+                    )
+            finally:
+                client.close()
+                runtime.rename(replacement)
+                backup.rename(runtime)
+            self.assertEqual(list((replacement / "calls").iterdir()), [])
 
     def test_raw_log_anchor_rejects_directory_swap_without_external_write(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -209,20 +252,372 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             self.assertFalse(root.exists())
             anchored.close()  # type: ignore[attr-defined]
 
-    def test_raw_reservation_fifo_is_rejected_without_blocking(self) -> None:
+    def test_workspace_first_open_race_rejects_replaced_parent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            raw_dir = Path(temporary) / "raw"
-            raw_dir.mkdir()
-            name = ".probe.reserve"
-            os.mkfifo(raw_dir / name)
-            descriptor = os.open(raw_dir, os.O_RDONLY | os.O_DIRECTORY)
+            base = Path(temporary)
+            parent = base / "parent"
+            parent.mkdir()
+            root = parent / "workspace"
+            external = base / "external-parent"
+            external.mkdir()
+            backup = base / "parent.backup"
+            original_open = filesystem_module.os.open
+            swapped = False
+
+            def raced_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if not swapped and path == parent.name and kwargs.get("dir_fd") is not None:
+                    swapped = True
+                    parent.rename(backup)
+                    external.rename(parent)
+                return original_open(path, flags, *args, **kwargs)
+
+            request = {
+                "title": "題名", "genre": ["幻想"], "premise": "前提",
+                "required_elements": [], "avoid": [], "ending_preference": "希望",
+                "volume_count": 4, "language": "ja",
+            }
+            settings = {
+                "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "probe",
+                "technical_retry_limit": 1, "quality_revision_limit": 1,
+                "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1],
+                "chapter_scene_range": [1, 1], "scene_text_char_range": [100, 100],
+            }
             try:
-                started = time.monotonic()
-                with self.assertRaises(ContractError):
-                    workspace_module._raw_log_read_text(descriptor, name)
-                self.assertLess(time.monotonic() - started, 1.0)
+                with patch.object(filesystem_module.os, "open", side_effect=raced_open):
+                    with self.assertRaises(ContractError):
+                        create_workspace(
+                            root, workspace_id="ws-probe", request=request, settings=settings,
+                            created_at="2026-08-05T00:00:00Z",
+                        )
+                self.assertFalse((parent / "workspace").exists())
             finally:
-                os.close(descriptor)
+                if parent.exists():
+                    parent.rename(external)
+                if backup.exists():
+                    backup.rename(parent)
+
+    def test_call_record_published_leaf_swap_is_rejected_without_deleting_competitor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            calls = root / "runtime/calls"
+            server = HTTPServer(("127.0.0.1", 0), _ProviderHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            original_write = ollama_module.atomic_write_text_noreplace
+            swapped = False
+
+            def swap_record_leaf(path: Path, content: str) -> tuple[int, int]:
+                nonlocal swapped
+                identity = original_write(path, content)
+                if not swapped and path.name == "record.json":
+                    path.unlink()
+                    path.write_text('{"attacker":true}\n', encoding="utf-8")
+                    swapped = True
+                return identity
+
+            try:
+                with patch.object(ollama_module, "atomic_write_text_noreplace", side_effect=swap_record_leaf):
+                    with self.assertRaises(ContractError):
+                        generate(
+                            f"http://127.0.0.1:{server.server_port}",
+                            "probe-model",
+                            "probe",
+                            None,
+                            call_record_dir=calls,
+                            workspace_root=root,
+                            settings_id="settings-000001",
+                        )
+                leaf = calls / "call-000001/record.json"
+                self.assertEqual(leaf.read_text(encoding="utf-8"), '{"attacker":true}\n')
+                self.assertFalse((calls / "call-000002").exists())
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_call_record_directory_leaf_swap_is_rejected_without_deleting_original(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            calls = root / "runtime/calls"
+            backup = base / "call-original"
+            server = HTTPServer(("127.0.0.1", 0), _ProviderHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            original_write = ollama_module.atomic_write_text_noreplace
+            swapped = False
+
+            def swap_call_directory(path: Path, content: str) -> tuple[int, int]:
+                nonlocal swapped
+                identity = original_write(path, content)
+                if not swapped and path.name == "record.json":
+                    target_directory = Path(os.readlink(path.parent))
+                    target_directory.rename(backup)
+                    target_directory.mkdir()
+                    swapped = True
+                return identity
+
+            try:
+                with patch.object(ollama_module, "atomic_write_text_noreplace", side_effect=swap_call_directory):
+                    with self.assertRaises(ContractError):
+                        generate(
+                            f"http://127.0.0.1:{server.server_port}",
+                            "probe-model",
+                            "probe",
+                            None,
+                            call_record_dir=calls,
+                            workspace_root=root,
+                            settings_id="settings-000001",
+                        )
+                self.assertTrue((backup / "record.json").is_file())
+                self.assertEqual(list((calls / "call-000001").iterdir()), [])
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_call_record_first_open_race_rejects_replaced_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            calls = root / "runtime/calls"
+            external = Path(temporary) / "external-calls"
+            external.mkdir()
+            backup = root / "runtime/calls.backup"
+            original_open = ollama_module.open_workspace_directory
+            swapped = False
+
+            def raced_open(root_arg, child_arg, *, create=True, **kwargs):
+                nonlocal swapped
+                if not swapped:
+                    swapped = True
+                    calls.rename(backup)
+                    external.rename(calls)
+                return original_open(root_arg, child_arg, create=create, **kwargs)
+
+            try:
+                with patch.object(ollama_module, "open_workspace_directory", side_effect=raced_open):
+                    with self.assertRaises(ContractError):
+                        ollama_module.generate(
+                            "http://127.0.0.1:1", "probe-model", "probe", None,
+                            call_record_dir=calls, workspace_root=root, settings_id="settings-000001",
+                        )
+                self.assertEqual(list(calls.iterdir()), [])
+            finally:
+                if calls.exists():
+                    calls.rename(external)
+                if backup.exists():
+                    backup.rename(calls)
+
+    def test_raw_log_first_open_race_rejects_replaced_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            raw_dir = root / "runtime/raw_logs"
+            external = Path(temporary) / "external-raw"
+            external.mkdir()
+            backup = root / "runtime/raw_logs.backup"
+            original_open = llm_module.open_workspace_directory
+            swapped = False
+
+            def raced_open(root_arg, child_arg, *, create=True, **kwargs):
+                nonlocal swapped
+                if not swapped:
+                    swapped = True
+                    raw_dir.rename(backup)
+                    external.rename(raw_dir)
+                return original_open(root_arg, child_arg, create=create, **kwargs)
+
+            settings = SimpleNamespace(
+                settings_id="settings-000001",
+                llm={"ollama_http_boundary": True, "base_url": "http://127.0.0.1:1/v1", "model": "probe"},
+                retry={},
+            )
+            try:
+                with patch.object(llm_module, "open_workspace_directory", side_effect=raced_open):
+                    with self.assertRaises(ContractError):
+                        LLMClient(settings, raw_dir, workspace_root=root)
+                self.assertEqual(list(raw_dir.iterdir()), [])
+            finally:
+                if raw_dir.exists():
+                    raw_dir.rename(external)
+                if backup.exists():
+                    backup.rename(raw_dir)
+
+    def test_raw_post_publish_failure_rolls_back_published_pair_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            client = LLMClient(
+                SimpleNamespace(settings_id="settings-000001", llm={"ollama_http_boundary": True}, retry={}),
+                root / "runtime/raw_logs",
+                workspace_root=root,
+            )
+            original_fsync = filesystem_module.os.fsync
+            fsync_count = 0
+
+            def fail_after_json_publish(descriptor: int) -> None:
+                nonlocal fsync_count
+                fsync_count += 1
+                if fsync_count == 3:  # reservation, JSON temporary, JSON directory
+                    raise OSError("directory fsync failed after publication")
+                original_fsync(descriptor)
+
+            try:
+                with patch.object(filesystem_module.os, "fsync", side_effect=fail_after_json_publish):
+                    with self.assertRaises(OSError):
+                        client.save_raw(
+                            CallRecord(kind="generate", phase="probe", ref="probe", attempt=1, seed=1, content="ok"),
+                            [{"role": "user", "content": "probe"}],
+                        )
+                self.assertEqual(list((root / "runtime/raw_logs").iterdir()), [])
+            finally:
+                client.close()
+
+    def test_raw_published_leaf_swap_is_rejected_without_deleting_competitor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            client = LLMClient(
+                SimpleNamespace(settings_id="settings-000001", llm={"ollama_http_boundary": True}, retry={}),
+                root / "runtime/raw_logs",
+                workspace_root=root,
+            )
+            original_write = llm_module.atomic_write_text_noreplace
+            swapped = False
+
+            def swap_json_leaf(path: Path, content: str) -> tuple[int, int]:
+                nonlocal swapped
+                identity = original_write(path, content)
+                if not swapped and path.name.endswith(".json"):
+                    path.unlink()
+                    path.write_text('{"attacker":true}\n', encoding="utf-8")
+                    swapped = True
+                return identity
+
+            try:
+                with patch.object(llm_module, "atomic_write_text_noreplace", side_effect=swap_json_leaf):
+                    with self.assertRaises(ContractError):
+                        client.save_raw(
+                            CallRecord(kind="generate", phase="probe", ref="probe", attempt=1, seed=1, content="ok"),
+                            [{"role": "user", "content": "probe"}],
+                        )
+                json_files = list((root / "runtime/raw_logs").glob("*.json"))
+                self.assertEqual(len(json_files), 1)
+                self.assertEqual(json_files[0].read_text(encoding="utf-8"), '{"attacker":true}\n')
+                self.assertEqual(list((root / "runtime/raw_logs").glob("*.md")), [])
+            finally:
+                client.close()
+
+    def test_raw_target_competitor_after_reservation_is_not_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            raw_dir = root / "runtime/raw_logs"
+            settings = SimpleNamespace(llm={"ollama_http_boundary": True}, retry={})
+            client = LLMClient(settings, raw_dir, workspace_root=root)
+            original_exists = llm_module._entry_exists_at
+            injected = False
+
+            def inject_competitor(directory_fd: int, name: str) -> bool:
+                nonlocal injected
+                result = original_exists(directory_fd, name)
+                if not injected and name.endswith(".json"):
+                    descriptor = os.open(
+                        name,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0),
+                        0o600,
+                        dir_fd=directory_fd,
+                    )
+                    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                        handle.write("competitor")
+                    injected = True
+                return result
+
+            try:
+                with patch.object(llm_module, "_entry_exists_at", side_effect=inject_competitor):
+                    with self.assertRaises(ContractError):
+                        client.save_raw(
+                            CallRecord(kind="generate", phase="probe", ref="probe", attempt=1, seed=1, content="ok"),
+                            [{"role": "user", "content": "probe"}],
+                        )
+                competitor = next(raw_dir.glob("*.json"))
+                self.assertEqual(competitor.read_text(encoding="utf-8"), "competitor")
+                self.assertEqual(list(raw_dir.glob(".*.reserve")), [])
+            finally:
+                client.close()
+
+    def test_mutated_boundary_cannot_reach_sdk_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "workspace"
+            root.mkdir()
+            self._bare_workspace(root)
+            settings = SimpleNamespace(
+                settings_id="settings-000001",
+                llm={"ollama_http_boundary": True, "base_url": "http://127.0.0.1:1/v1", "model": "probe"},
+                retry={},
+            )
+            client = LLMClient(settings, root / "runtime/raw_logs", workspace_root=root)
+            called = False
+
+            class Completions:
+                def create(self, **_kwargs):
+                    nonlocal called
+                    called = True
+                    return []
+
+            client.client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+            try:
+                client.settings.llm["ollama_http_boundary"] = False
+                with self.assertRaisesRegex(ContractError, "HTTP boundary"):
+                    client.call_once([{"role": "user", "content": "probe"}], None, 1)
+                self.assertFalse(called)
+                self.assertEqual(list((root / "runtime/calls").glob("*/record.json")), [])
+            finally:
+                client.close()
+
+    def test_validate_does_not_delete_stale_raw_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            parent = base / "parent"
+            parent.mkdir()
+            root = parent / "workspace"
+            request = {
+                "title": "題名", "genre": ["幻想"], "premise": "前提",
+                "required_elements": [], "avoid": [], "ending_preference": "希望",
+                "volume_count": 4, "language": "ja",
+            }
+            settings = {
+                "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "probe",
+                "technical_retry_limit": 1, "quality_revision_limit": 1,
+                "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1],
+                "chapter_scene_range": [1, 1], "scene_text_char_range": [100, 100],
+            }
+            workspace = create_workspace(
+                root, workspace_id="ws-probe", request=request, settings=settings,
+                created_at="2026-08-05T00:00:00Z",
+            )
+            try:
+                raw_dir = workspace / "runtime/raw_logs"
+                reservation = raw_dir / ".0000_probe_generate.reserve"
+                json_path = raw_dir / "0000_probe_generate.json"
+                reservation.write_text("0", encoding="ascii")
+                json_path.write_text("probe", encoding="utf-8")
+                before = {path.name: path.read_bytes() for path in raw_dir.iterdir()}
+                with self.assertRaises(ContractError):
+                    validate_workspace(workspace)
+                after = {path.name: path.read_bytes() for path in raw_dir.iterdir()}
+                self.assertEqual(after, before)
+            finally:
+                workspace.close()  # type: ignore[attr-defined]
 
     def test_workspace_target_competitor_is_not_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -266,7 +661,9 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             template_dir.mkdir()
             before = len(os.listdir("/proc/self/fd"))
             loaders = [PromptTemplate(template_dir) for _ in range(20)]
-            self.assertGreaterEqual(len(os.listdir("/proc/self/fd")), before + 20)
+            self.assertEqual(len({loader._root_descriptor for loader in loaders}), 20)
+            for loader in loaders:
+                loader.close()
             del loaders
             gc.collect()
             self.assertLessEqual(len(os.listdir("/proc/self/fd")), before + 2)

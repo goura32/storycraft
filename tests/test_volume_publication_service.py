@@ -59,7 +59,7 @@ def write_quality_audit(root: Path, quality_id: str, payload: dict, *, notice: b
     write_json(root / "runtime/calls" / generate_call_id / "record.json", {
         "schema_version": 1, "call_id": generate_call_id, "operation": "generate", "role": artifact_kind,
         "target_candidate_id": None, "input_refs": [input_selection_id], "technical_attempt": 1, "format_attempt": 1,
-        "seed": 1, "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
+        "seed": int(suffix), "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
         "request": "{}", "response": "{}", "transport": "success",
         "validation": {"result": "valid", "checks": [], "failure_code": None},
     })
@@ -80,7 +80,7 @@ def write_quality_audit(root: Path, quality_id: str, payload: dict, *, notice: b
     write_json(root / "runtime/calls" / review_call_id / "record.json", {
         "schema_version": 1, "call_id": review_call_id, "operation": "review", "role": artifact_kind,
         "target_candidate_id": candidate_id, "input_refs": [candidate_id], "technical_attempt": 1, "format_attempt": 1,
-        "seed": 1, "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
+        "seed": 900000 + int(suffix), "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
         "request": "{}", "response": "{}", "transport": "success",
         "validation": {"result": "valid", "checks": [], "failure_code": None},
     })

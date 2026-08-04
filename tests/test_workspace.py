@@ -141,7 +141,7 @@ class WorkspaceTests(unittest.TestCase):
                 write_record("runtime/calls", call_id, {
                     "schema_version": 1, "call_id": call_id, "operation": operation,
                     "role": "provider", "target_candidate_id": target, "input_refs": ["selection-000001"] + ([target] if target else []),
-                    "technical_attempt": 1, "format_attempt": 1, "seed": 1,
+                    "technical_attempt": 1, "format_attempt": 1, "seed": int(call_id.split("-")[1]),
                     "endpoint": "http://127.0.0.1:11434/v1", "model": "test",
                     "settings_id": "settings-000001", "request": "{}", "response": "{}",
                     "transport": "success",
@@ -387,7 +387,7 @@ class WorkspaceTests(unittest.TestCase):
             self._write_json(root / "runtime/calls/call-000002/record.json", {
                 "schema_version": 1, "call_id": "call-000002", "operation": "review",
                 "role": "scene_prose", "target_candidate_id": "candidate-000001", "input_refs": ["selection-000001", "candidate-000001"],
-                "technical_attempt": 1, "format_attempt": 1, "seed": 1,
+                "technical_attempt": 1, "format_attempt": 1, "seed": 2,
                 "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
                 "request": "{}", "response": "{}", "transport": "success",
                 "validation": {"result": "valid", "checks": [], "failure_code": None},

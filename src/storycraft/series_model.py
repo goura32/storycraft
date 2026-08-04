@@ -20,7 +20,7 @@ class OpenAIStoryModel:
 
     def __init__(self, settings, raw_dir, workspace_root) -> None:
         self.client = LLMClient(settings, raw_dir, workspace_root=workspace_root)
-        self._seed_sequence = 0
+        self._seed_sequence = self.client.persisted_seed_ceiling()
         self._format_attempt = 1
 
     def set_log_ref(self, ref: str) -> None:
@@ -279,8 +279,10 @@ class OpenAIStoryModel:
             format_attempt = getattr(self, "_format_attempt", local_format_attempt)
             format_failed = False
             for retry_attempt in range(1, attempts + 1):
-                self._seed_sequence = getattr(self, "_seed_sequence", 0) + 1
-                seed = self._seed_sequence
+                llm_settings = getattr(self.client.settings, "llm", {})
+                seed_step = 2 if llm_settings.get("ollama_http_boundary", False) else 1
+                seed = getattr(self, "_seed_sequence", 0) + 1
+                self._seed_sequence = seed + seed_step - 1
                 messages = [
                     {"role": "system", "content": self.render_system("prose")},
                     {"role": "user", "content": user_prompt},

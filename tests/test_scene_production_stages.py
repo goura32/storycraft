@@ -48,7 +48,7 @@ class Model:
             "schema_version": 1, "call_id": call_id, "operation": operation,
             "role": "test-model", "target_candidate_id": candidate_id if operation in {"review", "revise"} else None,
             "input_refs": [selection_id, *([candidate_id] if operation in {"review", "revise"} else [])],
-            "technical_attempt": 1, "format_attempt": 1, "seed": 1,
+            "technical_attempt": 1, "format_attempt": 1, "seed": int(call_id.split("-")[1]),
             "endpoint": "injected", "model": "test", "settings_id": "settings-000001",
             "request": json.dumps({"stage": stage, "operation": operation}, ensure_ascii=False, sort_keys=True),
             "response": json.dumps(response, ensure_ascii=False, sort_keys=True), "transport": "success",
