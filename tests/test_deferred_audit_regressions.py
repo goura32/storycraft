@@ -108,6 +108,7 @@ class DeferredAuditRegressionTests(unittest.TestCase):
             raw_dir = Path(temporary)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir
+            client.workspace_root = raw_dir
             record = CallRecord(
                 kind="generate",
                 phase="initial_design",

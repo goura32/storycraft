@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from storycraft.ollama import ContractError, OllamaResponseFormatError, generate
+from storycraft.artifact_ids import initial_counters
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -45,14 +46,57 @@ class OllamaTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.endpoint = f"http://127.0.0.1:{self.server.server_port}/v1/"
+        self._temporary = tempfile.TemporaryDirectory()
+        self.workspace_root = Path(self._temporary.name) / "workspace"
+        self.workspace_root.mkdir()
+        runtime = self.workspace_root / "runtime"
+        runtime.mkdir()
+        (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+        self.records = runtime / "calls"
 
     def tearDown(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+        self._temporary.cleanup()
+
+    @staticmethod
+    def _canonical_records(tmp: str) -> tuple[Path, Path]:
+        workspace = Path(tmp) / "workspace"
+        runtime = workspace / "runtime"
+        runtime.mkdir(parents=True)
+        (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+        return runtime / "calls", workspace
+
+    def test_rejects_unrecorded_provider_call_before_http(self):
+        with self.assertRaisesRegex(ContractError, "call record"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_canonical_call_records_without_counter_before_http(self):
+        broken_root = Path(self._temporary.name) / "broken"
+        (broken_root / "runtime/calls").mkdir(parents=True)
+        with self.assertRaisesRegex(ContractError, "counters"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=broken_root / "runtime/calls",
+                workspace_root=broken_root,
+                settings_id="settings-000001",
+            )
+        self.assertEqual(Handler.paths, [])
 
     def test_posts_non_streaming_openai_request_from_normalized_v1_base(self):
         self.assertEqual(
-            generate(self.endpoint, "m", "p", {"type": "object"}, request_options={"temperature": 0.2, "top_k": 20}),
+            generate(self.endpoint, "m", "p", {"type": "object"}, request_options={"temperature": 0.2, "top_k": 20}, call_record_dir=self.records, workspace_root=self.workspace_root, settings_id="settings-000001"),
             {"schema_version": 1},
         )
         self.assertEqual(Handler.paths, ["/v1/models/m", "/v1/chat/completions"])
@@ -66,13 +110,13 @@ class OllamaTests(unittest.TestCase):
     def test_rejects_capability_with_wrong_model_id(self):
         Handler.capability = {"id": "other", "context_length": 8192}
         with self.assertRaisesRegex(ContractError, "モデル情報"):
-            generate(self.endpoint, "m", "p", {"type": "object"})
+            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=self.records, workspace_root=self.workspace_root, settings_id="settings-000001")
         self.assertEqual(Handler.paths, ["/v1/models/m"])
 
     def test_rejects_capability_with_unexpected_fields(self):
         Handler.capability = {"id": "m", "context_length": 8192, "unexpected": True}
         with self.assertRaises(OllamaResponseFormatError):
-            generate(self.endpoint, "m", "p", {"type": "object"})
+            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=self.records, workspace_root=self.workspace_root, settings_id="settings-000001")
 
     def test_rejects_completion_object_that_violates_the_requested_schema(self):
         Handler.completion = {"choices": [{"message": {"content": '{"unexpected":true}'}}]}
@@ -81,9 +125,9 @@ class OllamaTests(unittest.TestCase):
             "required": ["value"], "properties": {"value": {"type": "string"}},
         }
         with tempfile.TemporaryDirectory() as tmp:
-            records = Path(tmp) / "calls"
+            records, workspace = self._canonical_records(tmp)
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", schema, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", schema, call_record_dir=records, workspace_root=workspace, settings_id="settings-000001")
             completion = next(
                 json.loads(path.read_text(encoding="utf-8"))
                 for path in records.glob("*/record.json")
@@ -93,8 +137,8 @@ class OllamaTests(unittest.TestCase):
 
     def test_writes_immutable_records_for_capability_and_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
-            records = Path(tmp) / "calls"
-            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
+            records, workspace = self._canonical_records(tmp)
+            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=workspace, settings_id="settings-000001")
             saved = sorted(records.glob("*/record.json"))
             self.assertEqual(len(saved), 2)
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in saved]
@@ -108,9 +152,9 @@ class OllamaTests(unittest.TestCase):
     def test_writes_failed_capability_attempt_before_raising(self):
         Handler.capability = {"id": "other", "context_length": 8192}
         with tempfile.TemporaryDirectory() as tmp:
-            records = Path(tmp) / "calls"
+            records, workspace = self._canonical_records(tmp)
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=workspace, settings_id="settings-000001")
             saved = list(records.glob("*/record.json"))
             self.assertEqual(len(saved), 1)
             payload = json.loads(saved[0].read_text(encoding="utf-8"))
@@ -122,9 +166,9 @@ class OllamaTests(unittest.TestCase):
     def test_malformed_completion_is_a_format_error_with_a_successful_invalid_audit_record(self):
         Handler.completion = {"choices": [{"message": {"content": "not-json"}}]}
         with tempfile.TemporaryDirectory() as tmp:
-            records = Path(tmp) / "calls"
+            records, workspace = self._canonical_records(tmp)
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=workspace, settings_id="settings-000001")
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in records.glob("*/record.json")]
         completion = next(record for record in payloads if record["operation"] == "generate")
         self.assertEqual(completion["transport"], "success")
@@ -159,7 +203,7 @@ class OllamaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaisesRegex(ContractError, "settings_id"):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records)
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp))
             self.assertFalse(records.exists())
 
 

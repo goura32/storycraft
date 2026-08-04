@@ -14,23 +14,29 @@ import math
 import os
 from queue import Empty, Queue
 import re
+import stat
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import weakref
 
-from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from .config import resolve_llm_credentials
 from .error_sanitizer import (
     redact_secrets,
     redact_value,
     safe_exception_message,
     sanitize_text,
 )
-from .filesystem_security import atomic_write_text, assert_no_symlink_path, assert_within, ensure_directory_nofollow, open_nofollow, unlink_nofollow
+from .filesystem_security import (
+    assert_directory_fd_identity,
+    assert_no_symlink_path,
+    atomic_write_text,
+    directory_fd_path,
+    open_workspace_directory,
+)
 from .log import logger
 from .ollama import OllamaResponseFormatError, OllamaTechnicalError, generate as ollama_generate
 from .series_contracts import ContractError
@@ -39,6 +45,31 @@ STATUS_THINKING = "thinking"
 STATUS_CONTENT = "content"
 STATUS_SAVING = "saving"
 _RAW_LOG_LOCK = threading.Lock()
+
+
+def _close_descriptors(*descriptors: int) -> None:
+    for descriptor in descriptors:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+
+def _entry_exists_at(directory_fd: int, name: str) -> bool:
+    try:
+        entry_stat = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISREG(entry_stat.st_mode):
+        raise ContractError("raw log entryが通常fileではありません")
+    return True
+
+
+def _unlink_at(directory_fd: int, name: str) -> None:
+    try:
+        os.unlink(name, dir_fd=directory_fd)
+    except FileNotFoundError:
+        pass
 
 
 def _positive_seconds(
@@ -137,88 +168,54 @@ class LLMClient:
         raw_dir: Path,
         workspace_root: Path | None = None,
     ) -> None:
+        if settings.llm.get("ollama_http_boundary") is not True:
+            raise ContractError("Ollama providerはHTTP boundary経由でなければなりません")
         if workspace_root is None:
             raise ContractError("LLMClientにはworkspace_rootが必要です")
         root = assert_no_symlink_path(workspace_root, require_directory=True)
+        raw_path = assert_no_symlink_path(raw_dir)
+        root_descriptor, raw_descriptor = open_workspace_directory(root, raw_path, create=True)
         self.settings = settings
         self.settings_id = getattr(settings, "settings_id", None)
-        self.raw_dir = assert_no_symlink_path(raw_dir)
-        assert_within(root, self.raw_dir)
+        self.raw_dir = raw_path
         self.workspace_root = root
+        self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
+        self._workspace_root_descriptor = root_descriptor
+        self._raw_directory_descriptor = raw_descriptor
+        self._directory_finalizer = weakref.finalize(self, _close_descriptors, root_descriptor, raw_descriptor)
 
-        llm = settings.llm
         # The Ollama HTTP boundary in storycraft.ollama performs
-        # the documented per-model capability call and persists its own audit
-        # record.  Do not initialize the separate SDK health probe here: it would
-        # issue an unrecorded capability request outside that boundary.
-        if llm.get("ollama_http_boundary", False):
-            self.client: Any = None
+        # the documented capability and completion calls and persists their
+        # audit records.  No SDK health probe or alternate transport is allowed.
+        self.client: Any = None
+
+    def close(self) -> None:
+        finalizer = getattr(self, "_directory_finalizer", None)
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+        self._workspace_root_descriptor = None
+        self._raw_directory_descriptor = None
+        self._workspace_root_anchor_path = None
+
+    def _ensure_directory_anchors(self) -> None:
+        """Initialize anchors for narrowly-scoped low-level test/adaptor objects."""
+        if isinstance(getattr(self, "_workspace_root_descriptor", None), int) and isinstance(
+            getattr(self, "_raw_directory_descriptor", None), int
+        ):
             return
-        base_url = llm["base_url"]
-
-        first_event_timeout = _positive_seconds(
-            llm,
-            "first_event_timeout_seconds",
-            3600,
-        )
-        idle_timeout = _positive_seconds(
-            llm,
-            "idle_timeout_seconds",
-            600,
-        )
-
-        api_key, default_headers = (
-            resolve_llm_credentials(llm)
-        )
-
-        client_options: dict[str, Any] = {
-            "base_url": base_url,
-            "api_key": api_key,
-            "timeout": max(
-                first_event_timeout,
-                idle_timeout,
-            ),
-            "max_retries": 0,
-        }
-        if default_headers:
-            client_options["default_headers"] = (
-                default_headers
-            )
-
-        self.client = OpenAI(
-            **client_options
-        )
-
-        safe_base_url = sanitize_text(
-            base_url,
-            max_length=500,
-        )
-
-        try:
-            models = self.client.models.list(
-                timeout=min(
-                    first_event_timeout,
-                    60.0,
-                ),
-            )
-            logger.info(
-                "LLM接続確認: base_url=%s models=%s",
-                safe_base_url,
-                len(models.data),
-            )
-        except Exception as error:
-            error_type = type(error).__name__
-            logger.error(
-                "LLM接続失敗: base_url=%s "
-                "error_type=%s",
-                safe_base_url,
-                error_type,
-            )
-            raise ContractError(
-                "LLMサーバーに接続できません: "
-                f"base_url={safe_base_url} "
-                f"error_type={error_type}"
-            ) from error
+        workspace_root = getattr(self, "workspace_root", None)
+        raw_dir = getattr(self, "raw_dir", None)
+        if workspace_root is None or raw_dir is None:
+            raise ContractError("provider callにはworkspace_rootとraw_dirが必要です")
+        root = assert_no_symlink_path(Path(workspace_root), require_directory=True)
+        raw_path = assert_no_symlink_path(Path(raw_dir))
+        root_descriptor, raw_descriptor = open_workspace_directory(root, raw_path, create=True)
+        self.workspace_root = root
+        self.raw_dir = raw_path
+        self._workspace_root_anchor_path = directory_fd_path(root_descriptor)
+        self._workspace_root_descriptor = root_descriptor
+        self._raw_directory_descriptor = raw_descriptor
+        self._directory_finalizer = weakref.finalize(self, _close_descriptors, root_descriptor, raw_descriptor)
 
     @staticmethod
     def _request_stream_close(
@@ -557,13 +554,19 @@ class LLMClient:
         schema: dict[str, Any] | None = None
         if isinstance(response_format, dict):
             schema = response_format.get("json_schema", {}).get("schema", {"type": "object"})
+        self._ensure_directory_anchors()
+        root_descriptor = getattr(self, "_workspace_root_descriptor", None)
+        if not isinstance(root_descriptor, int):
+            raise ContractError("provider callにはworkspace root descriptorが必要です")
+        anchored_root = directory_fd_path(root_descriptor)
+        anchored_call_dir = anchored_root / "runtime/calls"
         try:
             value = ollama_generate(
                 self.settings.llm["base_url"], self.settings.llm["model"],
                 visible_messages[-1]["content"] if visible_messages else "", schema,
                 request_options=self.settings.llm.get("request_options"),
-                messages=visible_messages, call_record_dir=self.raw_dir.parent / "calls",
-                workspace_root=self.workspace_root,
+                messages=visible_messages, call_record_dir=anchored_call_dir,
+                workspace_root=anchored_root,
                 technical_attempt=rec.attempt, format_attempt=meta.get("__format_attempt", 1), seed=seed,
                 operation=rec.kind, call_id_sink=lambda call_id: setattr(rec, "call_id", call_id),
                 settings_id=bound_settings_id, input_refs=meta.get("input_refs", []),
@@ -602,60 +605,86 @@ class LLMClient:
     def save_raw(self, rec: CallRecord, prompt_messages: list) -> None:
         """送受信生データと、人間向けMarkdownを同じstemで保存。thinking本文は除く。"""
         with _RAW_LOG_LOCK:
-            raw_dir = assert_no_symlink_path(self.raw_dir)
-            workspace_root = getattr(self, "workspace_root", None)
-            if workspace_root is not None:
-                assert_within(workspace_root, raw_dir)
-            raw_dir = ensure_directory_nofollow(raw_dir)
-            idx = 0
-            while True:
-                stem = _raw_filename(rec, idx)
-                json_path = raw_dir / f"{stem}.json"
-                markdown_path = json_path.with_suffix(".md")
-                reservation = raw_dir / f".{stem}.reserve"
-                try:
-                    descriptor = open_nofollow(reservation, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
-                    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-                        handle.write(str(os.getpid()))
-                        handle.flush()
-                        os.fsync(handle.fileno())
-                except FileExistsError:
-                    idx += 1
-                    continue
-                if json_path.exists() or markdown_path.exists():
-                    unlink_nofollow(reservation, missing_ok=True)
-                    idx += 1
-                    continue
-                break
-
+            root_descriptor = getattr(self, "_workspace_root_descriptor", None)
+            raw_descriptor = getattr(self, "_raw_directory_descriptor", None)
+            temporary_anchor = False
+            if not isinstance(root_descriptor, int) or not isinstance(raw_descriptor, int):
+                raw_path = assert_no_symlink_path(Path(self.raw_dir))
+                workspace_root = getattr(self, "workspace_root", None)
+                if workspace_root is None:
+                    raise ContractError("raw log保存にはworkspace_rootが必要です")
+                root_descriptor, raw_descriptor = open_workspace_directory(workspace_root, raw_path, create=True)
+                temporary_anchor = True
             try:
-                sent_messages_value = redact_value([
-                    m for m in prompt_messages
-                    if not (isinstance(m, dict) and "__" in "".join(m.keys()))
-                ])
-                assert isinstance(sent_messages_value, list)
-                sent_messages = sent_messages_value
-                received = redact_value(rec.to_dict())
-                assert isinstance(received, dict)
-                if received["error"] is not None:
-                    received["error"] = sanitize_text(received["error"])
-                content = redact_secrets(rec.content)
-                out = {
-                    "index": idx,
-                    "sent_messages": sent_messages,
-                    "received": received,
-                    "content": content,
-                }
-                self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
-                self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
-            except Exception:
-                # A raw call is published only as a complete JSON/Markdown pair.
-                # Roll back the first rename when the second file cannot be made.
-                unlink_nofollow(json_path, missing_ok=True)
-                unlink_nofollow(markdown_path, missing_ok=True)
-                raise
+                assert_directory_fd_identity(
+                    getattr(self, "_workspace_root_anchor_path", None) or self.workspace_root,
+                    root_descriptor,
+                )
+                assert_directory_fd_identity(self.raw_dir, raw_descriptor)
+                raw_view = directory_fd_path(raw_descriptor)
+                idx = 0
+                while True:
+                    stem = _raw_filename(rec, idx)
+                    json_name = f"{stem}.json"
+                    markdown_name = f"{stem}.md"
+                    reservation_name = f".{stem}.reserve"
+                    json_path = raw_view / json_name
+                    markdown_path = raw_view / markdown_name
+                    try:
+                        descriptor = os.open(
+                            reservation_name,
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                            0o600,
+                            dir_fd=raw_descriptor,
+                        )
+                        with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                            handle.write(str(os.getpid()))
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                        if _entry_exists_at(raw_descriptor, json_name) or _entry_exists_at(raw_descriptor, markdown_name):
+                            _unlink_at(raw_descriptor, reservation_name)
+                            idx += 1
+                            continue
+                        break
+                    except FileExistsError:
+                        idx += 1
+                        continue
+                    except Exception:
+                        _unlink_at(raw_descriptor, reservation_name)
+                        raise
+
+                try:
+                    sent_messages_value = redact_value([
+                        m for m in prompt_messages
+                        if not (isinstance(m, dict) and "__" in "".join(m.keys()))
+                    ])
+                    assert isinstance(sent_messages_value, list)
+                    sent_messages = sent_messages_value
+                    received = redact_value(rec.to_dict())
+                    assert isinstance(received, dict)
+                    if received["error"] is not None:
+                        received["error"] = sanitize_text(received["error"])
+                    content = redact_secrets(rec.content)
+                    out = {
+                        "index": idx,
+                        "sent_messages": sent_messages,
+                        "received": received,
+                        "content": content,
+                    }
+                    self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
+                    self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
+                    assert_directory_fd_identity(self.raw_dir, raw_descriptor)
+                except Exception:
+                    # A raw call is published only as a complete JSON/Markdown pair.
+                    # Roll back the first rename when the second file cannot be made.
+                    _unlink_at(raw_descriptor, json_name)
+                    _unlink_at(raw_descriptor, markdown_name)
+                    raise
+                finally:
+                    _unlink_at(raw_descriptor, reservation_name)
             finally:
-                unlink_nofollow(reservation, missing_ok=True)
+                if temporary_anchor:
+                    _close_descriptors(raw_descriptor, root_descriptor)
 
     @staticmethod
     def _write_raw_file(path: Path, content: str) -> None:

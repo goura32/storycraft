@@ -105,6 +105,8 @@ V1 の workspace には、未定義の巻間要約、シリーズ完結成果物
 
 複数ファイル成果物は必ずディレクトリ単位で staging に作り、`pending_commit` の `targets` manifest で複数の最終配置を管理します。workspace初期化のstaging作成・内容書込み・最終renameは、検証済みparent directory handleとstaging directory handleを基準に行い、parent pathのsymlink置換やTOCTOUを検出した場合は外部pathへ書かずfail-closedで停止します。
 
+workspaceの公開後に利用するroot pathも、初期化時に開いた最終directory descriptorを保持するFD-backed pathです。したがって、初期化の最終identity検査直後にparent pathが別directoryへ置換されても、返却rootからの相対操作は元の公開workspaceへ固定されます。公開renameは既存targetを置換しない`RENAME_NOREPLACE`相当で行い、検査後に同名file・directory・symlinkが作られた場合もstagingを公開せず停止します。providerのcall record directoryはcanonicalな`runtime/calls`だけを許可し、workspace rootと対象directoryのdescriptorをHTTP呼出し・raw pair作成より前に開き、`dir_fd`相対のmkdir・atomic rename・読み書きだけを使います。保存前後のpath/descriptor identityが一致しない場合はfail-closedで停止し、検証後のsymlinkや外部directoryへ書きません。reservationの復旧読み込みはnon-blocking descriptorで通常fileかを確認してから行うため、FIFOで処理を停止しません。
+
 1. ID を予約し、現在の選択スナップショットと必要な入力スロットを固定する。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。
 3. 形式、必須項目、参照実在、採用状態、内容の内部整合を決定的に検証する。同じ manifest の target を参照する場合は、その staging target 全体を閉じた参照集合として解決する。manifest 外の参照は最終配置だけを許可する。

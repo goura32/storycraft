@@ -1,10 +1,13 @@
 """Filesystem boundary checks used before creating or persisting artifacts."""
 from __future__ import annotations
 
+import ctypes
+import errno
 import os
 from pathlib import Path
 import stat
 from uuid import uuid4
+import weakref
 
 from .series_contracts import ContractError
 
@@ -79,6 +82,66 @@ def _assert_fd_file_path(directory_fd: int, parts: tuple[str, ...], *, require_f
 def directory_fd_path(directory_fd: int) -> Path:
     """Return a path view anchored to an open directory descriptor (Linux)."""
     return Path(f"/proc/self/fd/{directory_fd}")
+
+
+_PosixPath = type(Path())
+
+
+class _OwnedDirectoryPath(_PosixPath):
+    """A ``Path`` view that keeps its directory descriptor alive.
+
+    A plain ``/proc/self/fd/N`` path is only safe while the descriptor remains
+    open.  Workspace creation transfers ownership of the final directory FD to
+    the returned path so a caller cannot accidentally continue through a
+    replaced lexical parent.  Descendant paths retain the owner object.
+    """
+
+    def __new__(cls, value: str, descriptor: int):
+        self = super().__new__(cls, value)
+        setattr(self, "_anchor_descriptor", descriptor)
+        setattr(self, "_anchor_finalizer", weakref.finalize(self, os.close, descriptor))
+        return self
+
+    def _make_child(self, args):
+        child = super()._make_child(args)  # type: ignore[attr-defined]
+        setattr(child, "_anchor_owner", self)
+        return child
+
+    def close(self) -> None:
+        finalizer = getattr(self, "_anchor_finalizer", None)
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+
+
+def owned_directory_fd_path(directory_fd: int) -> Path:
+    """Return an FD-backed path whose descriptor is closed on final release."""
+    return _OwnedDirectoryPath(f"/proc/self/fd/{directory_fd}", directory_fd)
+
+
+def assert_directory_fd_identity(path: Path, descriptor: int) -> None:
+    """Fail closed when ``path`` no longer names the opened directory."""
+    anchored = _directory_fd_anchor(path)
+    target_identity: tuple[int, int]
+    try:
+        if anchored is None:
+            path_stat = os.stat(path, follow_symlinks=False)
+            if not stat.S_ISDIR(path_stat.st_mode):
+                raise ContractError("pathは通常directoryでなければなりません")
+            target_identity = (path_stat.st_dev, path_stat.st_ino)
+        else:
+            probe = _open_relative_directory(anchored[0], anchored[1])
+            try:
+                probe_stat = os.fstat(probe)
+                if not stat.S_ISDIR(probe_stat.st_mode):
+                    raise ContractError("directory fd相対pathが通常directoryではありません")
+                target_identity = (probe_stat.st_dev, probe_stat.st_ino)
+            finally:
+                os.close(probe)
+        fd_stat = os.fstat(descriptor)
+    except OSError as exc:
+        raise ContractError("directory identityを検証できません") from exc
+    if target_identity != (fd_stat.st_dev, fd_stat.st_ino):
+        raise ContractError("directoryが検証後に置換されました")
 
 
 def is_directory_fd_path(path: Path) -> bool:
@@ -181,6 +244,84 @@ def create_unique_directory_at(directory_fd: int, prefix: str) -> str:
     raise ContractError("一時directory名を確保できません")
 
 
+def ensure_directory_at(directory_fd: int, parts: tuple[str, ...], *, exist_ok: bool = True) -> int:
+    """Create/open a relative directory chain while retaining its final FD."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    current_fd = os.dup(directory_fd)
+    try:
+        for part in parts:
+            if part in {"", ".", ".."}:
+                raise ContractError("directory相対pathが不正です")
+            if exist_ok:
+                try:
+                    os.mkdir(part, 0o755, dir_fd=current_fd)
+                except FileExistsError:
+                    pass
+            next_fd = os.open(part, flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except Exception:
+        os.close(current_fd)
+        raise
+
+
+def _workspace_relative_parts(root: Path, child: Path) -> tuple[str, ...]:
+    root_anchor = _directory_fd_anchor(root)
+    child_anchor = _directory_fd_anchor(child)
+    if root_anchor is not None and child_anchor is not None and root_anchor[0] == child_anchor[0]:
+        prefix = root_anchor[1]
+        if child_anchor[1][:len(prefix)] != prefix:
+            raise ContractError("workspace childがroot外を参照しています")
+        return child_anchor[1][len(prefix):]
+    try:
+        return absolute_without_resolving(child).relative_to(absolute_without_resolving(root)).parts
+    except ValueError as exc:
+        raise ContractError("workspace childがroot外を参照しています") from exc
+
+
+def open_workspace_directory(root: Path, child: Path, *, create: bool = True) -> tuple[int, int]:
+    """Open workspace root and child directory FDs before pathname races occur."""
+    root_abs = assert_no_symlink_path(root, require_directory=True)
+    child_abs = absolute_without_resolving(child)
+    assert_within(root_abs, child_abs)
+    root_fd = _open_directory_chain(root_abs)
+    try:
+        assert_directory_fd_identity(root_abs, root_fd)
+        child_fd = ensure_directory_at(root_fd, _workspace_relative_parts(root_abs, child_abs), exist_ok=create)
+        assert_directory_fd_identity(child_abs, child_fd)
+        return root_fd, child_fd
+    except Exception:
+        os.close(root_fd)
+        raise
+
+
+def rename_noreplace_at(src_dir_fd: int, src_name: str, dst_dir_fd: int, dst_name: str) -> None:
+    """Atomically publish a directory without replacing an existing target."""
+    if os.name != "posix":
+        raise ContractError("rename without replaceはこのOSで利用できません")
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = libc.renameat2
+    except (AttributeError, OSError) as exc:
+        raise ContractError("rename without replaceを利用できません") from exc
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        src_dir_fd,
+        os.fsencode(src_name),
+        dst_dir_fd,
+        os.fsencode(dst_name),
+        1,  # Linux RENAME_NOREPLACE
+    )
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number == errno.EEXIST:
+        raise ContractError("workspace targetが既に存在します")
+    raise OSError(error_number, os.strerror(error_number))
+
+
 def remove_directory_at(parent_fd: int, name: str) -> None:
     """Remove a directory tree through an already opened parent directory."""
     child_fd = os.open(
@@ -268,8 +409,10 @@ def open_nofollow(path: Path, flags: int, mode: int = 0o600) -> int:
 
 def read_text_nofollow(path: Path, *, encoding: str = "utf-8") -> str:
     """Read one regular file through a no-follow descriptor."""
-    descriptor = open_nofollow(path, os.O_RDONLY)
+    descriptor = open_nofollow(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ContractError("pathは通常fileでなければなりません")
         with os.fdopen(descriptor, "r", encoding=encoding) as handle:
             descriptor = -1
             return handle.read()
@@ -293,8 +436,17 @@ def read_text_at(directory_fd: int, relative: Path, *, encoding: str = "utf-8") 
             next_fd = os.open(part, flags, dir_fd=current_fd)
             os.close(current_fd)
             current_fd = next_fd
-        descriptor = os.open(parts[-1], os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), dir_fd=current_fd)
+        descriptor = os.open(
+            parts[-1],
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=current_fd,
+        )
         try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ContractError("directory fdから読むleafは通常fileでなければなりません")
             with os.fdopen(descriptor, "r", encoding=encoding) as handle:
                 descriptor = -1
                 return handle.read()

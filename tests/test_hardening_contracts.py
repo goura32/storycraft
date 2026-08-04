@@ -141,6 +141,7 @@ class HardeningContractTests(unittest.TestCase):
             raw_dir = Path(temporary)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir
+            client.workspace_root = raw_dir
             barrier = threading.Barrier(8)
 
             def save(index: int) -> None:
@@ -187,6 +188,7 @@ class HardeningContractTests(unittest.TestCase):
             raw_dir.symlink_to(external, target_is_directory=True)
             client = LLMClient.__new__(LLMClient)
             client.raw_dir = raw_dir
+            client.workspace_root = root
             with self.assertRaises(ContractError):
                 client.save_raw(CallRecord(kind="generate", phase="plan", ref="plan", attempt=1, seed=1, content="{}"), [])
             self.assertEqual(list(external.iterdir()), [])

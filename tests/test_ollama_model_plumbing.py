@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from storycraft.llm import LLMClient
+from storycraft.filesystem_security import directory_fd_path
 from storycraft.ollama import OllamaResponseFormatError
 from storycraft.prompt_template import PromptTemplate
 from storycraft.series_model import OpenAIStoryModel
@@ -99,11 +100,14 @@ class ModelPlumbingTests(unittest.TestCase):
         self.assertEqual(json.loads(result.content), {"value": "ok"})
         args, kwargs = generate.call_args
         self.assertEqual(args, ("http://127.0.0.1:11434/v1", "m", "user", {"type": "object"}))
+        root_descriptor = client._workspace_root_descriptor
+        assert isinstance(root_descriptor, int)
+        anchored_root = directory_fd_path(root_descriptor)
         self.assertEqual(kwargs | {"call_id_sink": None}, {
             "request_options": {"temperature": 0.4},
             "messages": [{"role": "system", "content": "system"}, {"role": "user", "content": "user"}],
-            "call_record_dir": client.raw_dir.parent / "calls",
-            "workspace_root": client.workspace_root,
+            "call_record_dir": anchored_root / "runtime/calls",
+            "workspace_root": anchored_root,
             "technical_attempt": 2, "format_attempt": 1, "seed": 17, "operation": "generate",
             "settings_id": "settings-000001", "input_refs": [], "target_candidate_id": None,
             "call_id_sink": None,

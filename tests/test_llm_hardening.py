@@ -206,6 +206,7 @@ class LLMHardeningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             client = make_client(BlockingStream())
             client.raw_dir = Path(temporary)
+            client.workspace_root = Path(temporary)
 
             record = CallRecord(
                 kind="generate",

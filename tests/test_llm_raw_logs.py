@@ -7,13 +7,25 @@ import unittest
 from pathlib import Path
 
 from storycraft.llm import CallRecord, LLMClient
+from storycraft.series_contracts import ContractError
 
 
 class RawLogMarkdownTests(unittest.TestCase):
+    def test_save_raw_requires_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            client = LLMClient.__new__(LLMClient)
+            client.raw_dir = Path(temporary)
+            with self.assertRaises(ContractError):
+                client.save_raw(
+                    CallRecord(kind="generate", phase="plan", ref="plan", attempt=1, seed=1, content="{}"),
+                    [],
+                )
+
     def test_save_raw_writes_same_stem_markdown_with_expanded_contents(self) -> None:
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-"))
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
+        client.workspace_root = raw_dir
         record = CallRecord(
             kind="generate",
             phase="plan",
@@ -59,6 +71,7 @@ class RawLogMarkdownTests(unittest.TestCase):
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-global-"))
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
+        client.workspace_root = raw_dir
 
         client.save_raw(
             CallRecord(
@@ -74,6 +87,7 @@ class RawLogMarkdownTests(unittest.TestCase):
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-scene-"))
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
+        client.workspace_root = raw_dir
 
         client.save_raw(
             CallRecord(
@@ -89,6 +103,7 @@ class RawLogMarkdownTests(unittest.TestCase):
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-parent-")) / "raw"
         client = LLMClient.__new__(LLMClient)
         client.raw_dir = raw_dir
+        client.workspace_root = raw_dir.parent
         record = CallRecord(
             kind="generate",
             phase="scene_prose",

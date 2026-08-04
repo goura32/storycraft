@@ -15,7 +15,7 @@ storycraft status --workspace PATH [--json]
 storycraft validate --workspace PATH [--json]
 ```
 
-`init` は作業場所が存在しないときだけ作成する。既存なら終了コード `2` で変更しない。`--request` と `--keywords` は排他。設定は Ollama 専用で、設定不正なら作業場所を作らず終了コード `2` にする。
+`init` は作業場所が存在しないときだけ作成する。既存なら終了コード `2` で変更しない。`--request` と `--keywords` は排他。設定は Ollama 専用で、設定不正なら作業場所を作らず終了コード `2` にする。入力FILEはUTF-8 JSON objectかつ末尾改行を要求し、nofollowで通常fileとしてnon-blockingに読む。FIFO、symlink、directory、その他の非regular entryはwriter待ちせず契約エラーで停止する。
 
 `run` は健全で一意な保留中確定を収束してから完了まで実行し、停止中になった場合は終了コード `4`。停止中の `run` は終了コード `4` で変更しない。`status` と `validate` は提供者を初期化せず、状態を書き換えず、書込み lock を取得・読取・削除しない。
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import stat
 from typing import Any
+import weakref
 
 from jinja2 import BaseLoader, Environment, StrictUndefined
 from jsonschema import Draft202012Validator
@@ -39,6 +40,7 @@ class PromptTemplate:
     def __init__(self, template_dir: Path):
         self.template_dir = assert_no_symlink_path(template_dir.expanduser(), require_directory=True)
         self._root_descriptor = _open_directory_chain(self.template_dir)
+        self._root_finalizer = weakref.finalize(self, os.close, self._root_descriptor)
         self.env = Environment(
             loader=_NoFollowPromptLoader(self),
             autoescape=False,
@@ -91,6 +93,11 @@ class PromptTemplate:
         except ValueError as exc:
             raise ContractError("prompt assetがroot外を参照します") from exc
         return read_text_at(self._root_descriptor, relative)
+
+    def close(self) -> None:
+        finalizer = getattr(self, "_root_finalizer", None)
+        if finalizer is not None and finalizer.alive:
+            finalizer()
 
     def load_schema_object(self, category: str, stage: str) -> dict[str, object]:
         """Schema fileをJSON objectとして読み込む。"""

@@ -4,8 +4,10 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import stat
 
-from .filesystem_security import assert_no_symlink_path, assert_within, ensure_directory_nofollow, open_nofollow
+from .filesystem_security import assert_no_symlink_file_path, assert_no_symlink_path, open_workspace_directory
+from .series_contracts import ContractError
 
 
 def get_logger() -> logging.Logger:
@@ -27,9 +29,29 @@ def add_file_handler(log_file: Path, *, workspace_root: Path) -> None:
     """作業workspace内のログファイルへnofollowで出力する。"""
     root = assert_no_symlink_path(workspace_root, require_directory=True)
     path = Path(log_file).absolute()
-    assert_within(root, path)
-    ensure_directory_nofollow(path.parent)
-    descriptor = open_nofollow(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    root_descriptor, parent_descriptor = open_workspace_directory(root, path.parent, create=True)
+    try:
+        assert_no_symlink_file_path(path)
+        descriptor = os.open(
+            path.name,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_APPEND
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
+            0o600,
+            dir_fd=parent_descriptor,
+        )
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ContractError("log fileは通常fileでなければなりません")
+        except Exception:
+            os.close(descriptor)
+            raise
+    finally:
+        os.close(parent_descriptor)
+        os.close(root_descriptor)
     stream = os.fdopen(descriptor, "a", encoding="utf-8")
     fh = logging.StreamHandler(stream)
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))

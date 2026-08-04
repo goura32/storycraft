@@ -23,11 +23,14 @@ from .filesystem_security import (
     assert_no_symlink_path,
     create_unique_directory_at,
     directory_fd_path,
+    ensure_directory_at,
     ensure_directory_chain_nofollow,
     is_directory_fd_path,
     open_nofollow,
+    owned_directory_fd_path,
     read_text_nofollow,
     remove_directory_at,
+    rename_noreplace_at,
 )
 from .input_normalization import normalize_request, normalize_settings
 from .publication_builder import validate_volume_publication_files
@@ -103,10 +106,12 @@ def create_workspace(
         os.close(parent_descriptor)
         raise
     staging = directory_fd_path(staging_descriptor)
+    descriptor_transferred = False
     try:
         _assert_directory_fd_identity(parent, parent_descriptor)
         for relative in _WORKSPACE_DIRECTORIES:
-            (staging / relative).mkdir(parents=True, exist_ok=True)
+            directory_descriptor = ensure_directory_at(staging_descriptor, Path(relative).parts)
+            os.close(directory_descriptor)
         settings_id = "settings-000001"
         _write_json(staging / "runtime/settings" / settings_id / "record.json", {
             "schema_version": 1,
@@ -183,9 +188,12 @@ def create_workspace(
         _assert_directory_fd_identity(parent, parent_descriptor)
         validate_workspace(staging)
         _assert_directory_fd_identity(parent, parent_descriptor)
-        os.rename(staging_name, root.name, src_dir_fd=parent_descriptor, dst_dir_fd=parent_descriptor)
+        rename_noreplace_at(parent_descriptor, staging_name, parent_descriptor, root.name)
         os.fsync(parent_descriptor)
-        return root
+        _assert_directory_fd_identity(parent, parent_descriptor)
+        result = owned_directory_fd_path(staging_descriptor)
+        descriptor_transferred = True
+        return result
     except Exception:
         # staging はこの関数だけが作った未公開領域。失敗時に残さない。
         try:
@@ -194,7 +202,8 @@ def create_workspace(
             pass
         raise
     finally:
-        os.close(staging_descriptor)
+        if not descriptor_transferred:
+            os.close(staging_descriptor)
         os.close(parent_descriptor)
 
 
@@ -274,8 +283,18 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
 
 
 def _raw_log_read_text(directory_fd: int, name: str) -> str:
-    descriptor = os.open(name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd)
+    descriptor = os.open(
+        name,
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0),
+        dir_fd=directory_fd,
+    )
     try:
+        entry_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(entry_stat.st_mode):
+            raise ContractError("runtime/raw_logsのreservationが通常fileではありません")
         with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
             descriptor = -1
             return handle.read()

@@ -15,6 +15,8 @@
 
 LLM 境界は Ollama との通信のみを担当し、シード・タイムアウト・技術的再試行を制御します。Ollama への全通信は **OpenAI 互換 API** を使う。モデル能力は `GET /v1/models/{model}` の `{ "id": "model", "context_length": 正の整数 }` から取得する。接続直前にhostnameを許可済みloopback/private addressへ解決してHTTP requestをそのliteral addressへpinし、redirectは追従しない。HTTP・接続・時間切れ・provider error envelope は技術的失敗として扱い、`technical_retry_limit` は各論理処理で許可する物理試行回数（初回を含む）です。成功 HTTP の capability payload で `id` が不一致、`context_length` が欠落または正整数でない場合は形式不正として `invalid_response_limit` を消費する。いずれも各物理試行を `model_capability` call record として保存し、該当上限到達時はそれぞれ `technical_retry_exhausted` または `invalid_response_limit` で `blocked` にする。実装上の例外は共通の失敗分類へ変換し、クライアント固有の関数名を契約にしない。生成は `POST /v1/chat/completions` に `model`、`messages`、`think: true`、`stream: false`、`options: {"num_ctx": context_length}`、指定済みの `request_options`、および構造化時の `response_format: {"type":"json_schema","json_schema":{"name":"storycraft_response","strict":true,"schema":<工程スキーマ>}}` を送る。`schema` がある場合は `choices[0].message.content` を JSON として解析し、`schema` がない場面本文では同じ欄を raw text として受け取る。Ollama ネイティブ API（`/api/generate` 等）は使わない。
 
+provider境界は有効な`settings_id`、`workspace_root`、およびworkspace内のcanonicalな`runtime/calls` directoryを必須とします。HTTP開始前にworkspace rootとrecord directoryのdirectory descriptorを保持し、能力取得とcompletionの両方を同じFD anchorへ束縛してから通信します。record保存時にpathとdescriptorのidentityが一致しなければfail-closedで停止し、保存先を再解決しません。raw logも同様に、workspace内の`runtime/raw_logs` descriptorへJSON/Markdown pairのatomic書込みを固定します。HTTP openerは環境変数のproxy設定を使わず、hostnameのliteral address pinningを迂回させません。
+
 ### 1.2 決定的応答検証
 
 JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根拠位置解決を決定的に行います。契約は「未知項目拒否」「スキーマ・ID・参照・範囲・根拠位置の 5 観点で検証」「不合格は形式不正 1 回と数える」だけを定め、実装関数シグネチャは定めません。

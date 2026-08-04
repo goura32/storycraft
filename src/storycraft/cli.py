@@ -9,6 +9,7 @@ import sys
 from typing import Any, NoReturn
 
 from .error_sanitizer import safe_exception_message, sanitize_text
+from .filesystem_security import read_text_nofollow
 from .run_state import RunStateStore
 from .series_contracts import ContractError
 from .workspace import create_workspace, validate_workspace
@@ -31,7 +32,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _load_object(path: str) -> dict[str, Any]:
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        text = read_text_nofollow(Path(path), encoding="utf-8")
         if not text.endswith("\n"):
             raise ContractError("入力JSONはUTF-8・末尾改行必須です")
         value = json.loads(text)
@@ -75,7 +76,7 @@ def cmd_init(args: argparse.Namespace) -> dict[str, object]:
     keywords = _load_object(args.keywords) if args.keywords else None
     settings = _load_object(args.config)
     root = Path(args.workspace).expanduser()
-    create_workspace(
+    root = create_workspace(
         root,
         workspace_id=args.workspace_id or f"ws-{root.name}",
         request=request,

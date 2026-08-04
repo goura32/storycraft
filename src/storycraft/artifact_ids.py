@@ -7,7 +7,13 @@ from pathlib import Path
 import threading
 from typing import Final
 
-from .filesystem_security import atomic_write_text, assert_no_symlink_file_path, assert_no_symlink_path, open_nofollow, read_text_nofollow
+from .filesystem_security import (
+    _open_directory_chain,
+    atomic_write_text,
+    assert_no_symlink_path,
+    directory_fd_path,
+    read_text_at,
+)
 from .series_contracts import ContractError
 
 _COUNTERS: Final[frozenset[str]] = frozenset({
@@ -27,21 +33,39 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
         raise ContractError(f"未知のartifact counterです: {counter}")
     root = workspace_root.expanduser()
     assert_no_symlink_path(root, require_directory=True)
-    runtime = root / "runtime"
-    assert_no_symlink_path(runtime, require_directory=True)
-    path = runtime / "counters.json"
-    lock_path = runtime / "counters.lock"
+    root_descriptor = _open_directory_chain(root)
+    try:
+        return reserve_counter_at(root_descriptor, counter)
+    except OSError as exc:
+        raise ContractError("counters lockを取得できません") from exc
+    finally:
+        os.close(root_descriptor)
+
+
+def reserve_counter_at(root_descriptor: int, counter: str) -> int:
+    """Reserve a counter relative to an already opened workspace root FD."""
+    if counter not in _COUNTERS:
+        raise ContractError(f"未知のartifact counterです: {counter}")
+    runtime_descriptor = os.open(
+        "runtime",
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=root_descriptor,
+    )
     try:
         with _COUNTER_LOCK:
-            lock_descriptor = open_nofollow(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-            with os.fdopen(lock_descriptor, "a+", encoding="utf-8") as lock_handle:
+            lock_descriptor = os.open(
+                "counters.lock",
+                os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=runtime_descriptor,
+            )
+            with os.fdopen(lock_descriptor, "a+", encoding="ascii") as lock_handle:
                 if os.name == "posix":
                     import fcntl
                     fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
                 try:
-                    assert_no_symlink_file_path(path, require_file=True)
                     try:
-                        value = json.loads(read_text_nofollow(path))
+                        value = json.loads(read_text_at(runtime_descriptor, Path("counters.json")))
                     except (OSError, json.JSONDecodeError) as exc:
                         raise ContractError("counters.jsonを読み込めません") from exc
                     if not isinstance(value, dict) or set(value) != _COUNTERS:
@@ -51,7 +75,7 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
                     reserved = value[counter]
                     value[counter] = reserved + 1
                     try:
-                        atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+                        atomic_write_text(directory_fd_path(runtime_descriptor) / "counters.json", json.dumps(value, ensure_ascii=False, indent=2) + "\n")
                     except OSError as exc:
                         raise ContractError("counters.jsonを原子的に保存できません") from exc
                     return reserved
@@ -61,6 +85,8 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
                         fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
     except OSError as exc:
         raise ContractError("counters lockを取得できません") from exc
+    finally:
+        os.close(runtime_descriptor)
 
 
 def initial_counters() -> dict[str, int]:
