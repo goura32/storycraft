@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -186,6 +187,80 @@ class DeferredAuditRegressionTests(unittest.TestCase):
                     path.mkdir()
                 else:
                     path.write_bytes(original_files[relative])
+
+    def test_create_workspace_parent_swap_after_directory_fd_open_fails_closed(self) -> None:
+        settings = {
+            "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test",
+            "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1,
+            "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100],
+        }
+        request = {
+            "title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [],
+            "ending_preference": "希望", "volume_count": 4, "language": "ja",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            parent = base / "parent"
+            parent.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            backup = base / "parent-original"
+            staging_name: str | None = None
+            original_creator = __import__("storycraft.workspace", fromlist=["create_unique_directory_at"]).create_unique_directory_at
+
+            def swap_parent(directory_fd: int, prefix: str) -> str:
+                nonlocal staging_name
+                created = original_creator(directory_fd, prefix)
+                staging_name = created
+                parent.rename(backup)
+                parent.symlink_to(outside, target_is_directory=True)
+                return created
+
+            with patch("storycraft.workspace.create_unique_directory_at", side_effect=swap_parent):
+                with self.assertRaises(ContractError):
+                    create_workspace(
+                        parent / "workspace", workspace_id="ws-test", request=request,
+                        settings=settings, created_at="2026-07-28T00:00:00Z",
+                    )
+            self.assertFalse((outside / "workspace").exists())
+            if parent.is_symlink():
+                parent.unlink()
+            elif parent.exists():
+                shutil.rmtree(parent)
+            if backup.exists():
+                shutil.rmtree(backup)
+
+    def test_validate_workspace_raw_logs_swap_after_fd_open_fails_closed(self) -> None:
+        settings = {
+            "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test",
+            "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1,
+            "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1, 100],
+        }
+        request = {
+            "title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [],
+            "ending_preference": "希望", "volume_count": 4, "language": "ja",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "workspace"
+            create_workspace(root, workspace_id="ws-test", request=request, settings=settings, created_at="2026-07-28T00:00:00Z")
+            raw_dir = root / "runtime/raw_logs"
+            backup = base / "raw-logs-original"
+            outside = base / "outside"
+            outside.mkdir()
+            original_recover = __import__("storycraft.workspace", fromlist=["_recover_stale_raw_log_transactions"])._recover_stale_raw_log_transactions
+
+            def swap_raw_logs(path: Path, descriptor: int) -> None:
+                raw_dir.rename(backup)
+                raw_dir.symlink_to(outside, target_is_directory=True)
+                original_recover(path, descriptor)
+
+            with patch("storycraft.workspace._recover_stale_raw_log_transactions", side_effect=swap_raw_logs):
+                with self.assertRaises(ContractError):
+                    validate_workspace(root)
+            raw_dir.unlink()
+            backup.rename(raw_dir)
+
 
     def test_workflow_block_sanitizes_persisted_error_message(self) -> None:
         state = {

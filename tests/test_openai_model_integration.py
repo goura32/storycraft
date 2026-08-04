@@ -75,7 +75,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 call_dir = runtime / "calls"
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 with self.assertRaises(OllamaTechnicalError):
-                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, settings_id="settings-000001")
+                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, workspace_root=Path(temporary), settings_id="settings-000001")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(call_dir.glob("*/record.json"))]
                 for call in calls:
                     validate_call_record(call["call_id"], call)
@@ -105,7 +105,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 call_dir = runtime / "calls"
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 with self.assertRaises(OllamaTechnicalError):
-                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, settings_id="settings-000001")
+                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, workspace_root=Path(temporary), settings_id="settings-000001")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(call_dir.glob("*/record.json"))]
                 for call in calls:
                     validate_call_record(call["call_id"], call)

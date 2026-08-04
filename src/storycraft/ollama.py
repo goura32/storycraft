@@ -22,7 +22,7 @@ from jsonschema import Draft202012Validator, ValidationError
 from .artifact_ids import reserve_counter
 from .endpoint_security import pinned_http_request
 from .error_sanitizer import redact_value
-from .filesystem_security import atomic_write_text, assert_no_symlink_path, ensure_directory_nofollow
+from .filesystem_security import assert_no_symlink_path, assert_within, atomic_write_text, ensure_directory_nofollow
 from .series_contracts import ContractError, EndpointResolutionError, LLMCallError
 
 
@@ -92,6 +92,7 @@ def _write_record(
     format_attempt: int,
     seed: int,
     settings_id: str | None = None,
+    workspace_root: Path | None = None,
     role: str = "provider",
     input_refs: list[str] | None = None,
     target_candidate_id: str | None = None,
@@ -99,7 +100,12 @@ def _write_record(
     if directory is None:
         return None
     _require_settings_id(settings_id)
-    directory = ensure_directory_nofollow(Path(directory))
+    if workspace_root is None:
+        raise ContractError("call recordを保存するにはworkspace_rootが必要です")
+    root = assert_no_symlink_path(Path(workspace_root), require_directory=True)
+    directory = Path(directory)
+    assert_within(root, directory)
+    directory = ensure_directory_nofollow(directory)
     counters = directory.parent / "counters.json"
     if directory.name == "calls" and counters.is_file():
         call_id = f"call-{reserve_counter(directory.parent.parent, 'next_call'):06d}"
@@ -144,6 +150,7 @@ def _capability(
     format_attempt: int,
     seed: int,
     settings_id: str | None,
+    workspace_root: Path | None,
 ) -> int:
     url = f"{base_url}/models/{quote(model, safe='')}"
     raw = ""
@@ -155,19 +162,19 @@ def _capability(
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=None, transport="failure",
                       validation={"result": "not_applicable", "checks": [], "failure_code": _failure_code(exc)},
-                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id, workspace_root=workspace_root)
         raise OllamaTechnicalError("Ollamaモデル情報取得に失敗しました") from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=raw, transport="success",
                       validation={"result": "invalid", "checks": [], "failure_code": "json_parse"},
-                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id, workspace_root=workspace_root)
         raise OllamaResponseFormatError("Ollamaモデル情報が不正です") from exc
     if isinstance(payload, dict) and "error" in payload:
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=raw, transport="failure",
                       validation={"result": "not_applicable", "checks": [], "failure_code": "provider_error"},
-                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id, workspace_root=workspace_root)
         raise OllamaTechnicalError("Ollama provider error envelope")
     valid = (
         isinstance(payload, dict)
@@ -180,7 +187,7 @@ def _capability(
     _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                   request=None, response=_canonical_json(payload), transport="success",
                   validation={"result": "valid" if valid else "invalid", "checks": ["id", "context_length"] if valid else [], "failure_code": None if valid else "schema_invalid"},
-                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
+                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id, workspace_root=workspace_root)
     if not valid:
         raise OllamaResponseFormatError("Ollamaモデル情報が不正です")
     return payload["context_length"]
@@ -195,6 +202,7 @@ def generate(
     request_options: Optional[dict[str, Any]] = None,
     messages: Optional[list[dict[str, str]]] = None,
     call_record_dir: Path | None = None,
+    workspace_root: Path | None = None,
     technical_attempt: int = 1,
     format_attempt: int = 1,
     seed: int = 1,
@@ -207,10 +215,14 @@ def generate(
     """Invoke the non-streaming OpenAI-compatible structured or prose endpoint."""
     if call_record_dir is not None:
         _require_settings_id(settings_id)
+        if workspace_root is None:
+            raise ContractError("call recordを保存するにはworkspace_rootが必要です")
+        workspace_root = assert_no_symlink_path(Path(workspace_root), require_directory=True)
+        assert_within(workspace_root, Path(call_record_dir))
     base_url = normalized_v1_base_url(endpoint)
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
                                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                                 settings_id=settings_id)
+                                 settings_id=settings_id, workspace_root=workspace_root)
     # Use model's max context from capability, not settings
     options = {"num_ctx": context_length, "seed": seed}
     if request_options:
@@ -252,7 +264,7 @@ def generate(
                       request=body, response=None, transport="failure",
                       validation={"result": "not_applicable", "checks": [], "failure_code": _failure_code(exc)},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                      settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+                      settings_id=settings_id, workspace_root=workspace_root, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
         raise OllamaTechnicalError("Ollama呼出しに失敗しました") from exc
@@ -261,7 +273,7 @@ def generate(
                       request=body, response=raw, transport="failure",
                       validation={"result": "not_applicable", "checks": [], "failure_code": "provider_error"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                      settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+                      settings_id=settings_id, workspace_root=workspace_root, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
         raise exc
@@ -270,7 +282,7 @@ def generate(
                       request=body, response=raw, transport="success",
                       validation={"result": "invalid", "checks": [], "failure_code": "schema_invalid"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                      settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+                      settings_id=settings_id, workspace_root=workspace_root, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
         raise OllamaResponseFormatError("Ollama応答JSONがschemaに一致しません") from exc
@@ -279,7 +291,7 @@ def generate(
                       request=body, response=raw if "raw" in locals() else None, transport="success",
                       validation={"result": "invalid", "checks": [], "failure_code": "json_parse"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                      settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+                      settings_id=settings_id, workspace_root=workspace_root, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
         raise OllamaResponseFormatError("Ollama応答JSONが不正です") from exc
@@ -287,7 +299,7 @@ def generate(
                   request=body, response=content, transport="success",
                   validation={"result": "valid", "checks": [], "failure_code": None},
                   technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
-                  settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+                  settings_id=settings_id, workspace_root=workspace_root, input_refs=input_refs, target_candidate_id=target_candidate_id)
     if call_id is not None and call_id_sink is not None:
         call_id_sink(call_id)
     return value

@@ -3,24 +3,44 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
+import stat
+from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import BaseLoader, Environment, StrictUndefined
 from jsonschema import Draft202012Validator
 
+from .filesystem_security import _open_directory_chain, assert_no_symlink_path, read_text_at
 from .series_contracts import ContractError
+
+
+class _NoFollowPromptLoader(BaseLoader):
+    """Jinja loader that reads the selected asset through a no-follow descriptor."""
+
+    def __init__(self, owner: "PromptTemplate") -> None:
+        self.owner = owner
+
+    def get_source(self, environment: Environment, template: str):
+        del environment
+        relative = Path(template)
+        path = self.owner._asset_path(relative, "template")
+        try:
+            source = self.owner._read_asset_text(path)
+        except OSError as exc:
+            raise ContractError("templateを安全に読み込めません") from exc
+        return source, str(path), lambda: False
 
 
 class PromptTemplate:
     """Jinja template and schema loader constrained to the packaged prompt root."""
 
     def __init__(self, template_dir: Path):
-        self.template_dir = template_dir.expanduser()
-        if self.template_dir.is_symlink() or not self.template_dir.is_dir():
-            raise ContractError("prompt template rootが通常directoryではありません")
+        self.template_dir = assert_no_symlink_path(template_dir.expanduser(), require_directory=True)
+        self._root_descriptor = _open_directory_chain(self.template_dir)
         self.env = Environment(
-            loader=FileSystemLoader(str(self.template_dir)),
+            loader=_NoFollowPromptLoader(self),
             autoescape=False,
             undefined=StrictUndefined,
             trim_blocks=True,
@@ -42,7 +62,7 @@ class PromptTemplate:
 
     def _asset_path(self, relative: Path, label: str) -> Path:
         """Resolve one prompt asset without lexical or symlink escape."""
-        root = self.template_dir.resolve()
+        root = self.template_dir
         candidate = self.template_dir / relative
         if candidate.is_symlink() or not candidate.is_file():
             raise ContractError(f"{label}が通常fileではありません")
@@ -54,6 +74,23 @@ class PromptTemplate:
         if resolved.is_symlink() or not resolved.is_file():
             raise ContractError(f"{label}が通常fileではありません")
         return resolved
+
+    def _assert_root_descriptor(self) -> None:
+        try:
+            path_stat = os.stat(self.template_dir, follow_symlinks=False)
+            fd_stat = os.fstat(self._root_descriptor)
+        except OSError as exc:
+            raise ContractError("prompt rootが利用できません") from exc
+        if not stat.S_ISDIR(path_stat.st_mode) or (path_stat.st_dev, path_stat.st_ino) != (fd_stat.st_dev, fd_stat.st_ino):
+            raise ContractError("prompt rootが初期化時のdirectoryから置換されています")
+
+    def _read_asset_text(self, path: Path) -> str:
+        self._assert_root_descriptor()
+        try:
+            relative = path.relative_to(self.template_dir)
+        except ValueError as exc:
+            raise ContractError("prompt assetがroot外を参照します") from exc
+        return read_text_at(self._root_descriptor, relative)
 
     def load_schema_object(self, category: str, stage: str) -> dict[str, object]:
         """Schema fileをJSON objectとして読み込む。"""
@@ -69,10 +106,13 @@ class PromptTemplate:
         cache_key = self._asset_path(relative, "schema")
         cached = self._schema_cache.get(cache_key)
         if cached is not None:
+            self._assert_root_descriptor()
             return cached
 
-        with cache_key.open(encoding="utf-8") as file:
-            schema = json.load(file)
+        try:
+            schema = json.loads(self._read_asset_text(cache_key))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError("schemaを安全に読み込めません") from exc
         if not isinstance(schema, dict):
             raise ValueError(f"Schema rootはobjectでなければなりません: {cache_key}")
         Draft202012Validator.check_schema(schema)

@@ -103,7 +103,7 @@ V1 の workspace には、未定義の巻間要約、シリーズ完結成果物
 
 ## 3. 不変確定の共通手順
 
-複数ファイル成果物は必ずディレクトリ単位で staging に作り、`pending_commit` の `targets` manifest で複数の最終配置を管理します。
+複数ファイル成果物は必ずディレクトリ単位で staging に作り、`pending_commit` の `targets` manifest で複数の最終配置を管理します。workspace初期化のstaging作成・内容書込み・最終renameは、検証済みparent directory handleとstaging directory handleを基準に行い、parent pathのsymlink置換やTOCTOUを検出した場合は外部pathへ書かずfail-closedで停止します。
 
 1. ID を予約し、現在の選択スナップショットと必要な入力スロットを固定する。
 2. `runtime/staging/<kind>-<id>/` に全ファイルを新規作成する。

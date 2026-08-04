@@ -42,7 +42,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 
 各論理処理の `format_attempt` は1から始め、成功 HTTP 応答が形式不正だったときだけ1増やします。各 `format_attempt` 内の `technical_attempt` は1から始め、通信失敗・提供者エラー・時間切れごとに増やします。call recordのfailure codeは `connection_error`、`http_error`、`timeout`、`provider_error` のいずれかです。技術的再試行が成功したら、その応答の形式検証結果を同じ `format_attempt` に記録します。技術的再試行上限に達した場合は形式不正を消費せず、論理処理を `blocked` にします。
 
-各論理処理は `format_attempt=1` から開始し、各回で技術的再試行を完了してから応答を決定的に検証します。有効ならその値を返し、形式不正なら次のシードで次の `format_attempt` に進めます。物理呼出しと provider 境界の検証結果は call record に保存します。call recordを保存するprovider境界は有効な `settings_id` を必須とし、欠落・形式不正ならHTTP呼出し前に契約エラーで停止してrecordを作りません。工程固有の意味・参照・根拠検証を通過した値だけが candidate/review/quality record になり、別の validation 成果物は作りません。raw logはJSON/Markdownの両方を同一予約stemでatomicに保存し、prompt/response/exceptionに含まれるcredential-shaped valueをredactします。上限まで有効な応答がなければ、処理を `invalid_response_limit` として終了します。関数名やクラス名を実装契約にしません。
+各論理処理は `format_attempt=1` から開始し、各回で技術的再試行を完了してから応答を決定的に検証します。有効ならその値を返し、形式不正なら次のシードで次の `format_attempt` に進めます。物理呼出しと provider 境界の検証結果は call record に保存します。call recordを保存するprovider境界は有効な `settings_id` と、call record directoryを含む作業場所の `workspace_root` を必須とし、保存先が作業場所外ならHTTP呼出し前に契約エラーで停止してrecordを作りません。工程固有の意味・参照・根拠検証を通過した値だけが candidate/review/quality record になり、別の validation 成果物は作りません。raw logはJSON/Markdownの両方を同一予約stemでatomicに保存し、prompt/response/exceptionに含まれるcredential-shaped valueをredactします。上限まで有効な応答がなければ、処理を `invalid_response_limit` として終了します。関数名やクラス名を実装契約にしません。
 
 `invalid_response_limit` は、生成・確認・修正の各論理処理で形式不正の再呼出しを制限する。上限到達時は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
 

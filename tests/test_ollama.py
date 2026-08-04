@@ -83,7 +83,7 @@ class OllamaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", schema, call_record_dir=records, settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", schema, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
             completion = next(
                 json.loads(path.read_text(encoding="utf-8"))
                 for path in records.glob("*/record.json")
@@ -94,7 +94,7 @@ class OllamaTests(unittest.TestCase):
     def test_writes_immutable_records_for_capability_and_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
-            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
+            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
             saved = sorted(records.glob("*/record.json"))
             self.assertEqual(len(saved), 2)
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in saved]
@@ -110,7 +110,7 @@ class OllamaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
             saved = list(records.glob("*/record.json"))
             self.assertEqual(len(saved), 1)
             payload = json.loads(saved[0].read_text(encoding="utf-8"))
@@ -124,12 +124,36 @@ class OllamaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, workspace_root=Path(tmp), settings_id="settings-000001")
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in records.glob("*/record.json")]
         completion = next(record for record in payloads if record["operation"] == "generate")
         self.assertEqual(completion["transport"], "success")
         self.assertEqual(completion["validation"]["result"], "invalid")
         self.assertEqual(completion["validation"]["failure_code"], "json_parse")
+
+    def test_rejects_call_records_without_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            records = Path(tmp) / "calls"
+            with self.assertRaisesRegex(ContractError, "workspace_root"):
+                generate(
+                    self.endpoint, "m", "p", {"type": "object"},
+                    call_record_dir=records, settings_id="settings-000001",
+                )
+            self.assertFalse(records.exists())
+
+    def test_rejects_call_records_outside_workspace_root_before_http(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            workspace.mkdir()
+            records = Path(tmp) / "outside" / "calls"
+            with self.assertRaisesRegex(ContractError, "workspace root外"):
+                generate(
+                    self.endpoint, "m", "p", {"type": "object"},
+                    call_record_dir=records, workspace_root=workspace,
+                    settings_id="settings-000001",
+                )
+            self.assertFalse(records.exists())
+            self.assertEqual(Handler.paths, [])
 
     def test_requires_settings_id_when_persisting_call_records(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

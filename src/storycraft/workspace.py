@@ -6,7 +6,7 @@ import math
 import os
 from pathlib import Path
 import re
-import tempfile
+import stat
 import unicodedata
 from typing import Any, Optional
 from urllib.parse import urlsplit
@@ -16,7 +16,19 @@ from .artifact_record import validate_call_record, validate_candidate_record, va
 from .state_derivation import apply_continuity_state
 from .artifact_registry import ARTIFACT_SPECS
 from .endpoint_security import resolve_allowed_addresses
-from .filesystem_security import _open_directory_chain, atomic_write_text, assert_no_symlink_file_path, assert_no_symlink_path, open_nofollow, read_text_nofollow, unlink_nofollow
+from .filesystem_security import (
+    _open_directory_chain,
+    atomic_write_text,
+    assert_no_symlink_file_path,
+    assert_no_symlink_path,
+    create_unique_directory_at,
+    directory_fd_path,
+    ensure_directory_chain_nofollow,
+    is_directory_fd_path,
+    open_nofollow,
+    read_text_nofollow,
+    remove_directory_at,
+)
 from .input_normalization import normalize_request, normalize_settings
 from .publication_builder import validate_volume_publication_files
 from .review_contracts import validate_critique_fields
@@ -33,6 +45,18 @@ _WORKSPACE_DIRECTORIES = (
     "design/volume-plans", "design/chapter-plans", "design/scene-plans", "design/scene-cards", "generations",
     "scenes", "publications",
 )
+
+
+def _assert_directory_fd_identity(path: Path, descriptor: int) -> None:
+    """Fail closed if a path was replaced after its directory fd was opened."""
+    try:
+        path_stat = os.stat(path, follow_symlinks=False)
+        fd_stat = os.fstat(descriptor)
+    except OSError as exc:
+        raise ContractError("workspace parent directoryを検証できません") from exc
+    if (path_stat.st_dev, path_stat.st_ino) != (fd_stat.st_dev, fd_stat.st_ino):
+        raise ContractError("workspace parent directoryが検証後に置換されました")
+
 
 
 def create_workspace(
@@ -62,11 +86,25 @@ def create_workspace(
     _validate_settings(settings)
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
-    parent = assert_no_symlink_path(root.parent)
-    parent.mkdir(parents=True, exist_ok=True)
-    parent = assert_no_symlink_path(parent, require_directory=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=parent))
+    parent = ensure_directory_chain_nofollow(root.parent)
+    parent_descriptor = _open_directory_chain(parent)
     try:
+        staging_name = create_unique_directory_at(parent_descriptor, f".{root.name}.staging-")
+    except Exception:
+        os.close(parent_descriptor)
+        raise
+    try:
+        staging_descriptor = os.open(
+            staging_name,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_descriptor,
+        )
+    except Exception:
+        os.close(parent_descriptor)
+        raise
+    staging = directory_fd_path(staging_descriptor)
+    try:
+        _assert_directory_fd_identity(parent, parent_descriptor)
         for relative in _WORKSPACE_DIRECTORIES:
             (staging / relative).mkdir(parents=True, exist_ok=True)
         settings_id = "settings-000001"
@@ -142,26 +180,29 @@ def create_workspace(
                 os.close(descriptor)
             except FileExistsError:
                 assert_no_symlink_file_path(fixed_path, require_file=True)
+        _assert_directory_fd_identity(parent, parent_descriptor)
         validate_workspace(staging)
-        parent_descriptor = _open_directory_chain(parent)
-        try:
-            os.rename(staging.name, root.name, src_dir_fd=parent_descriptor, dst_dir_fd=parent_descriptor)
-            os.fsync(parent_descriptor)
-        finally:
-            os.close(parent_descriptor)
+        _assert_directory_fd_identity(parent, parent_descriptor)
+        os.rename(staging_name, root.name, src_dir_fd=parent_descriptor, dst_dir_fd=parent_descriptor)
+        os.fsync(parent_descriptor)
         return root
     except Exception:
         # staging はこの関数だけが作った未公開領域。失敗時に残さない。
-        import shutil
-        shutil.rmtree(staging, ignore_errors=True)
+        try:
+            remove_directory_at(parent_descriptor, staging_name)
+        except OSError:
+            pass
         raise
+    finally:
+        os.close(staging_descriptor)
+        os.close(parent_descriptor)
 
 
 def validate_workspace(workspace_root: Path) -> None:
     """providerを初期化せず、V1保存形式の正本・参照を静的に検証する。"""
     root = workspace_root.expanduser()
     assert_no_symlink_path(root, require_directory=True)
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or (not is_directory_fd_path(root) and root.is_symlink()):
         raise ContractError("workspace directoryが存在しません")
     for relative in _WORKSPACE_DIRECTORIES:
         if not (root / relative).is_dir() or (root / relative).is_symlink():
@@ -206,28 +247,57 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
     for relative in ("runtime/counters.json", "runtime/lock", "runtime/counters.lock", "runtime/run-state.json"):
         assert_no_symlink_file_path(root / relative, require_file=True)
     raw_dir = assert_no_symlink_path(root / "runtime/raw_logs", require_directory=True)
-    _recover_stale_raw_log_transactions(raw_dir)
-    stems: dict[str, set[str]] = {}
-    for entry in raw_dir.iterdir():
-        if entry.is_symlink() or not entry.is_file():
-            raise ContractError("runtime/raw_logsに通常file以外のentryがあります")
-        if entry.name.startswith("."):
-            raise ContractError("runtime/raw_logsに未確定temporary entryがあります")
-        if entry.suffix not in {".json", ".md"}:
-            raise ContractError("runtime/raw_logsに未定義のfileがあります")
-        stems.setdefault(entry.stem, set()).add(entry.suffix)
-    if any(suffixes != {".json", ".md"} for suffixes in stems.values()):
-        raise ContractError("runtime/raw_logsのJSON/Markdown pairが不完全です")
+    raw_descriptor = _open_directory_chain(raw_dir)
+    try:
+        _assert_directory_fd_identity(raw_dir, raw_descriptor)
+        _recover_stale_raw_log_transactions(raw_dir, raw_descriptor)
+        _assert_directory_fd_identity(raw_dir, raw_descriptor)
+        stems: dict[str, set[str]] = {}
+        for name in os.listdir(raw_descriptor):
+            try:
+                entry_stat = os.stat(name, dir_fd=raw_descriptor, follow_symlinks=False)
+            except OSError as exc:
+                raise ContractError("runtime/raw_logsのentryを検証できません") from exc
+            if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+                raise ContractError("runtime/raw_logsに通常file以外のentryがあります")
+            if name.startswith("."):
+                raise ContractError("runtime/raw_logsに未確定temporary entryがあります")
+            suffix = Path(name).suffix
+            if suffix not in {".json", ".md"}:
+                raise ContractError("runtime/raw_logsに未定義のfileがあります")
+            stems.setdefault(Path(name).stem, set()).add(suffix)
+        if any(suffixes != {".json", ".md"} for suffixes in stems.values()):
+            raise ContractError("runtime/raw_logsのJSON/Markdown pairが不完全です")
+        _assert_directory_fd_identity(raw_dir, raw_descriptor)
+    finally:
+        os.close(raw_descriptor)
 
 
-def _recover_stale_raw_log_transactions(raw_dir: Path) -> None:
-    for reservation in raw_dir.iterdir():
-        if reservation.is_symlink() or not reservation.is_file():
-            continue
-        if not (reservation.name.startswith(".") and reservation.name.endswith(".reserve")):
+def _raw_log_read_text(directory_fd: int, name: str) -> str:
+    descriptor = os.open(name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd)
+    try:
+        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+            descriptor = -1
+            return handle.read()
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _raw_log_unlink(directory_fd: int, name: str) -> None:
+    try:
+        os.unlink(name, dir_fd=directory_fd)
+    except FileNotFoundError:
+        pass
+
+
+def _recover_stale_raw_log_transactions(raw_dir: Path, raw_descriptor: int) -> None:
+    del raw_dir
+    for reservation in os.listdir(raw_descriptor):
+        if not (reservation.startswith(".") and reservation.endswith(".reserve")):
             continue
         try:
-            owner = read_text_nofollow(reservation).strip()
+            owner = _raw_log_read_text(raw_descriptor, reservation).strip()
             pid = int(owner) if owner else 0
         except (OSError, ValueError):
             raise ContractError("runtime/raw_logsのreservationが不正です")
@@ -240,17 +310,24 @@ def _recover_stale_raw_log_transactions(raw_dir: Path) -> None:
                 raise ContractError("runtime/raw_logsのreservation所有者を確認できません")
             else:
                 raise ContractError("runtime/raw_logsで別processのtransactionが実行中です")
-        stem = reservation.name[1:-len(".reserve")]
-        json_path = raw_dir / f"{stem}.json"
-        markdown_path = raw_dir / f"{stem}.md"
-        for temporary in raw_dir.glob(f".{stem}.*.tmp"):
-            unlink_nofollow(temporary)
-        json_exists = json_path.exists() and not json_path.is_symlink()
-        markdown_exists = markdown_path.exists() and not markdown_path.is_symlink()
+        stem = reservation[1:-len(".reserve")]
+        json_name = f"{stem}.json"
+        markdown_name = f"{stem}.md"
+        for name in os.listdir(raw_descriptor):
+            if name.startswith(f".{stem}.") and name.endswith(".tmp"):
+                _raw_log_unlink(raw_descriptor, name)
+        def is_regular(name: str) -> bool:
+            try:
+                entry_stat = os.stat(name, dir_fd=raw_descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                return False
+            return stat.S_ISREG(entry_stat.st_mode)
+        json_exists = is_regular(json_name)
+        markdown_exists = is_regular(markdown_name)
         if json_exists != markdown_exists:
-            unlink_nofollow(json_path, missing_ok=True)
-            unlink_nofollow(markdown_path, missing_ok=True)
-        unlink_nofollow(reservation, missing_ok=True)
+            _raw_log_unlink(raw_descriptor, json_name)
+            _raw_log_unlink(raw_descriptor, markdown_name)
+        _raw_log_unlink(raw_descriptor, reservation)
 
 
 def _validate_selection_scene_commit_lineage(root: Path, snapshot: dict[str, Any], resolved: dict[str, dict[str, Any]]) -> None:
