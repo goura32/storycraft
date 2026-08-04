@@ -8,7 +8,10 @@ import tempfile
 import threading
 import unittest
 
+from storycraft.artifact_record import validate_call_record
+from storycraft.artifact_ids import initial_counters
 from storycraft.candidate_stage import CandidateStageRunner, CandidateStageSpec
+from storycraft.ollama import OllamaTechnicalError, generate
 from storycraft.run_state import RunStateStore
 from storycraft.series_model import OpenAIStoryModel
 from storycraft.workspace import create_workspace, validate_workspace
@@ -20,6 +23,7 @@ NOW = "2026-07-31T00:00:00Z"
 class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
     requests: list[tuple[str, dict[str, object] | None]] = []
     completion_responses: list[object] = []
+    capability_response: object | None = None
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -35,7 +39,8 @@ class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         self.__class__.requests.append((self.path, None))
         if self.path == "/v1/models/fake-model":
-            self._send({"id": "fake-model", "context_length": 4096})
+            response = self.__class__.capability_response
+            self._send(response if isinstance(response, dict) else {"id": "fake-model", "context_length": 4096})
         elif self.path in {"/models", "/v1/models"}:
             self._send({"object": "list", "data": [{"id": "fake-model"}]})
         else:
@@ -46,11 +51,73 @@ class _OpenAICompatibleHandler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(length))
         self.__class__.requests.append((self.path, request))
         response = self.__class__.completion_responses.pop(0)
+        if isinstance(response, dict) and "error" in response:
+            self._send(response)
+            return
         content = response if isinstance(response, str) else json.dumps(response, ensure_ascii=False)
         self._send({"choices": [{"message": {"content": content}}]})
 
 
 class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
+    def test_http_200_provider_error_is_technical_failure_and_is_recorded(self) -> None:
+        handler = _OpenAICompatibleHandler
+        handler.requests = []
+        handler.completion_responses = [{"error": {"message": "provider busy"}}]
+        handler.capability_response = None
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                endpoint = f"http://127.0.0.1:{server.server_port}"
+                runtime = Path(temporary) / "runtime"
+                runtime.mkdir(parents=True, exist_ok=True)
+                call_dir = runtime / "calls"
+                (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+                with self.assertRaises(OllamaTechnicalError):
+                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, settings_id="settings-000001")
+                calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(call_dir.glob("*/record.json"))]
+                for call in calls:
+                    validate_call_record(call["call_id"], call)
+                completion = next(call for call in calls if call["operation"] == "generate")
+                self.assertEqual(completion["transport"], "failure")
+                self.assertEqual(completion["validation"]["result"], "not_applicable")
+                self.assertEqual(completion["validation"]["failure_code"], None)
+                self.assertEqual(json.loads(completion["response"])["error"]["message"], "provider busy")
+        finally:
+            handler.capability_response = None
+            server.shutdown()
+            server.server_close()
+
+    def test_http_200_capability_error_is_technical_failure_and_is_recorded(self) -> None:
+        handler = _OpenAICompatibleHandler
+        handler.requests = []
+        handler.completion_responses = []
+        handler.capability_response = {"error": {"message": "model unavailable"}}
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                endpoint = f"http://127.0.0.1:{server.server_port}"
+                runtime = Path(temporary) / "runtime"
+                runtime.mkdir(parents=True, exist_ok=True)
+                call_dir = runtime / "calls"
+                (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+                with self.assertRaises(OllamaTechnicalError):
+                    generate(endpoint, "fake-model", "本文", None, call_record_dir=call_dir, settings_id="settings-000001")
+                calls = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(call_dir.glob("*/record.json"))]
+                for call in calls:
+                    validate_call_record(call["call_id"], call)
+                capability = next(call for call in calls if call["operation"] == "model_capability")
+                self.assertEqual(capability["transport"], "failure")
+                self.assertEqual(capability["validation"]["result"], "not_applicable")
+                self.assertEqual(json.loads(capability["response"])["error"]["message"], "model unavailable")
+        finally:
+            handler.capability_response = None
+            server.shutdown()
+            server.server_close()
+
     def test_public_prose_transport_omits_response_format(self) -> None:
         handler = _OpenAICompatibleHandler
         handler.requests = []
@@ -61,6 +128,9 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as temporary:
                 endpoint = f"http://127.0.0.1:{server.server_port}"
+                runtime = Path(temporary) / "runtime"
+                runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
                     llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint,
                          "model": "fake-model", "api_key_env": None, "headers_env": {},
@@ -68,7 +138,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                          "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
                          "request_options": {}},
                     retry={"max_attempts": 1},
-                ), Path(temporary) / "raw")
+                ), runtime / "raw_logs")
                 self.assertEqual(model.generate_prose("scene_prose", {"scene": "context"}), "本文そのもの")
                 posts = [body for path, body in handler.requests if path == "/v1/chat/completions"]
                 self.assertEqual(len(posts), 1)
@@ -80,6 +150,36 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                     [path for path, _body in handler.requests if path.startswith("/v1/models")],
                     ["/v1/models/fake-model"],
                 )
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_legacy_prose_critique_alias_records_canonical_review_operation(self) -> None:
+        handler = _OpenAICompatibleHandler
+        handler.requests = []
+        handler.completion_responses = [{"schema_version": "review-response-v1", "decision": "pass", "issues": []}]
+        handler.capability_response = None
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                endpoint = f"http://127.0.0.1:{server.server_port}"
+                runtime = Path(temporary) / "runtime"
+                runtime.mkdir(parents=True, exist_ok=True)
+                (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+                model = OpenAIStoryModel(SimpleNamespace(
+                    llm={"v2_openai_ollama": True, "provider": "ollama", "base_url": endpoint,
+                         "model": "fake-model", "api_key_env": None, "headers_env": {},
+                         "thinking": True, "stream": False, "first_event_timeout_seconds": 5,
+                         "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
+                         "request_options": {}},
+                    retry={"max_attempts": 1},
+                ), runtime / "raw_logs")
+                response = model.critique_prose("scene_prose", "本文", {"scene": "context"})
+                self.assertEqual(response["decision"], "pass")
+                calls = [json.loads(path.read_text(encoding="utf-8")) for path in (runtime / "calls").glob("*/record.json")]
+                self.assertEqual({call["operation"] for call in calls}, {"model_capability", "review"})
         finally:
             server.shutdown()
             server.server_close()

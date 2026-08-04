@@ -6,9 +6,9 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-python -m pip wheel --no-deps --wheel-dir "$work/dist" "$root"
-python -m venv "$work/venv"
-"$work/venv/bin/pip" install "$work"/dist/*.whl
+uv build --wheel --out-dir "$work/dist" "$root"
+uv venv --no-project --python "${PYTHON:-python3}" "$work/venv"
+uv pip install --python "$work/venv/bin/python" "$work"/dist/*.whl
 "$work/venv/bin/storycraft" --help
 "$work/venv/bin/python" - <<'PY'
 from storycraft.prompt_template import get_template_loader
@@ -18,7 +18,7 @@ loader = get_template_loader()
 
 schema = loader.load_schema_object(
     "generate",
-    "scene_continuity_v1",
+    "scene_continuity",
 )
 assert isinstance(schema, dict)
 assert schema.get("type") == "object"
@@ -27,7 +27,7 @@ assert schema["properties"]
 
 prompt = OpenAIStoryModel._render(
     "generate",
-    "scene_continuity_v1",
+    "scene_continuity",
     context={},
 )
 assert isinstance(prompt, str)

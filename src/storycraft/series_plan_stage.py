@@ -41,13 +41,20 @@ class SeriesPlanStageService:
         spec = CandidateStageSpec(
             stage="series_plan", artifact_kind="series-plan", next_stage="volume_plan",
             next_target={"volume_number": 1}, content_id_factory=self._content_id,
-            content_validator=lambda content: self._validate_candidate(content, context["request"]),
+            content_validator=lambda content: self._validate_candidate(
+                content, context["request"], context["initial_design"],
+            ),
         )
         return CandidateStageRunner(self.workspace_root, spec).run(model, context=context, updated_at=updated_at)
 
     @staticmethod
-    def _validate_candidate(content: dict[str, Any], request: dict[str, Any]) -> None:
-        DEFAULT_CONTENT_VALIDATORS["series-plan"](content, {"request": {"content": request}})
+    def _validate_candidate(
+        content: dict[str, Any], request: dict[str, Any], initial_design: dict[str, Any],
+    ) -> None:
+        DEFAULT_CONTENT_VALIDATORS["series-plan"](
+            content,
+            {"request": {"content": request}, "initial_design": {"content": initial_design}},
+        )
 
     @staticmethod
     def _payload(record: dict[str, Any], slot: str) -> dict[str, Any]:

@@ -132,9 +132,9 @@ def validate_call_record(call_id: str, record: object) -> dict[str, Any]:
     result, failure = validation["result"], validation["failure_code"]
     if result == "valid" and failure is None and record["transport"] == "success" and record["response"] is not None:
         return record
-    if result == "invalid" and failure in {"json_parse", "schema_invalid", "reference_invalid", "evidence_invalid", "range_invalid"} and record["transport"] == "success" and record["response"] is not None:
+    if result == "invalid" and failure in {"json_parse", "schema_invalid"} and record["transport"] == "success" and record["response"] is not None:
         return record
-    if result == "not_applicable" and failure is None and record["transport"] == "failure" and record["response"] is None:
+    if result == "not_applicable" and failure is None and record["transport"] == "failure" and (record["response"] is None or isinstance(record["response"], str)):
         return record
     raise ContractError("call recordのvalidation/transport相関が不正です")
 

@@ -65,32 +65,26 @@
     "character_arc_map": {
       "type": "object",
       "minProperties": 1,
-      "additionalProperties": false,
-      "patternProperties": {
-        "^char-[A-Za-z0-9_-]+$": {
-          "$ref": "#/$defs/volumeNumbers"
-        }
-      }
+      "additionalProperties": {
+        "$ref": "#/$defs/volumeNumbers"
+      },
+      "description": "入力selectionで束縛された人物のcanonical keyから巻番号列への対応"
     },
     "relationship_arc_map": {
       "type": "object",
       "minProperties": 1,
-      "additionalProperties": false,
-      "patternProperties": {
-        "^rel-[A-Za-z0-9_-]+$": {
-          "$ref": "#/$defs/volumeNumbers"
-        }
-      }
+      "additionalProperties": {
+        "$ref": "#/$defs/volumeNumbers"
+      },
+      "description": "入力selectionで束縛された関係のcanonical keyから巻番号列への対応"
     },
     "thread_progression": {
       "type": "object",
       "minProperties": 1,
-      "additionalProperties": false,
-      "patternProperties": {
-        "^thread-[A-Za-z0-9_-]+$": {
-          "$ref": "#/$defs/volumeNumbers"
-        }
-      }
+      "additionalProperties": {
+        "$ref": "#/$defs/volumeNumbers"
+      },
+      "description": "初期設計のcanonical thread_nameから巻番号列への対応"
     },
     "revelation_schedule": {
       "type": "array",
@@ -111,7 +105,8 @@
           },
           "knowledge_id": {
             "type": "string",
-            "pattern": "^know-[A-Za-z0-9_-]+$"
+            "minLength": 1,
+            "description": "入力selectionで束縛された知識項目のcanonical key。フィールド名は保存互換のためknowledge_idを維持する"
           }
         }
       }

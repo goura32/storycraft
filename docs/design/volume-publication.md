@@ -37,18 +37,18 @@ publications/
 }
 ```
 
-`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。設定、計画、状態、場面、品質判定は `input_selection_id` から導出し、record へ複写しない。`volume_number` は導出した採用済み volume plan の巻番号と一致し、同じ selection から導出する全対象 scene、scene prose、scene prose 品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
+`record.json` は未知項目を拒否し、`schema_version`（整数 `1`）、`volume_publication_id`（ID表の `volume-pub-vNN-{通番6桁}`）、`volume_number`（1以上の整数）、`input_selection_id`、`created_at`（UTC RFC3339）を必須とする。`publication_notice_type` は省略、または文字列 `編集` だけを許可し、`null` を含む他の値を拒否する。設定、計画、状態、場面、本文・継続性品質判定は `input_selection_id` から導出し、record へ複写しない。`volume_number` は導出した採用済み volume plan の巻番号と一致し、同じ selection から導出する全対象 scene、scene prose、本文・継続性品質判定、状態、計画が一意かつ有効でなければならない。`manuscript.md` はその同じ導出集合だけを計画順に並べた決定的出力とし、`publication_notice_type="編集"` のときだけ先頭の定型文を持つ。
 
 **公開注意集約規則（決定的）:**
 - `scene_prose_disposition.vNN.cMM.sKK` の品質判定だけについて、`remaining_major_issues` が空でないかを確認する。これは本文の `critical` 指摘だけを巻全体へ集約する対象である
-- `scene_plan`、`scene_card`、`continuity_disposition.vNN.cMM.sKK` の品質判定は、欠落・重複・結果不正を公開拒否判定として検証するが、`publication_notice_type` へ集約しない
+- `continuity_disposition.vNN.cMM.sKK` の品質判定だけは、欠落・重複・結果不正を公開拒否判定として検証する。`scene_plan` と `scene_card` は専用の品質 disposition slot を持たず、採用時に候補全体の形式・親計画・入力束を検証済みであることを前提に、公開時は選択された内容と lineage の決定的整合だけを再検証する。いずれも `publication_notice_type` へ集約しない
 - いずれかの本文品質判定で `remaining_major_issues` が非空なら `publication_notice_type = "編集"` を保存する
 - すべて空なら `publication_notice_type` キーを省略する（`null` を書かない）
 - 対象本文ごとに品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` のいずれかであることを確認する。欠落・重複・列挙外なら公開を拒否する（`publication_invalid` で `blocked`）
 - 各場面の `continuity_disposition.{coordinate}` slot にも品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` であることを確認する。継続性品質判定は本文品質判定と別に検証するが、巻全体の公開注意へ集約しない。
 - `remaining_major_issues` の非空判定は `critical` 指摘だけを対象とし、`notice` 指摘は公開注意の集約対象にしない。
 
-コードは `input_selection_id` から対象の計画・状態・場面・本文品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。公開記録には導出可能な ID 群を再保存しません。
+コードは `input_selection_id` から対象の計画・状態・場面・本文・継続性品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。本文・継続性品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。公開記録には導出可能な ID 群を再保存しません。
 
 ## 3. 結末必須事項の扱い
 

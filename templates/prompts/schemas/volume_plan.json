@@ -41,36 +41,30 @@
     },
     "character_changes": {
       "type": "object",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^char-[A-Za-z0-9_-]+$": {
+      "additionalProperties": {
           "type": "string",
           "minLength": 1,
           "maxLength": 800
-        }
-      }
+      },
+      "description": "対象巻へ割り当てられた人物のcanonical keyから変化への対応"
     },
     "relationship_changes": {
       "type": "object",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^rel-[A-Za-z0-9_-]+$": {
+      "additionalProperties": {
           "type": "string",
           "minLength": 1,
           "maxLength": 800
-        }
-      }
+      },
+      "description": "対象巻へ割り当てられた関係のcanonical keyから変化への対応"
     },
     "thread_goals": {
       "type": "object",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^thread-[A-Za-z0-9_-]+$": {
+      "additionalProperties": {
           "type": "string",
           "minLength": 1,
           "maxLength": 1000
-        }
-      }
+      },
+      "description": "対象巻へ割り当てられたcanonical thread_nameから目標への対応"
     },
     "revelations": {
       "type": "array",

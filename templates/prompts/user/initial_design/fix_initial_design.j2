@@ -6,13 +6,10 @@
 
 ## 必須条件
 
-- Briefのpremise、required_elements、genre、toneを保持する
-- `tone`配列にはBriefの`tone`の全要素を、文字列を一切変更せずそのまま含める
-- Briefの`tone`を言い換え、語尾追加、語句結合、類義語置換してはならない
-- 必要ならBrief由来のtoneに追加要素を加えてよいが、元の要素は必ず完全一致で残す
-- Briefのvolume_countで継続可能な構造にする
-- Briefのending_preferenceと矛盾しない
-- Briefのavoidに該当する内容を導入しない
+- 依頼のpremise、required_elements、genreを根拠にする
+- 依頼のvolume_countで継続可能な構造にする
+- 依頼のending_preferenceと矛盾しない
+- 依頼のavoidに該当する内容を導入しない
 - 一巻だけで完結する仕組みにしない
 - 未入力の固有名詞、制度、診断名、場所、事件の具体的事実を補わない
 - 自然な日本語で書く
@@ -20,7 +17,7 @@
 
 ## 入力
 
-### 採用済みBriefと設定
+### 採用済み依頼と設定
 
 {{ context | tojson }}
 

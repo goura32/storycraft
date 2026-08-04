@@ -56,7 +56,7 @@
 | 現在作品状態 | `generation` | `current_state` |
 | 場面確定単位 | `scene` | `scene.vNN.cMM.sKK` |
 
-この表は共通外枠を持つ内容成果物だけを列挙します。`keywords`、`volume-publication`、`quality-disposition`、`scene-commit`、selection、candidate、review、call、adoption、run-state はこの `artifact_kind` 列挙の値ではなく、それぞれの個別記録形式を持ちます。
+この表は共通外枠を持つ内容成果物だけを列挙します。`keywords`、`quality-disposition`、selection、candidate、review、call、adoption、run-state はこの `artifact_kind` 列挙の値ではなく、それぞれの個別記録形式を持ちます。`volume-publication` と `scene-commit` は保存配置のregistry kindとして使いますが、共通 `content` envelopeではなく、それぞれpublication recordとscene-commit recordの形式を使います。
 
 各成果物の `content` は任意 object ではない。`artifact_kind`、`input_selection_id` が指す不変 selection、工程契約が定める必須入力スロットから一意に組み立てる閉じた入力束に対し、採用時と同じ種別別内容検証器を通る object だけを許可する。直接依頼と `request_intake` の request は bootstrap 例外で `input_selection_id=null` とし、不変 settings と入口入力だけから同じ入力束を組み立てる。種別別内容検証器は、工程契約の必須項目、型、列挙、座標、参照、相関制約、未知項目を決定的に検証する。採用済み内容を検証するときも、当該 artifact の input selection と工程スロットから同じ入力束を復元して再適用する。任意の入れ子を巨大な共通 JSON Schema に複写せず、種別別内容検証器を `content` の唯一の正本とする。
 
@@ -74,7 +74,7 @@
 | `generation` | 初期設計または場面確定からの決定的状態構築 | initial_design または基準 generation と確定 scene |
 | `scene` | 本文・更新・基準状態・カードの同一座標、後続 generation との整合 | current_state、scene_plan、scene_card、scene_prose、continuity_update |
 
-`validate` は現在 selection から到達する内容成果物だけを ID 順に同じ検証器へ渡す。固定パス・最新探索・未選択履歴・candidate・review・call record による補完、LLM 呼出し、意味品質評価はしない。不合格時は artifact ID、`schema | id | reference | range | evidence` の検査観点、および JSON path または論理項目を返す。実行前検証で同じ不合格を検出した場合は `authority_inconsistency` として `blocked` にする。
+`validate` は現在 selection から到達する内容成果物だけを ID 順に同じ検証器へ渡す。固定パス・最新探索・未選択履歴・candidate・review・call record による補完、LLM 呼出し、意味品質評価はしない。不合格時の公開 CLI 出力は [管理 CLI 契約](admin-cli-and-acceptance-contract.md) の固定 error envelope（`ok`、`code`、`message`）だけで、内部検証器は artifact ID、`schema | id | reference | range | evidence` の観点、JSON path または論理項目をその `message` の診断文へ含めます。構造化された詳細フィールドは CLI の公開契約ではありません。実行前検証で同じ不合格を検出した場合は `authority_inconsistency` として `blocked` にする。
 
 `generation` は共通外枠を持つ採用済みの**現在作品状態**で、`artifact_kind="generation"`、`artifact_id="gen-{通番6桁}"`、`input_selection_id`、初期設計または直前場面確定に対応する状態を **`content`** に持ちます。LLM 呼出し記録ではありません。初期 `generation` の `input_selection_id` は、初期設計工程への入力である依頼採用済み最初の selection ID です。初期設計採用で確定する後続 selection は、その `generation` を `current_state` slot に追加します。
 
@@ -128,10 +128,10 @@
 }
 ```
 
-- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない。`issues` の全件が根拠位置不正で除外された応答は `issues` の条件を満たさない形式不正として扱い、`invalid_response_limit` を消費する。`pass` へ正規化して採用してはならない
+- `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない。根拠位置の検証に一つでも失敗した応答は形式不正として扱い、`invalid_response_limit` を消費する。`pass` へ正規化して採用してはならない
 - `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
 - `evidence_locations`: `$.path`、`paragraph:N`、`prose:N` のいずれか。`N` は0始まりで、`paragraph` は空行区切りの段落番号、`prose` は本文のUTF-8 byte オフセット。対象本文・JSON に解決できない値は形式不正
-- `code`、`affected_artifact_ids`、`disposition`、`revision_instruction` はシステム側が確認記録作成時に付与し、LLM 応答には含めない
+- 確認記録には `ReviewResponse` をそのまま保存し、`code`、`affected_artifact_ids`、`disposition`、`revision_instruction` のような追加フィールドは持たせない。品質判定を作るときだけ、最終候補の各 `critical` 指摘を `{"code":"quality.critical", "message": issue.explanation, "evidence_locations": issue.evidence_locations}` へ決定的に変換する。LLMが `code` や `message` を生成することはない
 ### 3.3 quality-disposition (品質判定記録) — `quality/{id}/record.json`
 
 ```json
@@ -144,7 +144,7 @@
   "revision_count": 2,
   "result": "accepted_with_notice",
   "remaining_major_issues": [
-    {"code": "quality.contradiction", "message": "string", "evidence_locations": ["$.path"]}
+    {"code": "quality.critical", "message": "string", "evidence_locations": ["$.path"]}
   ],
   "notice_type": "編集",
   "created_at": "RFC3339"
@@ -238,7 +238,7 @@ call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存す
 }
 ```
 
-`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response=null` とする。`request_intake` のcallは `input_selection_id` を持たず、`input_refs` にkeywords IDとsettings IDを含める。`validation.result="valid"` では `failure_code=null`、`invalid` では `json_parse`、`schema_invalid`、`reference_invalid`、`evidence_invalid`、`range_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。認証情報と接続秘密値は request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
+`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response` は通常nullとする。ただしHTTP 200のprovider error envelopeは raw bodyを `response` に保存してよい。`request_intake` のcallは `input_selection_id` を持たず、`input_refs` にkeywords IDとsettings IDを含める。`validation.result="valid"` では `failure_code=null`、`invalid` では provider response の `json_parse` または `schema_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。候補・確認の意味検証に失敗した応答は candidate/review record を作らず、その物理 call record と raw response を残して形式不正再呼出しを行う。認証情報と接続秘密値を request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
 
 ### 3.8 adoption record（採用記録）
 

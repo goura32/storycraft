@@ -5,7 +5,7 @@
 
 # chapter_plan の批評
 
-Chapter Plan CandidateをVolume Planとcurrent Generationへ照合し、
+Chapter Plan CandidateをVolume Planとcurrent_stateへ照合し、
 候補内で修正可能な問題だけをissuesへ出す。
 問題がなければ `issues: []` を返す。
 
@@ -13,7 +13,7 @@ Chapter Plan CandidateをVolume Planとcurrent Generationへ照合し、
 
 1. 対象VolumeとChapterが正しい
 2. Chapter目的がVolume Planの対象summaryを具体化している
-3. starting_conditionsがcurrent Generationと矛盾しない
+3. starting_conditionsがcurrent_stateと矛盾しない
 4. 未発生の予定を開始時点の確定事実にしていない
 5. ending_changesがChapter終了時の意味ある変化である
 6. Scene番号が1からの連番である
@@ -22,7 +22,7 @@ Chapter Plan CandidateをVolume Planとcurrent Generationへ照合し、
 9. Chapter内に主要な対立の進行がある
 10. required_revelationsがVolume Planの許容範囲内である
 11. 必要な開示がScene目的へ実行可能に配置されている
-12. constraintsが上位PlanとBriefを保持している
+12. constraintsが上位Planとcurrent_stateの制約を保持している
 13. 最終ChapterではVolume終点へ収束する
 14. 最終Chapter以外では次Chapterへ接続する
 15. 入力にない事実、ID、採用metadataを追加していない

@@ -35,23 +35,23 @@
 
 ### 3.2 最初の作品状態
 
-候補からコードが別の `generation` スキーマを決定的に作り、これを最初の正規形現在状態とします。`story_facts` は `world` と `cast` の初期事実をコードが正規化した空でない事実一覧、`character_knowledge` は各人物 ID の作者が定義した公開知識だけ、`reader_disclosures` は空、`unresolved_thread_states` は各未解決事項 ID の `open`・根拠なし、`timeline_position` は `0` とします。
+候補からコードが別の `generation` スキーマを決定的に作り、これを最初の正規形現在状態とします。`story_facts` は `world` と `cast` の初期事実をコードが正規化した空でない事実一覧、`character_knowledge` は各人物 ID の作者が定義した公開知識だけ、`reader_disclosures` は空、`unresolved_thread_states` は各 canonical `thread_name` の `open`・根拠なし、`timeline_position` は `0` とします。
 
 | 項目 | 内容 |
 |---|---|
 | `story_facts` | 初期時点で確定している作品事実 |
 | `character_knowledge` | 人物 ID ごとの現在知識 |
 | `reader_disclosures` | 読者に開示済みの情報 |
-| `unresolved_thread_states` | 未解決事項 ID ごとの現在状態 |
+| `unresolved_thread_states` | 初期設計の canonical `thread_name` ごとの現在状態 |
 | `timeline_position` | 現在の時系列位置 |
 
-`generation` は initial-design の人物、世界、関係、知識構造、未解決事項 ID と矛盾してはなりません。`initial_design` のLLM応答は `CandidateResponse` envelope（`schema_version="candidate-response-v1"`、`artifact_kind="initial-design"`、`payload`）で返し、コードが envelope を検証してから payload を候補記録に保存します。確認・修正promptは正式依頼、現候補、確認応答をそれぞれ固定ラベル下のcanonical JSONとして受け取ります。
+`generation` は initial-design の人物、世界、関係、知識構造、canonical `thread_name` と矛盾してはなりません。`initial_design` のLLM応答は `CandidateResponse` envelope（`schema_version="candidate-response-v1"`、`artifact_kind="initial-design"`、`payload`）で返し、コードが envelope を検証してから payload を候補記録に保存します。確認・修正promptは正式依頼、現候補、確認応答をそれぞれ固定ラベル下のcanonical JSONとして受け取ります。
 
 ### 3.3 確認・修正・採用
 
-- 確認記録: 対象候補 ID、判定、指摘 ID、重要度、根拠位置、説明
+- 確認記録: 対象候補 ID、判定、重要度、根拠位置、説明
 - 修正候補: `initial-design` と同一の完全スキーマ。元候補 ID と確認記録 ID は、システム側の候補記録だけが持つ。
-- 採用選択: 採用候補 ID、`initial_design_id`、`generation_id`、品質上限到達時の残存重大指摘と注意根拠。`initial_design_adoption` の一つのmanifestが initial-design と最初の generation を同時に確定し、生成recordの `input_selection_id` は確定前selection、出力selectionが両slotを束縛する。payloadへ相互参照IDを重複保存しない。
+- 採用選択: 採用候補 ID、`initial_design_id`、`generation_id`、品質判定 ID。品質上限到達時の残存重大指摘と注意根拠は `quality` record にだけ保存する。`initial_design_adoption` の一つのmanifestが initial-design と最初の generation を同時に確定し、生成recordの `input_selection_id` は確定前selection、出力selectionが両slotを束縛する。payloadへ相互参照IDを重複保存しない。
 
 確認記録、修正候補、採用選択は初期設計・作品状態の内容を複写しません。
 
@@ -60,7 +60,7 @@
 コードは次を検証します。
 
 1. 依頼入力の排他、必須項目、言語が日本語、巻数が 4–10、必須条件と避ける条件の明示矛盾。
-2. `cast`、関係、世界要素、知識主体、未解決事項、ending condition の ID 一意性、列挙値、参照実在、参照型。
+2. `cast`、関係、世界要素、知識主体、未解決事項、ending condition の名称一意性、列挙値、参照実在、参照型。
 3. 結末必須未解決事項と `ending_conditions` の一対一対応。非必須未解決事項に達成条件を置かない。
 4. `generation` が初期設計からの決定的な初期化規則に従い、人物、世界、関係、知識、未解決事項状態と対応し、現在状態として必要な項目をすべて持つこと。
 5. 確認記録の対象候補 ID、重要度列挙値、根拠位置の実在・解決可能性。
@@ -71,7 +71,7 @@
 
 独立 LLM は、正式依頼と候補全体を照合し、人物・関係・世界・知識・未解決事項・結末条件の物語的整合性、必須要素・避ける条件・結末希望の取り違え、主題と読者への約束、知識モデルの不自然なネタバレを確認します。
 
-重大指摘が上限前にあれば、初期設計候補全体を修正し、再検証・再確認します。上限に達した場合は、最後の形式有効候補を注意付きで採用し、残存重大指摘と注意根拠を採用選択に保存します。部分成果物だけを修正・採用しません。
+重大指摘が上限前にあれば、初期設計候補全体を修正し、再検証・再確認します。品質修正上限に達した場合は、最後の形式有効候補を注意付きで採用し、残存重大指摘と注意根拠を `quality` record に保存します。adoption record と selection snapshot はその `quality_id` または採用記録だけを参照し、指摘本文を複写しません。修正応答が形式不正上限に達した場合は、`quality_revision_limit=0` で直前に形式有効な候補があるときだけ同候補を注意付きで採用し、それ以外は `blocked` にします。部分成果物だけを修正・採用しません。
 
 採用後、後続選択スナップショットは `request`、`settings`、`initial_design`、`current_state`、`initial_design_adoption` の各スロットを持ちます。`series_plan` はこれらの正本を直接読み、次工程専用の要約・引継ぎ文書は作りません。
 

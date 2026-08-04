@@ -1,6 +1,6 @@
 # scene_plan の批評
 
-Scene Plan CandidateをChapter Plan、current Generation、
+Scene Plan CandidateをChapter Plan、current_state、
 採用済みInitial Designへ照合する。
 候補内で修正可能な問題だけをissuesへ出し、
 問題がなければ `issues: []` を返す。
@@ -10,8 +10,8 @@ Scene Plan CandidateをChapter Plan、current Generation、
 1. 対象Volume、Chapter、Sceneが正しい
 2. purposeが対象Scene summaryを具体化している
 3. POV人物が参加人物に含まれている
-4. 人物とLocationのIDが採用済みデータに存在する
-5. 人物の現在State、所在、Knowledge、利用可能性と矛盾しない
+4. 人物とLocationのcanonical keyが採用済みデータに存在する
+5. 人物の現在state、所在、知識、利用可能性と矛盾しない
 6. starting_conditionsがScene開始前の確定状態だけを表す
 7. intended_beatsが因果順で、Scene目的へ寄与する
 8. intended_revelationsがChapter Planの許容範囲内である
@@ -21,7 +21,7 @@ Scene Plan CandidateをChapter Plan、current Generation、
 12. 最終SceneならChapter終点へ収束する
 13. 最終Scene以外なら次Sceneへ接続する
 14. Scene Card相当の過剰な詳細へ踏み込んでいない
-15. 未入力の事実、ID、採用metadataを追加していない
+15. 未入力の事実、key、採用metadataを追加していない
 16. 不自然な日本語、意味の重複、直接矛盾がない
 
 各issueの `evidence_locations` はCandidate内に実在するJSON pathを `$.` 付きで指定し、候補外の新事実を根拠や説明へ追加しない。

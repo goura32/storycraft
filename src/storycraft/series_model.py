@@ -85,7 +85,7 @@ class OpenAIStoryModel:
         context: dict[str, Any],
     ) -> dict[str, Any]:
         return self._call(
-            "critique",
+            "review",
             stage,
             self._render(
                 "critique",

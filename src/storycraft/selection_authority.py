@@ -99,6 +99,16 @@ def _validate_series_plan(content: dict[str, Any], inputs: dict[str, dict[str, A
     request = inputs.get("request", {}).get("content") if isinstance(inputs.get("request"), dict) else None
     if request is not None and (not isinstance(request, dict) or request.get("volume_count") != count):
         raise ContractError("series-plan volume_countがrequestと一致しません")
+    initial_design = _record_content(inputs.get("initial_design"))
+    if initial_design is not None:
+        threads = initial_design.get("unresolved_threads")
+        progression = value.get("thread_progression")
+        thread_names = {
+            item.get("name") for item in threads
+            if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"]
+        } if isinstance(threads, list) else set()
+        if not thread_names or not isinstance(progression, dict) or set(progression) != thread_names:
+            raise ContractError("series-planのthread_progressionがinitial-designのunresolved_threadsと一致しません")
 
 
 def _validate_volume_plan(content: dict[str, Any], inputs: dict[str, dict[str, Any]]) -> None:

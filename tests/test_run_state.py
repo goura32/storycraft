@@ -74,6 +74,10 @@ class RunStateV2Tests(unittest.TestCase):
             ],
         }
         self.assertIs(validate_run_state(state), state)
+        state["current_stage"] = "initial_design"
+        state["current_selection_id"] = "selection-000001"
+        with self.assertRaisesRegex(ContractError, "bootstrap"):
+            validate_run_state(state)
 
     def test_initial_design_adoption_includes_its_first_generation(self) -> None:
         state = copy.deepcopy(BASE_STATE)

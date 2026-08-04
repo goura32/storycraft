@@ -10,6 +10,8 @@ Storycraft は、作品の依頼文またはキーワードから、日本語の
 - 新規作業場所の初期化 `init`、実行 `run`、状態表示 `status`、検証 `validate` を使う
 - 創作や意味の評価は大規模言語モデル（LLM）、形式・保存・復旧は決定的なコードが担当する
 
+キーワードは参考情報です。LLM は採用、部分採用、一般化、不採用を選べるため、キーワードとの逐語一致や巻数一致を入口で要求しません。採用する依頼文は、依頼スキーマ、自然な日本語、各項目の責務、未指定の具体的事実を追加しないことを満たします。
+
 複数人の同時編集、分散実行、外部の作業場所、自動ウェブ検索、公開時の本文再生成は V1 の対象外です。
 
 ## 必要環境
@@ -44,13 +46,15 @@ cat > config.json <<'EOF'
   "endpoint": "http://192.168.1.50:11434",
   "model": "qwen3:35b-a3b",
   "technical_retry_limit": 3,
-  "quality_revision_limit": 0,
+  "quality_revision_limit": 2,
   "invalid_response_limit": 3,
   "chapter_per_volume_range": [1, 20],
   "chapter_scene_range": [1, 20],
   "scene_text_char_range": [1000, 12000]
 }
 EOF
+
+# `quality_revision_limit` は通常は有限値にします。0 は明示的に無制限の品質修正を選ぶ値です。
 
 # 依頼文作成
 cat > request.json <<'EOF'
@@ -134,6 +138,7 @@ uv run python -m storycraft.cli validate --workspace ./my-novel --json
 | [仕様書](docs/SPECIFICATION.md) | V1 の唯一の仕様正本 |
 | [実装状況](docs/IMPLEMENTATION_STATUS.md) | 時点付きの実装・検証記録。仕様正本ではない |
 | [設計書](docs/design/README.md) | 実装設計ドキュメント群の索引 |
+| [依頼JSON例](example_brief.json) | 現行 `--request` 入力の最小例 |
 | [テスト用資料](tests/fixtures/README.md) | 自動試験で使う資料の構成 |
 
 ## 開発者向け検証
@@ -168,7 +173,7 @@ src/storycraft/           # 実装コード
 templates/prompts/
 ├── system/                      # システムプロンプト
 ├── schemas/                     # JSONスキーマ
-└── user/                        # ユーザープロンプト (generate/critique/revision × 9 LLM工程。scene_commit と volume_publication はコード処理)
+└── user/                        # active 9 LLM工程の generate/critique/fix（旧 brief 3 template は非接続。scene_commit と volume_publication はコード処理）
 
 docs/
 ├── SPECIFICATION.md             # 仕様正本

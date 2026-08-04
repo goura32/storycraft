@@ -129,7 +129,10 @@ def _validate_current_work(state: dict[str, Any], *, allow_null_selection: bool)
             raise ContractError("current_selection_idはrequest_intake以外で必要です")
     else:
         _require_id(selection_id, "selection-", "current_selection_id")
-    _validate_pending_commit(state["pending_commit"], state["published_volumes"], state["current_selection_id"])
+    _validate_pending_commit(
+        state["pending_commit"], state["published_volumes"], state["current_selection_id"],
+        state["status"], state["current_stage"],
+    )
 
 
 def _validate_target(stage: str, target: object) -> None:
@@ -144,7 +147,10 @@ def _validate_target(stage: str, target: object) -> None:
             raise ContractError(f"run-state.current_target.{field}は1以上の整数でなければなりません")
 
 
-def _validate_pending_commit(value: object, published_volumes: object, current_selection_id: object) -> None:
+def _validate_pending_commit(
+    value: object, published_volumes: object, current_selection_id: object,
+    status: object, current_stage: object,
+) -> None:
     if value is None:
         return
     if not isinstance(value, dict):
@@ -165,7 +171,13 @@ def _validate_pending_commit(value: object, published_volumes: object, current_s
         _require_id(output_selection_id, "selection-", "pending_commit.output_selection_id")
         if input_selection_id is not None:
             _require_id(input_selection_id, "selection-", "pending_commit.input_selection_id")
-        elif not (kind == "candidate_adoption" and _is_bootstrap_request_adoption(targets)):
+        elif not (
+            kind == "candidate_adoption"
+            and _is_bootstrap_request_adoption(targets)
+            and status == "running"
+            and current_stage == "request_intake"
+            and current_selection_id is None
+        ):
             raise ContractError("input_selection_id=nullはbootstrap request adoptionだけに許可されます")
     if input_selection_id is not None and input_selection_id != current_selection_id:
         raise ContractError("pending_commit.input_selection_idはrun-state.current_selection_idと一致しなければなりません")

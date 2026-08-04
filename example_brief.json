@@ -1,17 +1,9 @@
 {
-  "schema_version": 1,
-  "source_type": "brief",
   "title": "岬の灯",
   "genre": [
     "海洋幻想譚"
   ],
-  "audience": "成人読者",
-  "tone": [
-    "静かな緊張",
-    "希望のある結末"
-  ],
   "premise": "岬の灯台守見習いの澪が、疎遠になった幼なじみの凪とともに停止した灯台の原因を追い、町全体で灯を守る仕組みを作ろうとする。",
-  "central_question": "澪は家業としてではなく、自分の意思で灯を守る道を選べるか。",
   "required_elements": [
     "岬の灯台",
     "停止原因の調査",
@@ -24,10 +16,5 @@
   ],
   "ending_preference": "町が灯を守る意思を持ち、澪と凪が再点灯を見届ける。",
   "volume_count": 4,
-  "language": "ja",
-  "style_preferences": [
-    "情景描写は簡潔",
-    "説明過多を避ける"
-  ],
-  "user_notes": null
+  "language": "ja"
 }

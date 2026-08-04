@@ -1,6 +1,6 @@
 # V1 Scene継続性更新の批評
 
-候補を凍結本文、allowed_updates、Current Stateへ照合し、
+候補を凍結本文、allowed_updates、current_stateへ照合し、
 修正可能で具体的な問題だけをissuesへ出す。
 問題がなければ空配列を返す。
 
@@ -8,7 +8,7 @@
 
 - 本文に書かれた変化だけである
 - allowed_updates外のtargetまたはfieldがない
-- old_valueがCurrent Stateと完全一致する
+- old_valueがcurrent_stateと完全一致する
 - new_valueがfieldの型と不変条件を守る
 - no-op更新がない
 - Evidence quoteが本文へ完全一致する

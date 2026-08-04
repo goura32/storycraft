@@ -113,11 +113,13 @@ ID は採番後に変更しません。
 
 呼出し、決定的検証、LLM 確認、品質上限の結果は不変の監査記録です。作品正本を更新するのは、採用処理と場面確定だけです。
 
-- `runtime/calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、その応答に対する解析、スキーマ、参照、根拠位置の決定的評価。selection前のrequest_intakeでは`settings_id`と`input_refs`（keywords/settings）を持つ。送受信本文は監査用の生記録であり、候補 payload と ReviewResponse の正本はそれぞれ候補・確認記録だけとする
+- `runtime/calls/<call-id>/record.json` と依頼/応答: 物理的な一回の提供者呼出しと、通信・応答 envelope・provider schema の決定的評価。selection前のrequest_intakeでは`settings_id`と`input_refs`（keywords/settings）を持つ。送受信本文は監査用の生記録であり、候補 payload、ReviewResponse、参照・根拠位置の意味検証の正本はそれぞれ候補・確認・品質記録の検証境界だけとする
 - `candidates/<candidate-id>/record.json`: `schema_version`、`candidate_id`、`artifact_kind`、`input_selection_id`、`keywords_id`、`settings_id`、工程 payload、生成または修正元 candidate ID、対応する call ID、作成時刻を持つ不変候補記録。selection 前の `request_intake` だけは `keywords_id` を持ち、他工程では `null` とする。
 - `reviews/<review-id>/record.json`: `schema_version`、`review_id`、対象 candidate ID、ReviewResponse、対応する call ID、作成時刻を持つ不変確認記録。selection前の入力源はcandidate IDから候補記録へ辿り、reviewへkeywords/settingsを重複保存しない
-- `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。品質判定は採用記録を参照しない。
-- `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot、継続性更新採用では `continuity_disposition.vNN.cMM.sKK` slot に固定する。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
+- `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。これは内容やLLM要約の正本ではなく、候補・品質・selectionを一つの原子的確定へ束ねる監査・復旧用の参照束です。品質判定の生成は採用記録を参照しません。
+- `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot、継続性更新採用では `continuity_disposition.vNN.cMM.sKK` slot に固定する。ReviewResponse 全体の正本は `reviews` 記録であり、品質判定の `remaining_major_issues` は公開可否を再検証するための critical 指摘の決定的な派生値だけを持つ。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
+
+`runtime/raw_logs/<stem>.json` と同名の `.md` は、境界処理から戻った物理呼出しの送受信を人が確認するための非正本補助ログです。形式不正で境界が例外終了した呼出しは `runtime/calls` の記録だけが残ることがあります。機械的な監査・復旧・`validate` が参照する正本は `runtime/calls/<call-id>/record.json` だけで、raw log を後続工程の入力・内容判定・公開原稿に使いません。送信内容から内部 marker 付きのメッセージと thinking 本文を除外し、認証情報は保存しません。call ID、設定参照、endpoint、model などの呼出しメタデータは補助ログに含まれ得ます。公開ディレクトリへコピーしません。
 
 依頼/応答に認証情報、Authorization、secret header、思考過程を保存しません。呼出し記録は作品状態や公開原稿の正本ではありません。
 

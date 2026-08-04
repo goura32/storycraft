@@ -121,6 +121,12 @@ def _capability(
                       validation={"result": "invalid", "checks": [], "failure_code": "json_parse"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
         raise OllamaResponseFormatError("Ollamaモデル情報が不正です") from exc
+    if isinstance(payload, dict) and "error" in payload:
+        _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
+                      request=None, response=raw, transport="failure",
+                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
+        raise OllamaTechnicalError("Ollama provider error envelope")
     valid = (
         isinstance(payload, dict)
         and set(payload) == {"id", "context_length"}
@@ -185,6 +191,8 @@ def generate(
         with urlopen(request, timeout=60) as response:
             raw = response.read().decode("utf-8")
             envelope = json.loads(raw)
+        if isinstance(envelope, dict) and "error" in envelope:
+            raise OllamaTechnicalError("Ollama provider error envelope")
         content = envelope["choices"][0]["message"]["content"]
         if schema is None:
             if not isinstance(content, str) or not content.strip():
@@ -204,6 +212,15 @@ def generate(
         if call_id is not None and call_id_sink is not None:
             call_id_sink(call_id)
         raise OllamaTechnicalError("Ollama呼出しに失敗しました") from exc
+    except OllamaTechnicalError as exc:
+        call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
+                      request=body, response=raw, transport="failure",
+                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
+                      settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
+        if call_id is not None and call_id_sink is not None:
+            call_id_sink(call_id)
+        raise exc
     except ValidationError as exc:
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=raw, transport="success",

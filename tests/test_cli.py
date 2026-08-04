@@ -138,7 +138,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             invalid_state_error = json.loads(invalid_state.stderr)
             self.assertEqual(invalid_state_error["ok"], False)
             self.assertEqual(invalid_state_error["code"], "validation_failed")
-            self.assertEqual(invalid_state_error["message"], "validation_failed")
+            self.assertIn("current_stage", invalid_state_error["message"])
 
     def test_unavailable_provider_uses_machine_error_protocol_and_persists_technical_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

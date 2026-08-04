@@ -9,7 +9,7 @@
 | 依頼文 | 依頼内容 | 不変 `request` | `initial_design` |
 | キーワード | 1個以上の短いキーワード | 依頼候補、確認、採用済み `request` | `initial_design` |
 
-キーワード起点は `request_intake` 工程です。`init` は入力 keywords を `inputs/keywords-{通番6桁}/record.json` として不変確定し、`run` がその入力記録と不変 settings を読んで生成、確認、修正を行います。入力記録は `keywords_id`、正規化したキーワード配列、言語、created_at を持ち、selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照します。採用時だけ、採用済み `request` を唯一の初期化時成果物として `input_selection_id=null` で不変確定し、直後に最初の選択スナップショットを確定します。
+キーワード起点は `request_intake` 工程です。`init` は入力 keywords を `inputs/keywords-{通番6桁}/record.json` として不変確定し、`run` がその入力記録と不変 settings を読んで生成、確認、修正を行います。キーワードは参考情報であり、LLM は採用、部分採用、一般化、不採用を選べます。逐語一致や巻数一致、キーワードの不正・矛盾・曖昧さだけを理由に候補を拒否・修正・停止しません。入力記録は `keywords_id`、正規化したキーワード配列、言語、created_at を持ち、selection 前の候補・確認・呼出し記録は `keywords_id` と `settings_id` を必ず参照します。採用時だけ、採用済み `request` を唯一の初期化時成果物として `input_selection_id=null` で不変確定し、直後に最初の選択スナップショットを確定します。
 
 採用済み依頼は次を満たします。
 
@@ -46,7 +46,7 @@ V1では、`thread_id`、`action`、`required_conditions` を持つ別個のallo
 - chapter-plan: `required_revelations` と `ending_changes` が場面配分と章末状態を持つ。
 - scene-plan: `intended_revelations`、`intended_changes`、`intended_beats` が当該場面の予定を持ち、座標はselection slotとartifact IDだけで束縛する。
 
-子計画は親payloadの対象範囲を狭めて具体化し、親にない目的、開示、予定変化を追加しません。未解決事項の名称・達成条件との対応は、初期設計の`unresolved_threads`と`ending_conditions.thread_name`を読み合わせ、別名のIDや説明文の重複保存は行いません。scene-cardはscene-planの予定を`required_beats`、`ending_state_targets`、`allowed_updates`へ本文用に具体化するだけです。
+子計画は親payloadの対象範囲を狭めて具体化し、親にない目的、開示、予定変化を追加しません。未解決事項の対応のcanonical keyは初期設計の`unresolved_threads[].name`（`thread_name`）と`ending_conditions[].thread_name`です。V1では別個のthread IDやallocation payloadを作らず、子計画の予定文字列は親配列の部分集合として決定的に検証し、名称が指す意味と達成条件の保持は独立 LLM 確認で検証します。別名のIDや説明文の要約成果物は保存しません。scene-cardはscene-planの予定を`required_beats`、`ending_state_targets`、`allowed_updates`へ本文用に具体化するだけです。
 
 ## 4. 本文から解決まで
 
@@ -63,7 +63,7 @@ V1では、`thread_id`、`action`、`required_conditions` を持つ別個のallo
 
 ## 5. 巻公開の検証
 
-巻公開は、当該巻のscene-plan、scene-card、本文、継続性更新、作品状態、品質判定のselection lineageを決定的に検証します。本文の意味的な達成判定は通常の本文品質確認で行い、上限到達時は他の本文と同じく最後の形式有効版を注意付き採用します。公開工程自身はLLMを呼びません。
+巻公開は、当該巻のscene-plan、scene-card、本文、継続性更新、作品状態、品質判定のselection lineageを決定的に検証します。本文の意味的な達成判定は通常の本文品質確認で行います。品質修正上限に達した場合は最後の形式有効版を注意付き採用し、残存重大指摘はquality recordが保持します。adoption/selectionに指摘本文を複写しません。修正応答が形式不正上限に達した場合は `quality_revision_limit=0` の既存有効候補だけを同じ例外として採用し、それ以外は停止します。公開工程自身はLLMを呼びません。
 
 最終巻でも追加の確認記録、本文再生成、注意付き公開による例外を設けません。通常の巻公開検証が成功すれば、その巻の公開がシリーズ制作完了です。
 
