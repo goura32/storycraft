@@ -13,7 +13,13 @@ import weakref
 from jinja2 import BaseLoader, Environment, StrictUndefined
 from jsonschema import Draft202012Validator
 
-from .filesystem_security import _open_directory_chain, assert_no_symlink_path, directory_identity, read_text_at
+from .filesystem_security import (
+    _open_directory_chain,
+    absolute_without_resolving,
+    assert_no_symlink_path,
+    directory_identity,
+    read_text_at,
+)
 from .series_contracts import ContractError
 
 
@@ -43,10 +49,12 @@ class PromptTemplate:
     """Jinja template and schema loader constrained to the packaged prompt root."""
 
     def __init__(self, template_dir: Path):
-        self.template_dir = assert_no_symlink_path(template_dir.expanduser(), require_directory=True)
+        template_candidate = absolute_without_resolving(template_dir.expanduser())
+        expected_root_identity = directory_identity(template_candidate)
+        self.template_dir = assert_no_symlink_path(template_candidate, require_directory=True)
         self._root_descriptor = _open_directory_chain(
             self.template_dir,
-            expected_identity=directory_identity(self.template_dir),
+            expected_identity=expected_root_identity,
         )
         self._root_finalizer = weakref.finalize(self, os.close, self._root_descriptor)
         self.env = Environment(

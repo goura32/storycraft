@@ -133,14 +133,15 @@ class _RecordAnchor:
                 assert_directory_fd_identity(directory_fd_path(root_descriptor) / "runtime", owned_runtime_descriptor)
                 assert_directory_fd_identity(directory_path, owned_directory_descriptor)
             else:
-                assert_within(root_path, directory_path)
-                candidate_relative = absolute_without_resolving(directory_path).relative_to(absolute_without_resolving(root_path)).parts
+                candidate_absolute = absolute_without_resolving(directory_path)
+                assert_within(root_path, candidate_absolute)
+                candidate_relative = candidate_absolute.relative_to(absolute_without_resolving(root_path)).parts
                 if candidate_relative != ("runtime", "calls"):
                     raise ContractError("call record directoryはworkspace/runtime/callsでなければなりません")
-                expected_directory_identity = directory_identity(directory_path, missing_ok=True)
+                expected_directory_identity = directory_identity(candidate_absolute, missing_ok=True)
                 root_descriptor, owned_directory_descriptor = open_workspace_directory(
                     root_path,
-                    directory_path,
+                    candidate_absolute,
                     create=True,
                     expected_root_identity=expected_root_identity,
                     expected_child_identity=expected_directory_identity,

@@ -18,6 +18,7 @@ from .artifact_registry import ARTIFACT_SPECS
 from .endpoint_security import resolve_allowed_addresses
 from .filesystem_security import (
     _open_directory_chain,
+    absolute_without_resolving,
     atomic_write_text,
     assert_no_symlink_file_path,
     assert_no_symlink_path,
@@ -255,8 +256,10 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
     """Validate fixed runtime files and raw-log pair integrity before reads."""
     for relative in ("runtime/counters.json", "runtime/lock", "runtime/counters.lock", "runtime/run-state.json"):
         assert_no_symlink_file_path(root / relative, require_file=True)
-    raw_dir = assert_no_symlink_path(root / "runtime/raw_logs", require_directory=True)
-    raw_descriptor = _open_directory_chain(raw_dir, expected_identity=directory_identity(raw_dir))
+    raw_candidate = absolute_without_resolving(root / "runtime/raw_logs")
+    expected_raw_identity = directory_identity(raw_candidate)
+    raw_dir = assert_no_symlink_path(raw_candidate, require_directory=True)
+    raw_descriptor = _open_directory_chain(raw_dir, expected_identity=expected_raw_identity)
     try:
         _assert_directory_fd_identity(raw_dir, raw_descriptor)
         stems: dict[str, set[str]] = {}

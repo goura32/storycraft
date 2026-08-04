@@ -6,7 +6,13 @@ import os
 from pathlib import Path
 import stat
 
-from .filesystem_security import assert_no_symlink_file_path, assert_no_symlink_path, directory_identity, open_workspace_directory
+from .filesystem_security import (
+    absolute_without_resolving,
+    assert_no_symlink_file_path,
+    assert_no_symlink_path,
+    directory_identity,
+    open_workspace_directory,
+)
 from .series_contracts import ContractError
 
 
@@ -27,14 +33,17 @@ logger = get_logger()
 
 def add_file_handler(log_file: Path, *, workspace_root: Path) -> None:
     """作業workspace内のログファイルへnofollowで出力する。"""
-    root = assert_no_symlink_path(workspace_root, require_directory=True)
-    path = Path(log_file).absolute()
+    root_candidate = absolute_without_resolving(workspace_root)
+    path = absolute_without_resolving(log_file)
+    expected_root_identity = directory_identity(root_candidate)
+    expected_child_identity = directory_identity(path.parent, missing_ok=True)
+    root = assert_no_symlink_path(root_candidate, require_directory=True)
     root_descriptor, parent_descriptor = open_workspace_directory(
         root,
         path.parent,
         create=True,
-        expected_root_identity=directory_identity(root),
-        expected_child_identity=directory_identity(path.parent, missing_ok=True),
+        expected_root_identity=expected_root_identity,
+        expected_child_identity=expected_child_identity,
     )
     try:
         assert_no_symlink_file_path(path)

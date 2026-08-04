@@ -152,23 +152,26 @@ def assert_directory_fd_identity(path: Path, descriptor: int) -> None:
 
 
 def directory_identity(path: Path, *, missing_ok: bool = False) -> tuple[int, int] | None:
-    """Capture the identity of a directory before handing its path to an opener."""
+    """Capture identity from the directory FD that was actually opened.
+
+    Do not perform a pathname validation followed by a separate pathname
+    ``stat`` here.  That sequence lets a replacement win between the two
+    operations.  The no-follow directory chain opens and verifies every
+    component relative to its already-open parent before returning the final
+    descriptor.
+    """
     absolute = absolute_without_resolving(path)
+    descriptor: int | None = None
     try:
-        assert_no_symlink_path(absolute, require_directory=not missing_ok)
-        anchored = _directory_fd_anchor(absolute)
-        if anchored is not None:
-            descriptor = _open_relative_directory(anchored[0], anchored[1])
-            try:
-                descriptor_stat = os.fstat(descriptor)
-            finally:
-                os.close(descriptor)
-        else:
-            descriptor_stat = os.stat(absolute, follow_symlinks=False)
+        descriptor = _open_directory_chain(absolute)
+        descriptor_stat = os.fstat(descriptor)
     except FileNotFoundError:
         if missing_ok:
             return None
         raise ContractError("directoryが存在しません")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
     if stat.S_ISLNK(descriptor_stat.st_mode) or not stat.S_ISDIR(descriptor_stat.st_mode):
         raise ContractError("pathは通常directoryでなければなりません")
     return descriptor_stat.st_dev, descriptor_stat.st_ino
@@ -366,13 +369,14 @@ def open_workspace_directory(
     expected_child_identity: tuple[int, int] | None = None,
 ) -> tuple[int, int]:
     """Open workspace root and child directory FDs before pathname races occur."""
-    root_abs = assert_no_symlink_path(root, require_directory=True)
+    root_abs = absolute_without_resolving(root)
     child_abs = absolute_without_resolving(child)
     assert_within(root_abs, child_abs)
     if expected_root_identity is None:
         expected_root_identity = directory_identity(root_abs)
     if expected_child_identity is None:
         expected_child_identity = directory_identity(child_abs, missing_ok=create)
+    root_abs = assert_no_symlink_path(root_abs, require_directory=True)
     root_fd = _open_directory_chain(root_abs, expected_identity=expected_root_identity)
     try:
         relative_parts = _workspace_relative_parts(root_abs, child_abs)

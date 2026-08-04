@@ -27,6 +27,7 @@ from .filesystem_security import (
     assert_file_identity_at,
     assert_no_symlink_path,
     atomic_write_text_noreplace,
+    absolute_without_resolving,
     directory_identity,
     directory_entry_identity,
     directory_fd_path,
@@ -150,10 +151,12 @@ class LLMClient:
             raise ContractError("Ollama providerはHTTP boundary経由でなければなりません")
         if workspace_root is None:
             raise ContractError("LLMClientにはworkspace_rootが必要です")
-        root = assert_no_symlink_path(workspace_root, require_directory=True)
-        raw_path = assert_no_symlink_path(raw_dir)
-        expected_root_identity = directory_identity(root)
-        expected_raw_identity = directory_identity(raw_path, missing_ok=True)
+        root_candidate = absolute_without_resolving(Path(workspace_root))
+        raw_candidate = absolute_without_resolving(Path(raw_dir))
+        expected_root_identity = directory_identity(root_candidate)
+        expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
+        root = assert_no_symlink_path(root_candidate, require_directory=True)
+        raw_path = assert_no_symlink_path(raw_candidate)
         root_descriptor, raw_descriptor = open_workspace_directory(
             root,
             raw_path,
@@ -245,10 +248,12 @@ class LLMClient:
         raw_dir = getattr(self, "raw_dir", None)
         if workspace_root is None or raw_dir is None:
             raise ContractError("provider callにはworkspace_rootとraw_dirが必要です")
-        root = assert_no_symlink_path(Path(workspace_root), require_directory=True)
-        raw_path = assert_no_symlink_path(Path(raw_dir))
-        expected_root_identity = directory_identity(root)
-        expected_raw_identity = directory_identity(raw_path, missing_ok=True)
+        root_candidate = absolute_without_resolving(Path(workspace_root))
+        raw_candidate = absolute_without_resolving(Path(raw_dir))
+        expected_root_identity = directory_identity(root_candidate)
+        expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
+        root = assert_no_symlink_path(root_candidate, require_directory=True)
+        raw_path = assert_no_symlink_path(raw_candidate)
         root_descriptor, raw_descriptor = open_workspace_directory(
             root,
             raw_path,
@@ -357,16 +362,20 @@ class LLMClient:
             raw_descriptor = getattr(self, "_raw_directory_descriptor", None)
             temporary_anchor = False
             if not isinstance(root_descriptor, int) or not isinstance(raw_descriptor, int):
-                raw_path = assert_no_symlink_path(Path(self.raw_dir))
+                raw_candidate = absolute_without_resolving(Path(self.raw_dir))
                 workspace_root = getattr(self, "workspace_root", None)
                 if workspace_root is None:
                     raise ContractError("raw log保存にはworkspace_rootが必要です")
+                root_candidate = absolute_without_resolving(Path(workspace_root))
+                expected_root_identity = directory_identity(root_candidate)
+                expected_raw_identity = directory_identity(raw_candidate, missing_ok=True)
+                raw_path = assert_no_symlink_path(raw_candidate)
                 root_descriptor, raw_descriptor = open_workspace_directory(
-                    workspace_root,
+                    root_candidate,
                     raw_path,
                     create=True,
-                    expected_root_identity=directory_identity(workspace_root),
-                    expected_child_identity=directory_identity(raw_path, missing_ok=True),
+                    expected_root_identity=expected_root_identity,
+                    expected_child_identity=expected_raw_identity,
                 )
                 temporary_anchor = True
             try:

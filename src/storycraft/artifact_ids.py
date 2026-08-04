@@ -9,6 +9,7 @@ from typing import Final
 
 from .filesystem_security import (
     _open_directory_chain,
+    absolute_without_resolving,
     atomic_write_text,
     assert_no_symlink_path,
     directory_fd_path,
@@ -33,9 +34,10 @@ def reserve_counter(workspace_root: Path, counter: str) -> int:
     """Atomically reserve a positive counter value; reserved values are never reused."""
     if counter not in _COUNTERS:
         raise ContractError(f"未知のartifact counterです: {counter}")
-    root = workspace_root.expanduser()
-    assert_no_symlink_path(root, require_directory=True)
-    root_descriptor = _open_directory_chain(root, expected_identity=directory_identity(root))
+    root_candidate = absolute_without_resolving(workspace_root.expanduser())
+    expected_root_identity = directory_identity(root_candidate)
+    root = assert_no_symlink_path(root_candidate, require_directory=True)
+    root_descriptor = _open_directory_chain(root, expected_identity=expected_root_identity)
     try:
         return reserve_counter_at(root_descriptor, counter)
     except OSError as exc:
