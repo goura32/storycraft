@@ -243,7 +243,7 @@ class CandidateStageTests(unittest.TestCase):
             workspace(root)
             settings_path = root / "runtime/settings/settings-000001/record.json"
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
-            settings["payload"]["quality_revision_limit"] = 0
+            settings["payload"]["quality_revision_limit"] = 2
             write_json(settings_path, settings)
             critical = {"schema_version": "review-response-v1", "decision": "issues", "issues": [{"severity": "critical", "evidence_locations": ["$.volume_summaries"], "explanation": "直す"}]}
             clean = {"schema_version": "review-response-v1", "decision": "pass", "issues": []}

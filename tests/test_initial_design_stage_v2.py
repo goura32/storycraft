@@ -104,7 +104,7 @@ def _workspace(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "required_elements": ["灯台"], "avoid": ["宇宙"],
         "ending_preference": "希望", "volume_count": 4, "language": "ja",
     }
-    settings = {"endpoint": "injected", "model": "fake-model", "quality_revision_limit": 0, "invalid_response_limit": 5}
+    settings = {"endpoint": "injected", "model": "fake-model", "quality_revision_limit": 1, "invalid_response_limit": 5}
     _write_json(root / "inputs/request-000001/record.json", {
         "schema_version": 1, "artifact_id": "request-000001", "artifact_kind": "request",
         "input_selection_id": None, "created_at": TIMESTAMP, "content": request,
@@ -228,7 +228,7 @@ class InitialDesignStageV2Tests(unittest.TestCase):
             }
             settings = {
                 "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "fake-model",
-                "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1,
+                "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1,
                 "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1],
                 "scene_text_char_range": [1000, 1000],
             }

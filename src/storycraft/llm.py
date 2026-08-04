@@ -133,6 +133,7 @@ class LLMClient:
         raw_dir: Path,
     ) -> None:
         self.settings = settings
+        self.settings_id = getattr(settings, "settings_id", None)
         self.raw_dir = raw_dir
 
         llm = settings.llm
@@ -528,6 +529,9 @@ class LLMClient:
         if not self.settings.llm.get("v2_openai_ollama", False):
             return self._make_call(messages, response_format, seed)
         meta = messages[-1] if messages and isinstance(messages[-1], dict) else {}
+        bound_settings_id = meta.get("settings_id") or self.settings_id or getattr(self.settings, "settings_id", None)
+        if not isinstance(bound_settings_id, str) or re.fullmatch(r"settings-[0-9]{6}", bound_settings_id) is None:
+            raise ContractError("V2 provider callには有効なsettings_idが必要です")
         visible_messages = [
             message for message in messages
             if isinstance(message, dict) and isinstance(message.get("role"), str)
@@ -549,7 +553,7 @@ class LLMClient:
                 messages=visible_messages, call_record_dir=self.raw_dir.parent / "calls",
                 technical_attempt=rec.attempt, format_attempt=meta.get("__format_attempt", 1), seed=seed,
                 operation=rec.kind, call_id_sink=lambda call_id: setattr(rec, "call_id", call_id),
-                settings_id=meta.get("settings_id"), input_refs=meta.get("input_refs", []),
+                settings_id=bound_settings_id, input_refs=meta.get("input_refs", []),
                 target_candidate_id=meta.get("target_candidate_id"),
             )
             rec.content = value if schema is None and isinstance(value, str) else json.dumps(value, ensure_ascii=False)

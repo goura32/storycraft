@@ -48,17 +48,17 @@ storycraft validate --workspace PATH [--json]
 
 **模擬 Ollama 契約**: OpenAI 互換の Ollama `/v1/chat/completions` エンドポイントを提供し、モデル最大コンテキスト長を返す OpenAI 互換のモデル情報応答も提供する。`messages`、`think: true`、シード、`options.num_ctx`、構造化工程のJSON Schema `response_format` を検査し、場面本文の生成・修正では `response_format` がないことを検査する。いずれも `choices[0].message.content` に応答を返す。温度等は設定で指定された場合だけ検査する。実装クラス・メソッドシグネチャはコード側で定義。
 
-**設定検証契約**: `init --config FILE` は JSON がスキーマ（§2.2）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/形式不正再呼出し上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。`quality_revision_limit` は JSON integer（booleanを除く）かつ0以上、`technical_retry_limit` と `invalid_response_limit` は1以上、負値・小数・文字列・booleanはそれぞれの JSON pointer を含む `invalid_argument` とし、workspaceを作成しない。省略時の既定値はありません。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#22-init-入力) に従う。
+**設定検証契約**: `init --config FILE` は JSON がスキーマ（§2.2）と範囲制約に従うかのみ検査。provider/endpoint/model/技術的再試行上限/品質修正上限/形式不正再呼出し上限/各rangeが必須で、`request_options` は任意。未知項目・型不一致・range順序違反で終了コード 2。`quality_revision_limit` は JSON integer（booleanを除く）かつ1以上、`technical_retry_limit` と `invalid_response_limit` は1以上、負値・小数・文字列・booleanはそれぞれの JSON pointer を含む `invalid_argument` とし、workspaceを作成しない。省略時の既定値はありません。**provider は `ollama` 固定。endpoint は userinfo・query・fragment を含まない OpenAI 互換 API の HTTP URL を許可する。host は loopback、RFC1918 プライベート IPv4、または ULA（`fc00::/7`）に限り、ホスト名を使う場合も DNS 解決先がすべてその範囲でなければならない。公開アドレス、link-local、userinfo、query、fragment は拒否する。** `request_options` の許可キーと型・範囲は [スキーマと正規化](schemas-and-normalization.md#22-init-入力) に従う。
 
 **受入試験シナリオ（10件、仕様レベル）**:
 
 | # | 名称 | 目的 | 成功基準 |
 |---|------|------|----------|
-| 1 | 依頼入口 | 依頼・キーワード排他・依頼採用 | `--request` と `--keywords` 同時指定で exit 2。`--request` は init 後に request 確定・`current_stage=initial_design`。`--keywords` は keywords だけを確定して `current_stage=request_intake` とし、run の依頼採用後に request 確定・`initial_design` |
+| 1 | 依頼入口 | 依頼・キーワード排他・依頼採用 | `--request` と `--keywords` 同時指定で exit 2。`--request` は初期化用ステージング内でrequest・adoption・selectionを原子的に確定し、pending manifestなしで `initial_design` を開始する。`--keywords` はkeywordsだけを確定して `current_stage=request_intake` とし、runの依頼採用時だけbootstrap pending manifestからrequest・selectionを確定して `initial_design` へ進む |
 | 2 | 4巻完走 | 全工程正常遷移 | 各巻公開後だけ次巻、最終巻で `completed` |
 | 3 | 品質上限到達 | 重大指摘上限到達時の注意付き採用 | `quality_revision_limit=2` で3回重大指摘 → `accepted_with_notice`、品質判定に `notice_type=編集` |
-| 4 | 品質無制限時の修正安全上限 | 最後の形式有効候補がある場合の注意付き採用 | `quality_revision_limit=0`、有効候補への修正が `invalid_response_limit=2` 回連続で形式不正 → 直前の有効候補を `accepted_with_notice` として採用 |
-| 5 | 形式不正上限到達 | 有効候補がない形式不正上限の停止 | 生成または確認が初回から `invalid_response_limit` 回連続 `valid=false` → exit 4、`status=blocked`、`last_error.code=invalid_response_limit`。修正中に既存の形式有効候補がある場合はシナリオ4を適用 |
+| 4 | 修正応答の形式不正 | 有効候補を不正な修正で置き換えない | `quality_revision_limit=2` の修正応答が `invalid_response_limit=2` 回連続で形式不正 → `blocked`、既存候補を採用・次工程へ進めない |
+| 5 | 形式不正上限到達 | 有効候補がない形式不正上限の停止 | 生成または確認が初回から `invalid_response_limit` 回連続 `valid=false` → exit 4、`status=blocked`、`last_error.code=invalid_response_limit`。修正応答が同上限に達した場合も `blocked` |
 | 6 | 技術的再試行上限 | 技術的失敗の物理試行上限到達による停止 | `technical_retry_limit=2`（初回を含む最大2回）で2回とも失敗 → exit 4 |
 | 7 | 最大コンテキスト超過 | 提供者のコンテキスト超過を技術的失敗として扱う | 指定モデルの最大コンテキスト超過を返す → 技術的再試行、上限到達で exit 4 |
 | 8 | 中断収束 | 異常終了後の健全pending収束 | `scene_commit` staging残存 → `run` でmanifest検証→確定→次scene_plan |

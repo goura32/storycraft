@@ -12,7 +12,7 @@ from storycraft.workspace import create_workspace
 NOW = "2026-07-31T00:00:00Z"
 SETTINGS = {
     "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test",
-    "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1,
+    "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1,
     "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1],
     "scene_text_char_range": [1000, 1000],
 }

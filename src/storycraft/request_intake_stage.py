@@ -95,22 +95,15 @@ class RequestIntakeStageService:
             critical = [issue for issue in review["issues"] if issue["severity"] == "critical"]
             if not critical:
                 break
-            if self._quality_limit(settings) != 0 and revision_count >= self._quality_limit(settings):
+            if revision_count >= self._quality_limit(settings):
                 break
             bind_call([keywords_id, settings_id, candidate_id, review_id], candidate_id)
-            try:
-                revised = self._call_valid(
-                    model.revise,
-                    ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
-                    self._candidate,
-                    invalid_limit,
-                )
-            except InvalidResponseLimitError:
-                if self._quality_limit(settings) != 0:
-                    raise
-                # Keep the last structurally valid candidate only for the
-                # explicitly unbounded quality policy.
-                break
+            revised = self._call_valid(
+                model.revise,
+                ("request_intake", deepcopy(context), deepcopy(candidate), deepcopy(review)),
+                self._candidate,
+                invalid_limit,
+            )
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call = self._write_call(model, "revise", candidate_id, [keywords_id, settings_id, candidate_id, review_id], revised, settings_id, updated_at)
             self._write_audit("candidates", revised_id, {
@@ -211,7 +204,7 @@ class RequestIntakeStageService:
     @staticmethod
     def _quality_limit(settings: dict[str, Any]) -> int:
         value = settings.get("quality_revision_limit")
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise ContractError("quality_revision_limitが不正です")
         return value
 

@@ -523,7 +523,7 @@ def _validate_settings(value: object) -> None:
     _validate_endpoint(value.get("endpoint"))
     if not isinstance(value.get("model"), str) or not value["model"]:
         raise ContractError("#/config/model: 空でない文字列が必要です")
-    for key, minimum in (("technical_retry_limit", 1), ("quality_revision_limit", 0), ("invalid_response_limit", 1)):
+    for key, minimum in (("technical_retry_limit", 1), ("quality_revision_limit", 1), ("invalid_response_limit", 1)):
         item = value.get(key)
         if not isinstance(item, int) or isinstance(item, bool) or item < minimum:
             raise ContractError(f"#/config/{key}: 不正です")

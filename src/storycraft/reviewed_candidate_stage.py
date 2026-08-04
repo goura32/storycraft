@@ -240,19 +240,7 @@ class ReviewedCandidateStageRunner:
 
             issues = critique["issues"]
             accepted = not issues
-            # V1 spec: quality_revision_limit = 0 means unlimited revisions
-            # But safety cap: invalid_response_limit prevents infinite loops
-            if revision_limit == 0:
-                # Unlimited revisions - but safety cap at invalid_response_limit
-                if revisions_used >= invalid_response_limit:
-                    # Safety cap reached - accept last valid version with notice
-                    exhausted = True
-                    decision = "accept"
-                    candidate_status = "accepted"
-                else:
-                    exhausted = False
-            else:
-                exhausted = bool(issues) and revisions_used >= revision_limit
+            exhausted = bool(issues) and revisions_used >= revision_limit
 
             if accepted:
                 candidate_status = "accepted"
@@ -773,11 +761,11 @@ def revision_limit_from_config(config: dict[str, Any]) -> int:
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or value < 0
+        or value < 1
     ):
         raise ContractError(
             "config.quality.max_critique_passesは"
-            "0以上の整数が必要です"
+            "1以上の整数が必要です"
         )
 
     return value

@@ -64,7 +64,7 @@ class InitialDesignStageService:
         if not isinstance(invalid_limit, int) or isinstance(invalid_limit, bool) or invalid_limit < 1:
             raise ContractError("initial_designのinvalid_response_limitが不正です")
         quality_limit = settings.get("quality_revision_limit")
-        if not isinstance(quality_limit, int) or isinstance(quality_limit, bool) or quality_limit < 0:
+        if not isinstance(quality_limit, int) or isinstance(quality_limit, bool) or quality_limit < 1:
             raise ContractError("initial_designのquality_revision_limitが不正です")
 
         def valid_candidate(value: object) -> dict[str, Any]:
@@ -154,17 +154,10 @@ class InitialDesignStageService:
             })
             review_ids.append(review_id)
             critical = [issue for issue in review["issues"] if issue.get("severity") == "critical"]
-            if not critical or (quality_limit != 0 and revision_count >= quality_limit):
+            if not critical or revision_count >= quality_limit:
                 break
             bind_call([input_selection_id, candidate_id, review_id], candidate_id)
-            try:
-                revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
-            except InvalidResponseLimitError:
-                if quality_limit != 0:
-                    raise
-                # An unbounded quality loop may retain the last structurally
-                # valid candidate when a revision never becomes valid.
-                break
+            revised = call_valid("revise", "initial_design", context, content, review, validator=valid_candidate)
             revised_id = f"candidate-{reserve_counter(self.workspace_root, 'next_candidate'):06d}"
             revise_call_id = self._call_id(model, "revise")
             self._write_audit_record("runtime/calls", revise_call_id, {

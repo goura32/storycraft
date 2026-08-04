@@ -4,7 +4,7 @@
 
 `initial_design` は、作品の構造と意図を一つの候補として生成、確認する工程です。重大な指摘があり、`quality_revision_limit` の上限前であれば候補全体を修正して再確認し、その後に採用します。個別要素（核、人物、関係、世界、知識、未解決事項、結末）を別々の工程で確定しません。
 
-この工程は、採用済み初期設計と、それに対応する最初の作品状態を不変確定します。候補、確認、修正記録は補助成果物であり、作品正本ではありません。
+採用時の正本は、`adoption` record（`candidate_id`、`quality_id`、`output_content_artifact_ids`、`output_selection_id`、`input_selection_id`）と、後続のselection snapshotです。初期設計では `output_content_artifact_ids` に `initial_design_id` と対応する `generation_id` を入れ、selection snapshotの `initial_design`、`current_state`、`initial_design_adoption` スロットへそれぞれ成果物IDとadoption IDを保存します。
 
 ## 2. 入力
 
@@ -71,10 +71,10 @@
 
 独立 LLM は、正式依頼と候補全体を照合し、人物・関係・世界・知識・未解決事項・結末条件の物語的整合性、必須要素・避ける条件・結末希望の取り違え、主題と読者への約束、知識モデルの不自然なネタバレを確認します。
 
-重大指摘が上限前にあれば、初期設計候補全体を修正し、再検証・再確認します。品質修正上限に達した場合は、最後の形式有効候補を注意付きで採用し、残存重大指摘と注意根拠を `quality` record に保存します。adoption record と selection snapshot はその `quality_id` または採用記録だけを参照し、指摘本文を複写しません。修正応答が形式不正上限に達した場合は、`quality_revision_limit=0` で直前に形式有効な候補があるときだけ同候補を注意付きで採用し、それ以外は `blocked` にします。部分成果物だけを修正・採用しません。
+重大指摘が上限前にあれば、初期設計候補全体を修正し、再検証・再確認します。品質修正上限に達した場合は、最後の形式有効候補を注意付きで採用し、残存重大指摘と注意根拠を `quality` record に保存します。adoption record は最終候補ID・quality ID・出力content ID集合・出力selection ID・入力selection IDだけを保持し、selection snapshotは各成果物IDとadoption IDをスロットで参照します。指摘本文をadoption/selectionへ複写しません。修正応答が形式不正上限に達した場合は `blocked` とします。部分成果物だけを修正・採用しません。
 
 採用後、後続選択スナップショットは `request`、`settings`、`initial_design`、`current_state`、`initial_design_adoption` の各スロットを持ちます。`series_plan` はこれらの正本を直接読み、次工程専用の要約・引継ぎ文書は作りません。
 
 ## 6. 失敗
 
-生成、確認、修正の各応答に、初回を含め**形式不正再呼出し上限**・別シードの形式不正再呼出しを適用します。初回生成・確認で有効候補がないまま上限に達した場合は、候補・作品状態・スナップショットを確定せず `blocked` と `last_error.code=invalid_response_limit` にします。ただし `quality_revision_limit=0` の修正中に既存の形式有効候補がある場合は、共通契約に従いその候補を注意付き採用します。通信失敗と内部エラーは共通の停止契約に従います。
+生成、確認、修正の各応答に、初回を含め**形式不正再呼出し上限**・別シードの形式不正再呼出しを適用します。初回生成・確認で有効候補がないまま上限に達した場合は、候補・作品状態・スナップショットを確定せず `blocked` と `last_error.code=invalid_response_limit` にします。修正応答が形式不正上限に達した場合も `blocked` とします。通信失敗と内部エラーは共通の停止契約に従います。

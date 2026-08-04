@@ -21,7 +21,7 @@ JSON 解析・スキーマ検証・ID形式・参照存在・更新範囲・根�
 
 ### 1.3 品質ループ
 
-生成・決定的検証・確認を行い、重大な指摘があれば修正・再確認を繰り返します。品質修正上限到達時は注意付き採用とします。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、正の `quality_revision_limit` の修正中は `blocked`、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合は注意付き採用とします。`quality_revision_limit=0` はV1で意図的に無制限の品質修正を選ぶ設定であり、時間・費用・LLM呼出し数による自動停止やキャンセル状態は設けません。
+生成・決定的検証・確認を行い、重大な指摘があれば、正の `quality_revision_limit` の範囲で修正・再確認を繰り返します。上限到達時は最後の形式有効候補を注意付き採用します。形式不正上限到達は、生成または確認で有効候補がない場合は `blocked`、修正応答が形式不正の場合も `blocked` とします。品質修正は必ず有限回で終了します。
 
 V1 の提供者は `ollama` だけです。設定検証器は他の提供者を拒否します。
 
@@ -36,15 +36,15 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
 | 区分 | 対象 | 上限 | 上限到達 |
 |---|---|---|---|
 | 技術的再試行 | 接続不能、提供者エラー、HTTP/接続時間切れ | `technical_retry_limit`。作業場所作成時に固定 | `blocked`、`last_error.code=technical_retry_exhausted` |
-| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、成功 HTTP の capability payload 不正 | 各論理処理で初回を含め `invalid_response_limit` 回 | 生成・確認で有効候補がなければ `blocked`、`last_error.code=invalid_response_limit`。`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合だけ、その候補を `accepted_with_notice` として採用 |
+| 形式不正再呼出し | 空応答、解析失敗、非オブジェクト、スキーマ・参照・根拠・更新範囲の不適合、成功 HTTP の capability payload 不正 | 各論理処理で初回を含め `invalid_response_limit` 回 | 生成・確認で有効候補がなければ `blocked`、`last_error.code=invalid_response_limit`。修正応答が形式不正上限に達した場合も `blocked` |
 
 生成、確認（provider operation=`review`）、修正（provider operation=`revise`）は別々の論理処理です。`request` を含む構造化工程には CandidateResponse の品質ループを適用します。`scene_prose` の生成・修正だけは wire 上 raw text であり、コードが座標付き `scene-prose` payload に包んでから同じ候補検証・品質ループへ渡します。技術失敗は応答本文がないため、形式不正再呼出しを消費しません。形式不正の各回は別のシードを使い、すべての物理呼出しを記録します。
 
 各論理処理の `format_attempt` は1から始め、成功 HTTP 応答が形式不正だったときだけ1増やします。各 `format_attempt` 内の `technical_attempt` は1から始め、通信失敗・提供者エラー・時間切れごとに増やします。技術的再試行が成功したら、その応答の形式検証結果を同じ `format_attempt` に記録します。技術的再試行上限に達した場合は形式不正を消費せず、論理処理を `blocked` にします。
 
-各論理処理は `format_attempt=1` から開始し、各回で技術的再試行を完了してから応答を決定的に検証します。有効ならその値を返し、形式不正なら次のシードで次の `format_attempt` に進めます。物理呼出しと provider 境界の検証結果は call record に保存します。工程固有の意味・参照・根拠検証を通過した値だけが candidate/review/quality record になり、別の validation 成果物は作りません。上限まで有効な応答がなければ、処理を `invalid_response_limit` として終了します。関数名やクラス名を実装契約にしません。
+各論理処理は `format_attempt=1` から開始し、各回で技術的再試行を完了してから応答を決定的に検証します。有効ならその値を返し、形式不正なら次のシードで次の `format_attempt` に進めます。物理呼出しと provider 境界の検証結果は call record に保存します。call recordを保存するprovider境界は有効な `settings_id` を必須とし、欠落・形式不正ならHTTP呼出し前に契約エラーで停止してrecordを作りません。工程固有の意味・参照・根拠検証を通過した値だけが candidate/review/quality record になり、別の validation 成果物は作りません。上限まで有効な応答がなければ、処理を `invalid_response_limit` として終了します。関数名やクラス名を実装契約にしません。
 
-`invalid_response_limit` は、`quality_revision_limit=0` の修正中で直前の形式有効候補がある場合だけ、その候補を `accepted_with_notice` として返す。それ以外は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
+`invalid_response_limit` は、生成・確認・修正の各論理処理で形式不正の再呼出しを制限する。上限到達時は `blocked` にして `last_error.code=invalid_response_limit` を保存する。
 
 ## 3. 通常の品質ループ
 
@@ -70,8 +70,7 @@ V1 の提供者は `ollama` だけです。設定検証器は他の提供者を�
   重大あり・上限到達: 最後の構造有効版を注意付き採用。構造有効版が一度も生成されていない場合（**形式不正再呼出し上限**すべて形式不正）は、`blocked` と `last_error.code=invalid_response_limit` とする。
 ```
 
-`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。品質上限は停止理由ではありません。**`quality_revision_limit = 0`（明示的な無制限モード）の場合、重大指摘が解消されない場合の自動終了を保証せず、無人運転では正の値を指定します。** 形式有効な品質修正は上限なしで継続し、形式不正の再呼出しだけを `invalid_response_limit` 回で制限して、その時点で最後の形式有効版を注意付き採用して次工程へ進む。
-正の `quality_revision_limit=N` は、重大指摘に対する修正を最大 `N` 回許可します。修正回数が `N` に達した時点で重大指摘が残っていれば、最後の形式有効候補を `accepted_with_notice` として採用します。`quality_revision_limit=0` は修正回数を制限せず、形式不正の連続発生だけを `invalid_response_limit` で制限します。
+`quality_revision_limit` を含む設定入力は `init --config FILE` だけが読み、検証済みの全設定を不変 `settings` 成果物へ一回だけ確定します。以後の処理は選択スナップショットの `settings` スロットだけを読み、設定入力ファイルや可変 `runtime/config.json` を保存・参照しません。`quality_revision_limit=N` は1以上の整数で、重大指摘に対する修正を最大 `N` 回許可します。修正回数が `N` に達した時点で重大指摘が残っていれば、最後の形式有効候補を注意付き採用して次工程へ進みます。
 
 修正は候補全体を置き換えられます。ただしスキーマ、ID、参照、更新可能範囲、作品状態の根拠契約は必ず再検証します。既存の確定物を、望む結果を探すために再生成・上書きしてはなりません。
 

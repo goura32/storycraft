@@ -21,7 +21,7 @@
 - `volume_count`: 4〜10 の整数
 - `language`: `ja`
 
-直接依頼でもキーワード起点でも、依頼採用時に、採用済み `request`、依頼採用記録、`request` と `settings` をスロットに持つ最初の選択スナップショット、`current_stage=initial_design` を原子的に確定します。採用済み `request` は唯一の初期化時成果物として `input_selection_id=null` を持ちます。初期設計採用は、この最初のスナップショットの後続を作ります。
+直接依頼は `init --request` の内部ステージングで、`request`、`direct_request` adoption、最初のselection、`current_stage=initial_design` を一つの原子操作として確定します。この経路は `pending_commit` を公開しません。キーワード起点は `init --keywords` でkeywordsだけを確定し、`current_stage=request_intake`、`current_selection_id=null` で開始します。`request_intake` の候補採用時だけbootstrap用 `pending_commit` を使い、依頼採用後に request、adoption、最初のselection、`current_stage=initial_design` を確定します。いずれの経路でも採用済み `request` は `input_selection_id=null` を持ちます。
 
 ## 2. 未解決事項の正本
 
@@ -63,7 +63,7 @@ V1では、`thread_id`、`action`、`required_conditions` を持つ別個のallo
 
 ## 5. 巻公開の検証
 
-巻公開は、当該巻のscene-plan、scene-card、本文、継続性更新、作品状態、品質判定のselection lineageを決定的に検証します。本文の意味的な達成判定は通常の本文品質確認で行います。品質修正上限に達した場合は最後の形式有効版を注意付き採用し、残存重大指摘はquality recordが保持します。adoption/selectionに指摘本文を複写しません。修正応答が形式不正上限に達した場合は `quality_revision_limit=0` の既存有効候補だけを同じ例外として採用し、それ以外は停止します。公開工程自身はLLMを呼びません。
+巻公開は、当該巻のscene-plan、scene-card、本文、継続性更新、作品状態、品質判定のselection lineageを決定的に検証します。本文の意味的な達成判定は通常の本文品質確認で行います。品質修正上限に達した場合は最後の形式有効版を注意付き採用し、残存重大指摘はquality recordが保持します。adoption/selectionに指摘本文を複写しません。修正応答が形式不正上限に達した場合は停止します。公開工程自身はLLMを呼びません。
 
 最終巻でも追加の確認記録、本文再生成、注意付き公開による例外を設けません。通常の巻公開検証が成功すれば、その巻の公開がシリーズ制作完了です。
 

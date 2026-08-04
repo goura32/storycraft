@@ -138,6 +138,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                          "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
                          "request_options": {}},
                     retry={"max_attempts": 1},
+                    settings_id="settings-000001",
                 ), runtime / "raw_logs")
                 self.assertEqual(model.generate_prose("scene_prose", {"scene": "context"}), "本文そのもの")
                 posts = [body for path, body in handler.requests if path == "/v1/chat/completions"]
@@ -175,6 +176,7 @@ class OpenAIStoryModelV2IntegrationTests(unittest.TestCase):
                          "idle_timeout_seconds": 5, "stream_progress_log_interval_seconds": 5,
                          "request_options": {}},
                     retry={"max_attempts": 1},
+                    settings_id="settings-000001",
                 ), runtime / "raw_logs")
                 response = model.critique_prose("scene_prose", "本文", {"scene": "context"})
                 self.assertEqual(response["decision"], "pass")

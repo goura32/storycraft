@@ -55,7 +55,7 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
     from .series_model import OpenAIStoryModel
 
     try:
-        return OpenAIStoryModel(_model_settings_from_payload(payload), root / "runtime/raw_logs")
+        return OpenAIStoryModel(_model_settings_from_payload(payload, settings_id), root / "runtime/raw_logs")
     except ContractError as exc:
         # Settings have already passed static workspace validation.  A failure
         # while constructing the provider is therefore a transport failure,
@@ -63,12 +63,13 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
         raise LLMCallError("LLM provider initialization failed") from exc
 
 
-def _model_settings_from_payload(payload: dict[str, Any]) -> Any:
+def _model_settings_from_payload(payload: dict[str, Any], settings_id: str) -> Any:
     """Adapt immutable V2 settings at the legacy provider boundary only."""
     class SettingsWrapper:
-        def __init__(self, llm: dict[str, Any], retry: dict[str, Any]) -> None:
+        def __init__(self, llm: dict[str, Any], retry: dict[str, Any], settings_id: str) -> None:
             self.llm = llm
             self.retry = retry
+            self.settings_id = settings_id
 
     try:
         return SettingsWrapper(
@@ -85,6 +86,7 @@ def _model_settings_from_payload(payload: dict[str, Any]) -> Any:
                 "v2_openai_ollama": True,
             },
             {"max_attempts": payload["technical_retry_limit"]},
+            settings_id,
         )
     except KeyError as exc:
         raise ContractError("settings payloadにprovider設定がありません") from exc

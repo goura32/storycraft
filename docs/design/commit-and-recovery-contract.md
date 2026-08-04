@@ -8,7 +8,7 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 
 ## 2. 共通収束表
 
-`pending_commit` があるとき、提供者を呼ぶ前に manifest の `input_selection_id`（bootstrap request adoption の `null` を除く）が `run-state.current_selection_id` と一致することを確認し、publication targetの`record.json.input_selection_id`も同じmanifest入力へ束縛したうえで、`targets` と最終配置を照合して収束します。すべての target の staging/finalの存在、型、内容、cross-target lineage、final親directory、同一filesystem上のrename前提を移動前に検証し、検証に失敗した場合は一つも移動しません。manifest の唯一のスキーマ、収束表、`blocked` 条件は[状態と遷移](state-and-transitions.md#21-現在対象と保留中確定)に従います。「有効」はスキーマ、参照、入力選択、種類ごとの不変条件に通ることです。自動削除、自動選択、LLM 再呼出しはしません。
+`pending_commit` があるとき、提供者を呼ぶ前に manifest の `input_selection_id`（キーワード入口のbootstrap request adoption の `null` を除く）が `run-state.current_selection_id` と一致することを確認し、publication targetの`record.json.input_selection_id`も同じmanifest入力へ束縛したうえで、`targets` と最終配置を照合して収束します。すべての target の staging/finalの存在、型、内容、cross-target lineage、final親directory、同一filesystem上のrename前提を移動前に検証し、検証に失敗した場合は一つも移動しません。manifest の唯一のスキーマ、収束表、`blocked` 条件は[状態と遷移](state-and-transitions.md#21-現在対象と保留中確定)に従います。「有効」はスキーマ、参照、入力選択、種類ごとの不変条件に通ることです。自動削除、自動選択、LLM 再呼出しはしません。
 
 ## 3. 種類ごとの状態更新
 

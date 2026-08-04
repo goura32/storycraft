@@ -254,11 +254,11 @@ def revision_limit_from_config(config: dict[str, Any]) -> int:
     if (
         not isinstance(value, int)
         or isinstance(value, bool)
-        or value < 0
+        or value < 1
     ):
         raise ContractError(
             "config.quality.max_critique_passesは"
-            "0以上の整数が必要です"
+            "1以上の整数が必要です"
         )
 
     return value

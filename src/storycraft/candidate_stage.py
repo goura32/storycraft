@@ -111,27 +111,18 @@ class CandidateStageRunner:
                 return self._adopt(state, slots, input_selection_id, candidate_id, candidate, review_ids, revision_count, [], updated_at)
 
             limit = self._quality_limit(settings_id)
-            if limit != 0 and revision_count >= limit:
+            if revision_count >= limit:
                 return self._adopt(state, slots, input_selection_id, candidate_id, candidate, review_ids, revision_count, critical, updated_at)
 
-            try:
-                self._set_model_call_context(
-                    model, settings_id=settings_id,
-                    input_refs=[input_selection_id, candidate_id, review_id],
-                    target_candidate_id=candidate_id,
-                )
-                revised = self._valid_response(
-                    model, "revise", (self.spec.stage, deepcopy(context), deepcopy(candidate), deepcopy(review)), self._candidate,
-                    invalid_limit=invalid_limit,
-                )
-            except InvalidResponseLimitError:
-                # Only an explicitly unbounded quality loop may accept the last
-                # valid candidate after a malformed revision.  A finite quality
-                # limit is a contract boundary: a failed revision blocks rather
-                # than silently turning into accepted_with_notice.
-                if limit != 0:
-                    raise
-                return self._adopt(state, slots, input_selection_id, candidate_id, candidate, review_ids, revision_count, critical, updated_at)
+            self._set_model_call_context(
+                model, settings_id=settings_id,
+                input_refs=[input_selection_id, candidate_id, review_id],
+                target_candidate_id=candidate_id,
+            )
+            revised = self._valid_response(
+                model, "revise", (self.spec.stage, deepcopy(context), deepcopy(candidate), deepcopy(review)), self._candidate,
+                invalid_limit=invalid_limit,
+            )
             revised_id = self._reserve("candidates", "candidate")
             revise_call = self._physical_call_id(model, "revise")
             self._write_record("candidates", revised_id, {
@@ -284,7 +275,7 @@ class CandidateStageRunner:
             limit = payload["quality_revision_limit"]
         except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
             raise ContractError("settings quality_revision_limitを読めません") from exc
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             raise ContractError("quality_revision_limitが不正です")
         return limit
 

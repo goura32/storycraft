@@ -27,6 +27,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
     def test_prose_format_failures_consume_invalid_response_limit(self) -> None:
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
+            client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
                 "v2_openai_ollama": True,
@@ -47,6 +48,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
     def test_call_once_keeps_v2_prose_as_raw_text_when_response_format_is_none(self) -> None:
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
+            client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
                 "v2_openai_ollama": True,
@@ -72,6 +74,7 @@ class V2ModelPlumbingTests(unittest.TestCase):
     def test_call_once_uses_ollama_boundary_with_options_messages_and_attempt_metadata(self) -> None:
         client = LLMClient.__new__(LLMClient)
         with tempfile.TemporaryDirectory() as temporary:
+            client.settings_id = "settings-000001"
             client.raw_dir = Path(temporary) / "runtime" / "raw_logs"
             client.settings = SimpleNamespace(llm={
                 "v2_openai_ollama": True,
@@ -98,12 +101,13 @@ class V2ModelPlumbingTests(unittest.TestCase):
             "messages": [{"role": "system", "content": "system"}, {"role": "user", "content": "user"}],
             "call_record_dir": client.raw_dir.parent / "calls",
             "technical_attempt": 2, "format_attempt": 1, "seed": 17, "operation": "generate",
-            "settings_id": None, "input_refs": [], "target_candidate_id": None,
+            "settings_id": "settings-000001", "input_refs": [], "target_candidate_id": None,
             "call_id_sink": None,
         })
 
     def test_call_once_propagates_provider_format_error_instead_of_marking_it_transport(self) -> None:
         client = LLMClient.__new__(LLMClient)
+        client.settings_id = "settings-000001"
         client.raw_dir = Path(tempfile.gettempdir()) / "storycraft-test-raw"
         client.settings = SimpleNamespace(llm={"v2_openai_ollama": True, "base_url": "http://127.0.0.1:11434/v1", "model": "m"})
         with patch("storycraft.llm.ollama_generate", side_effect=OllamaResponseFormatError("bad response")):

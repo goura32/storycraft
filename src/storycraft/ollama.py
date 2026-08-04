@@ -7,6 +7,7 @@ one immutable audit record for each physical HTTP call when given a call directo
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any, Optional
@@ -42,6 +43,11 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _require_settings_id(settings_id: str | None) -> None:
+    if not isinstance(settings_id, str) or re.fullmatch(r"settings-[0-9]{6}", settings_id) is None:
+        raise ContractError("call recordを保存するには有効なsettings_idが必要です")
+
+
 def _write_record(
     directory: Path | None,
     *,
@@ -62,6 +68,7 @@ def _write_record(
 ) -> str | None:
     if directory is None:
         return None
+    _require_settings_id(settings_id)
     counters = directory.parent / "counters.json"
     if directory.name == "calls" and counters.is_file():
         call_id = f"call-{reserve_counter(directory.parent.parent, 'next_call'):06d}"
@@ -163,6 +170,8 @@ def generate(
     target_candidate_id: str | None = None,
 ) -> dict[str, Any] | str:
     """Invoke the non-streaming OpenAI-compatible structured or prose endpoint."""
+    if call_record_dir is not None:
+        _require_settings_id(settings_id)
     base_url = normalized_v1_base_url(endpoint)
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
                                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,

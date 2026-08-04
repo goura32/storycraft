@@ -19,7 +19,8 @@ class WorkflowSettingsTests(unittest.TestCase):
                 "model": "test-model",
                 "technical_retry_limit": 3,
                 "request_options": {"temperature": 0.4},
-            }
+            },
+            "settings-000001",
         )
 
         self.assertEqual(settings.llm["base_url"], "http://127.0.0.1:11434/v1")
@@ -27,6 +28,7 @@ class WorkflowSettingsTests(unittest.TestCase):
         self.assertEqual(settings.llm["request_options"], {"temperature": 0.4})
         self.assertTrue(settings.llm["v2_openai_ollama"])
         self.assertEqual(settings.retry, {"max_attempts": 3})
+        self.assertEqual(settings.settings_id, "settings-000001")
 
 
 class CliV2AcceptanceTests(unittest.TestCase):
@@ -65,7 +67,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
             request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}) + "\n", encoding="utf-8")
-            valid = {"provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}
+            valid = {"provider": "ollama", "endpoint": "http://192.168.1.50:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}
             invalid_cases = (
                 ("endpoint", "http://example.com:11434"),
                 ("endpoint", "https://127.0.0.1:11434"),
@@ -98,7 +100,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
             request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}) + "\n", encoding="utf-8")
-            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
+            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
             command = ["uv", "run", "storycraft"]
             initialized = subprocess.run(command + ["init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(initialized.returncode, 0, initialized.stderr)
@@ -146,7 +148,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
             request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}) + "\n", encoding="utf-8")
-            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:1", "model": "unavailable", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
+            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://127.0.0.1:1", "model": "unavailable", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
             command = ["uv", "run", "storycraft"]
             initialized = subprocess.run(command + ["init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(initialized.returncode, 0, initialized.stderr)
@@ -167,7 +169,7 @@ class CliV2AcceptanceTests(unittest.TestCase):
             request = Path(temporary) / "request.json"
             config = Path(temporary) / "config.json"
             request.write_text(json.dumps({"title": "題", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"}) + "\n", encoding="utf-8")
-            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://localhost:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
+            config.write_text(json.dumps({"provider": "ollama", "endpoint": "http://localhost:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]}) + "\n", encoding="utf-8")
             result = subprocess.run(["uv", "run", "storycraft", "init", "--workspace", str(root), "--request", str(request), "--config", str(config), "--json"], text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(set(json.loads(result.stdout)), {"workspace_id", "status", "current_selection_id"})

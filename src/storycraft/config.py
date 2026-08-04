@@ -555,11 +555,11 @@ class Settings:
                 max_critique_passes,
                 int,
             )
-            or max_critique_passes < 0
+            or max_critique_passes < 1
         ):
             raise ContractError(
                 "quality.max_critique_passesは"
-                "0以上の整数で指定してください"
+                "1以上の整数で指定してください"
             )
 
         invalid_response_limit = config[

@@ -54,7 +54,7 @@ cat > config.json <<'EOF'
 }
 EOF
 
-# `quality_revision_limit` は通常は有限値にします。0 は明示的に無制限の品質修正を選ぶ値です。
+# `quality_revision_limit` は1以上の有限値です。重大指摘が残る場合も設定回数で品質ループを終了し、最後の形式有効候補を注意付き採用するか、形式不正なら停止します。
 
 # 依頼文作成
 cat > request.json <<'EOF'

@@ -22,7 +22,7 @@ class WorkspaceV2Tests(unittest.TestCase):
             root,
             workspace_id="ws-test",
             request={"title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
-            settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
+            settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
             created_at="2026-07-28T00:00:00Z",
         )
 
@@ -33,12 +33,13 @@ class WorkspaceV2Tests(unittest.TestCase):
                 root,
                 workspace_id="ws-test",
                 request={"title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
-                settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
+                settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
                 created_at="2026-07-28T00:00:00Z",
             )
             state = RunStateStore(root).load()
             self.assertEqual(state["schema_version"], 3)
             self.assertEqual(state["current_stage"], "initial_design")
+            self.assertIsNone(state["pending_commit"])
             self.assertNotIn("active_candidate", state)
             self.assertNotIn("active_scene_id", state)
             for relative in ("candidates", "reviews", "runtime", "runtime/adoptions", "design/scene-cards"):
@@ -54,7 +55,7 @@ class WorkspaceV2Tests(unittest.TestCase):
                 root,
                 workspace_id="ws-test",
                 request={"title": " A\u0301 ", "genre": [" 幻想 "], "premise": " 前提 ", "required_elements": [" 灯台 "], "avoid": [], "ending_preference": " 希望 ", "volume_count": 4, "language": "ja"},
-                settings={"provider": "ollama", "endpoint": " http://127.0.0.1:11434 ", "model": " test-model ", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
+                settings={"provider": "ollama", "endpoint": " http://127.0.0.1:11434 ", "model": " test-model ", "technical_retry_limit": 1, "quality_revision_limit": 1, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
                 created_at="2026-07-28T00:00:00Z",
             )
             request = json.loads((root / "inputs/request-000001/record.json").read_text(encoding="utf-8"))["content"]
@@ -64,6 +65,19 @@ class WorkspaceV2Tests(unittest.TestCase):
             self.assertEqual(request["required_elements"], ["灯台"])
             self.assertEqual(settings["endpoint"], "http://127.0.0.1:11434")
             self.assertEqual(settings["model"], "test-model")
+
+    def test_rejects_zero_quality_revision_limit_before_workspace_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "novel"
+            with self.assertRaisesRegex(ValueError, "quality_revision_limit"):
+                create_workspace(
+                    root,
+                    workspace_id="ws-test",
+                    request={"title": "題名", "genre": ["幻想"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
+                    settings={"provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "test", "technical_retry_limit": 1, "quality_revision_limit": 0, "invalid_response_limit": 1, "chapter_per_volume_range": [1, 1], "chapter_scene_range": [1, 1], "scene_text_char_range": [1000, 1000]},
+                    created_at="2026-07-28T00:00:00Z",
+                )
+            self.assertFalse(root.exists())
 
     def test_refuses_existing_workspace_without_mutating_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

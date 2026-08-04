@@ -83,7 +83,7 @@ class OllamaV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", schema, call_record_dir=records)
+                generate(self.endpoint, "m", "p", schema, call_record_dir=records, settings_id="settings-000001")
             completion = next(
                 json.loads(path.read_text(encoding="utf-8"))
                 for path in records.glob("*/record.json")
@@ -94,7 +94,7 @@ class OllamaV2Tests(unittest.TestCase):
     def test_writes_immutable_records_for_capability_and_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
-            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records)
+            generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
             saved = sorted(records.glob("*/record.json"))
             self.assertEqual(len(saved), 2)
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in saved]
@@ -110,7 +110,7 @@ class OllamaV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records)
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
             saved = list(records.glob("*/record.json"))
             self.assertEqual(len(saved), 1)
             payload = json.loads(saved[0].read_text(encoding="utf-8"))
@@ -124,12 +124,19 @@ class OllamaV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             records = Path(tmp) / "calls"
             with self.assertRaises(OllamaResponseFormatError):
-                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records)
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records, settings_id="settings-000001")
             payloads = [json.loads(path.read_text(encoding="utf-8")) for path in records.glob("*/record.json")]
         completion = next(record for record in payloads if record["operation"] == "generate")
         self.assertEqual(completion["transport"], "success")
         self.assertEqual(completion["validation"]["result"], "invalid")
         self.assertEqual(completion["validation"]["failure_code"], "json_parse")
+
+    def test_requires_settings_id_when_persisting_call_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            records = Path(tmp) / "calls"
+            with self.assertRaisesRegex(ContractError, "settings_id"):
+                generate(self.endpoint, "m", "p", {"type": "object"}, call_record_dir=records)
+            self.assertFalse(records.exists())
 
 
 if __name__ == "__main__":
