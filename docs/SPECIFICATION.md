@@ -89,7 +89,7 @@ flowchart TD
 
 **シリーズ計画**（`series_plan`）は各巻の位置と役割に加え、扱う未解決事項（結末必須事項を含む）をどの巻で進め、どの巻で解決する予定かを持ちます。結末必須事項の解決予定巻は一意です。
 
-**巻計画**（`volume_plan`）は第一巻ではシリーズ計画の確定後、第二巻以降では直前の巻が公開済みになった後にだけ作ります。
+**巻計画**（`volume_plan`）は第一巻ではシリーズ計画の確定後、第二巻以降では直前の巻が公開済みになった後にだけ作ります。巻計画payloadは、次の9項目だけで構成します。`title`、`volume_purpose`、`central_conflict`、`character_changes`、`relationship_changes`、`thread_goals`、`revelations`、`chapter_summaries`、`required_end_state`。保存用識別子、座標、状態、selection参照などのmetadataはpayloadへ含めず、artifact recordとselectionが保持します。未知項目は拒否します。
 
 **章計画**（`chapter_plan`）、**場面計画**（`scene_plan`）は、その計画対象で扱う初期設計の未解決事項名（canonical `thread_name`。結末必須事項を含む）と、進行または解決に必要な条件を既存の計画 payload 内で具体化し、前段の計画と矛盾してはなりません。V1では別個の thread ID/allocation payload を作らず、名称・計画文字列の親子範囲を決定的に検証し、意味的な対応は独立 LLM 確認で検証します。
 

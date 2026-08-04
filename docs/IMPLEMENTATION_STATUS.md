@@ -7,13 +7,13 @@
 この節は、仕様書と現行コード・試験・配布物を読み合わせた記録です。
 
 - V1 の規範 provider は `ollama` だけである。
-- planning成果物（series-plan、volume-plan、chapter-plan）は正本JSON Schemaの形式を使用し、`volumes` / `chapters` / `scenes` / `thread_allocations` payloadは採用しない。
-- `thread_id`、`action`、`required_conditions` を持つallocation payloadは採用しない。planning payloadの `thread_progression`、`thread_goals`、`required_revelations`、`ending_changes`、`intended_revelations`、`intended_changes` をselection lineageと親計画の束縛で検証する。
+- planning成果物（series-plan、volume-plan、chapter-plan）は正本JSON Schemaの閉じたpayloadを使用し、追加のallocation payloadを保存しない。
+- planning payloadの `thread_progression`、`thread_goals`、`required_revelations`、`ending_changes`、`intended_revelations`、`intended_changes` をselection lineageと親計画の束縛で検証する。
 - series planは4〜10巻、`volume_summaries`はseriesの巻数と一致する。巻・章・場面の座標はartifact envelopeとselection slotで管理し、planning payloadへ重複保存しない。
 - 注意付き巻公開の `publication_notice_type="編集"` と原稿冒頭の定型文は実装・試験済み。公開 `record.json` は閉じたスキーマで、`publication_notice_type: null` は拒否される。
 - 形式不正再呼出し上限到達、修正上限時の注意付き採用、品質修正ループの有限終了を実装済み。`quality_revision_limit` は1以上の有限値で、重大指摘が残っても上限回数で注意付き採用へ収束する。改稿応答が形式不正上限に達した場合は注意付き採用せず `blocked` にする。
 - 指摘対象だけに修正範囲を制限せず、成果物全体の整合性・品質改善のために置き換える契約は実装済み。`validate_revision_scope` は指摘フィールドの存在確認のみを行い、修正範囲を制限しない。
-- run-state は V1仕様の保存形式識別値 `schema_version=3` を使用する。これは製品版番号ではない。`run_id` と `stop_reason` は保存しない。`active_candidate` と `active_scene_id` は保存しない。進捗を stage・target・不変 selectionと健全な `pending_commit` だけで表す契約を満たす。
+- run-state は保存形式識別値 `schema_version=3` を使用する。`run_id` と `stop_reason` は保存しない。`active_candidate` と `active_scene_id` は保存しない。進捗を stage・target・不変 selectionと健全な `pending_commit` だけで表す契約を満たす。
 - `pending_commit` は仕様通りの閉じた構造で、`sha256` を持たず、bootstrapの`input_selection_id=null`、kindごとの閉じた`state_update`、target集合の完全一致を実装。クラッシュ収束のmanifestは仕様達成済み。
 - `scene_commit` は一場面の本文・継続性更新・後続 `generation`・次対象を原子確定する。全場面の確定後に `volume_publication` が巻を公開し、前巻公開後だけ次巻計画へ進み、最終巻の巻公開後だけ `completed` になる
 - console scriptは`storycraft.cli:console_main`を指し、配布CLIは起動可能。lock取得失敗は仕様通り`75`で返す。
@@ -28,12 +28,12 @@
 - `ollama.py`は指定されたOpenAI互換境界を実装。モデル能力の`context_length`を取得し、`options.num_ctx`に反映し、`think: true`、`stream: false`を使用する。構造化工程では`response_format: json_schema`を付け、scene-proseの生成・修正では付けずraw textを運ぶ。設定検証でunknown field、公開・link-local endpoint、userinfo/query/fragment、`[0,0]` rangeを拒否し、loopbackまたはプライベートLAN endpointを許可。
 - OllamaのHTTP 200 `error` envelope（モデル能力・completion）はHTTP/接続失敗と同じtechnical failureとしてcall recordへ保存し、形式不正再呼出しではなくtechnical retryへ送る。
 - 巻公開recordは `input_selection_id` を正本参照として持ち、公開時のsource evidenceはrecoveryでselectionから再導出する。内部検証用の入力ID群は公開recordへ保存しない。
-- 次巻計画は直前公開巻のcanonicalな `volume_plan.vNN` slotを直接解決する。`prior_volume_plan` のselection aliasは生成・受理せず、巻引継ぎ要約も保存しない。
+- 次巻計画は直前公開巻のcanonicalな `volume_plan.vNN` slotを直接解決し、別個の巻間要約を保存しない。
 - CLI入力JSONはUTF-8・末尾改行を要求し、request/settingsの文字列をNFC・trim・制御文字拒否で正規化する。保存済みrecordはUTC RFC3339とcanonical artifact IDを検証し、publication/selection path traversalを拒否する。
 - direct requestは`direct_request` adoption recordを初期selectionと同一atomic workspace creationで保存する。request-intakeのcandidate/review/adoption/revision採番は全て`counters.json`を進め、後続工程との衝突を起こさない。
 - scene-proseの再生成は同一座標のcontinuity slotsだけを無効化し、確定済み過去sceneのcontinuity lineageを保持する。scene commit recoveryはinput selectionにsceneを要求せず、output scene contentの全参照・座標・selection lineageを移動前に検証する。
 - quality dispositionはclosed issue object（code/message/evidence_locations）とreview/candidate payloadの証拠到達性を再検証し、selection authorityは祖先selectionの解決結果を1回のresolve処理内でmemoizeする。
 
-**確認時点で199テスト、120 subtestsが通過しています。**
+**確認時点で197テスト、117 subtestsが通過しています。**
 
 この記録は、実装・試験・配布物の確認結果です。公開判断は、現在の仕様、実装、試験、配布物を確認して行います。

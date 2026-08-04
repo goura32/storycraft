@@ -113,8 +113,8 @@ def make_client(
 def messages() -> list[dict]:
     return [{
         "__kind": "generate",
-        "__phase": "brief",
-        "__ref": "brief",
+        "__phase": "request_intake",
+        "__ref": "request_intake",
         "__attempt": 1,
         "__retry_total": 1,
     }]
@@ -209,8 +209,8 @@ class LLMHardeningTests(unittest.TestCase):
 
             record = CallRecord(
                 kind="generate",
-                phase="brief",
-                ref="brief",
+                phase="request_intake",
+                ref="request_intake",
                 attempt=1,
                 seed=1,
                 error=(

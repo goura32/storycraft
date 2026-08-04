@@ -1,5 +1,0 @@
-{
-  "classification": "resume",
-  "action": "generation stagingが完全ならGenerationをfinalizeし、run-stateを更新する。",
-  "provider_call_expected": false
-}

@@ -31,4 +31,4 @@ class StageTransitionTests(unittest.TestCase):
 
     def test_unsupported_stages_are_not_transitions(self) -> None:
         with self.assertRaisesRegex(ContractError, "未知"):
-            allowed_next_stages("completion")
+            allowed_next_stages("unsupported")

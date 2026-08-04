@@ -1,3 +1,0 @@
-scenes/scene-v01-c001-s001/
-generations/gen-000002/
-runtime/run-state.json

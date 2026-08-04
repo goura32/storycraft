@@ -13,7 +13,7 @@
 
 ## 必須条件
 
-- `target_volume_number` の一巻だけを計画する
+- contextの `volume_number` で示された一巻だけを計画する
 - 第二巻以降では `prior_volume_plan` の確定内容と制約を参照し、前巻の計画を要約成果物として複製しない
 - 対象巻のSeries Plan `volume_summaries` にあるpurposeと
   ending_changeを具体化する
@@ -37,21 +37,9 @@
   秘密、犯人、制度、事件原因、結末条件を追加しない
 - Series PlanとInitial Designから継承したrequired_elements、avoid、ending_preferenceを保持する
 
-## 禁止metadata
+## 出力形式
 
-Candidateへ次を含めない。
-
-- `schema_version`
-- `volume_plan_id`
-- `volume_number`
-- `version`
-- `status`
-- `basis_generation_id`
-- `series_plan_id`
-- `parent_plan_id`
-- `created_at`
-
-これらは採用処理が付与する。
+出力は出力スキーマに定義されたvolume-plan payloadだけにする。CandidateResponse envelopeや保存記録のmetadataは含めない。対象座標は入力contextの `volume_number` を使い、payloadへ座標や保存用識別子を追加しない。
 
 ## 入力
 

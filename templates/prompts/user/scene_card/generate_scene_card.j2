@@ -16,7 +16,7 @@
 - `ending_state_targets` は予定であり、確定済みCanonやStateとして扱わない
 - POV人物が知覚・推測できない非公開情報を、Scene Cardへ無条件に複製しない
 - 入力にない人物、場所、知識、未解決事項、事実、制度、証拠を新設しない
-- 採用metadataである `schema_version`、`scene_id`、`version`、`basis_generation_id`、`scene_plan_id`、`created_at` は出力しない
+- 出力は出力スキーマに定義されたscene-card payloadだけにし、CandidateResponse envelopeや保存記録のmetadataを含めない
 
 ## 入力
 

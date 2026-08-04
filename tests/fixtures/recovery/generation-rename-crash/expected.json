@@ -1,5 +1,0 @@
-{
-  "classification": "resume",
-  "action": "current_generation_idをgen-000002へ更新し、pending_commitを消す。",
-  "provider_call_expected": false
-}

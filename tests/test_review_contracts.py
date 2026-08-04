@@ -75,7 +75,7 @@ class ReviewContractsTest(unittest.TestCase):
         critique = {
             "issues": [
                 {
-                    "evidence_locations": ["$.brief.premise"],
+                    "evidence_locations": ["$.request.premise"],
                 }
             ]
         }

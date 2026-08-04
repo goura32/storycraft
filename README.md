@@ -138,8 +138,7 @@ uv run python -m storycraft.cli validate --workspace ./my-novel --json
 | [仕様書](docs/SPECIFICATION.md) | V1 の唯一の仕様正本 |
 | [実装状況](docs/IMPLEMENTATION_STATUS.md) | 時点付きの実装・検証記録。仕様正本ではない |
 | [設計書](docs/design/README.md) | 実装設計ドキュメント群の索引 |
-| [依頼JSON例](example_brief.json) | 現行 `--request` 入力の最小例 |
-| [テスト用資料](tests/fixtures/README.md) | 自動試験で使う資料の構成 |
+| [依頼JSON例](example_request.json) | 現行 `--request` 入力の最小例 |
 
 ## 開発者向け検証
 
@@ -163,7 +162,7 @@ src/storycraft/           # 実装コード
 ├── candidate_stage.py    # 汎用候補生成/確認/修正/採用
 ├── scene_prose_stage.py         # 場面本文
 ├── scene_continuity_stage.py    # 継続性更新
-├── series_contracts.py          # 検証器
+├── series_contracts.py          # 契約エラー
 ├── series_model.py              # LLMモデル
 ├── ollama.py                    # Ollama境界
 ├── prompt_template.py           # プロンプトテンプレート

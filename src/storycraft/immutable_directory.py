@@ -5,11 +5,21 @@ from collections.abc import Callable
 import os
 from pathlib import Path
 
-from .candidate_utils import fsync_directory
 from .series_contracts import ContractError
 
 
 DirectoryValidator = Callable[[Path], None]
+
+
+def fsync_directory(path: Path) -> None:
+    """POSIX環境でdirectory entryを同期する。"""
+    if os.name != "posix":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def finalize_immutable_directory(
@@ -39,10 +49,7 @@ def finalize_immutable_directory(
         )
 
     final_parent = final.parent
-    if (
-        final_parent.is_symlink()
-        or not final_parent.is_dir()
-    ):
+    if final_parent.is_symlink() or not final_parent.is_dir():
         raise ContractError(
             "final directoryの親directoryが存在しません: "
             f"{final_parent}"
@@ -56,22 +63,16 @@ def finalize_immutable_directory(
         )
 
     try:
-        staging_device = staging.stat(
-            follow_symlinks=False
-        ).st_dev
-        final_device = final_parent.stat(
-            follow_symlinks=False
-        ).st_dev
+        staging_device = staging.stat(follow_symlinks=False).st_dev
+        final_device = final_parent.stat(follow_symlinks=False).st_dev
     except OSError as exc:
         raise ContractError(
-            "immutable directoryのfilesystemを"
-            "確認できません"
+            "immutable directoryのfilesystemを確認できません"
         ) from exc
 
     if staging_device != final_device:
         raise ContractError(
-            "stagingとfinalは同一filesystem上に"
-            "存在する必要があります"
+            "stagingとfinalは同一filesystem上に存在する必要があります"
         )
 
     try:

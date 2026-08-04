@@ -1,5 +1,0 @@
-{
-  "classification": "resume",
-  "action": "Publicationを検証し、current_publication_idとstatusを更新し、current_stageをvolume_publicationに保つ。",
-  "provider_call_expected": false
-}

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "storycraft"
-version = "1.0.0.dev0"
+version = "1.0.0"
 description = "検証可能な日本語長編シリーズ生成・継続性管理CLI"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -51,13 +51,11 @@ include = [
     "/scripts/wheel_smoke.sh",
     "/docs",
     "/README.md",
-    "/example_brief.json",
+    "/example_request.json",
     "/pyproject.toml",
 ]
 
 [tool.storycraft.release]
-stable_version = "1.0.0"
-development_version = "1.0.0.dev0"
 minimum_python = "3.11"
 canonical_test_command = 'uv run python -m unittest discover -s tests -p "test_*.py"'
 canonical_wheel_smoke_command = "bash scripts/wheel_smoke.sh"

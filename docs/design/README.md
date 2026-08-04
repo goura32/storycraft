@@ -27,7 +27,7 @@
 | [成果物と保存](artifacts-and-storage.md) | ID、配置、参照、不変確定、検証範囲 |
 | [LLM と検証](llm-and-validation.md) | Ollama 呼出し、再試行、形式検証、品質確認 |
 | [巻公開](volume-publication.md) | 全巻共通の巻公開記録、原稿、復旧 |
-| [保存形式と受入確認](migration-and-acceptance.md) | V1作業場所の拒否条件、受入確認 |
+| [保存形式と受入確認](storage-and-acceptance.md) | 作業場所の保存形式、拒否条件、受入確認 |
 
 ## 3. 共通原則
 

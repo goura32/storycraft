@@ -21,7 +21,7 @@ class PromptTemplateCacheTests(unittest.TestCase):
             schema_directory.mkdir()
 
             schema_path = (
-                schema_directory / "brief.json"
+                schema_directory / "request_intake.json"
             )
             schema_path.write_text(
                 '{"type": "object"}',
@@ -52,11 +52,11 @@ class PromptTemplateCacheTests(unittest.TestCase):
             ):
                 first = loader.load_schema_object(
                     "generate",
-                    "brief",
+                    "request_intake",
                 )
                 second = loader.load_schema_object(
                     "revision",
-                    "brief",
+                    "request_intake",
                 )
 
             self.assertIs(first, second)
@@ -73,7 +73,7 @@ class PromptTemplateCacheTests(unittest.TestCase):
             schema_directory.mkdir()
 
             schema_path = (
-                schema_directory / "brief.json"
+                schema_directory / "request_intake.json"
             )
             schema_path.write_text(
                 '{"type": "object"}',
@@ -89,11 +89,11 @@ class PromptTemplateCacheTests(unittest.TestCase):
 
             first = first_loader.load_schema_object(
                 "generate",
-                "brief",
+                "request_intake",
             )
             second = second_loader.load_schema_object(
                 "generate",
-                "brief",
+                "request_intake",
             )
 
             self.assertEqual(first, second)

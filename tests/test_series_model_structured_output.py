@@ -80,16 +80,16 @@ class CaptureClient:
 
 class StructuredOutputTests(unittest.TestCase):
     def test_initial_design_review_and_revision_prompts_include_live_inputs(self) -> None:
-        context = {"request": {"title": "brief-title"}, "settings": {"model": "local"}}
+        context = {"request": {"title": "request-title"}, "settings": {"model": "local"}}
         candidate = {"core": {"logline": "current-candidate"}}
         critique = {"decision": "issues", "issues": [{"severity": "critical", "explanation": "fix-this"}]}
 
         review_prompt = OpenAIStoryModel._render("review", "initial_design", context=context, candidate=candidate)
         revise_prompt = OpenAIStoryModel._render("revise", "initial_design", context=context, candidate=candidate, critique=critique)
 
-        self.assertIn("brief-title", review_prompt)
+        self.assertIn("request-title", review_prompt)
         self.assertIn("current-candidate", review_prompt)
-        self.assertIn("brief-title", revise_prompt)
+        self.assertIn("request-title", revise_prompt)
         self.assertIn("current-candidate", revise_prompt)
         self.assertIn("fix-this", revise_prompt)
 
@@ -103,7 +103,7 @@ class StructuredOutputTests(unittest.TestCase):
             "initial_design",
             {"core": {"logline": "current-candidate"}},
             {"decision": "issues", "issues": []},
-            {"request": {"title": "brief-title"}},
+            {"request": {"title": "request-title"}},
         )
 
         self.assertEqual(actual, {"value": "ok"})
@@ -166,7 +166,7 @@ class StructuredOutputTests(unittest.TestCase):
                 OpenAIStoryModel
                 ._response_format(
                     "generate",
-                    "initial_concept",
+                    "initial_design",
                 )
             )
 
@@ -175,7 +175,7 @@ class StructuredOutputTests(unittest.TestCase):
             [
                 (
                     "generate",
-                    "initial_concept",
+                    "initial_design",
                 ),
             ],
         )
@@ -183,7 +183,7 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertEqual(actual["type"], "json_schema")
         self.assertTrue(actual["json_schema"]["strict"])
         self.assertEqual(schema["properties"]["schema_version"], {"const": "candidate-response-v1"})
-        self.assertEqual(schema["properties"]["artifact_kind"], {"const": "initial-concept"})
+        self.assertEqual(schema["properties"]["artifact_kind"], {"const": "initial-design"})
         self.assertEqual(schema["properties"]["payload"]["required"], ["value"])
 
     def test_scene_prose_critique_uses_closed_review_wrapper(
@@ -222,7 +222,7 @@ class StructuredOutputTests(unittest.TestCase):
         ):
             actual = model._call(
                 "generate",
-                "initial_concept",
+                "initial_design",
                 "test prompt",
             )
 

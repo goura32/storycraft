@@ -719,7 +719,7 @@ wheels = [
 
 [[package]]
 name = "storycraft"
-version = "1.0.0.dev0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },

@@ -1,4 +1,0 @@
-```json
-{"decision":"accept","issues":[]}
-```
-補足: 問題ありません。

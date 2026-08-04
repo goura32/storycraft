@@ -7,8 +7,7 @@
 
 ## 必須条件
 
-- `target_volume_number`、`target_chapter_number`、
-  `target_scene_number` の一Sceneだけを計画する
+- contextの `volume_number`、`chapter_number`、`scene_number` で示された一Sceneだけを計画する
 - Chapter Planの対象 `scene_summaries` を具体化する
 - `purpose` は対象Sceneの固有目的を具体化する
 - POV人物は `participant_ids` に含める
@@ -28,19 +27,9 @@
 - 上位計画から継承したrequired_elements、avoid、ending_preferenceを損なわない
 - 採用metadataを含めない
 
-## 禁止metadata
+## 出力形式
 
-- `schema_version`
-- `scene_plan_id`
-- `volume_number`
-- `chapter_number`
-- `scene_number`
-- `version`
-- `status`
-- `basis_generation_id`
-- `chapter_plan_id`
-- `parent_plan_id`
-- `created_at`
+出力は出力スキーマに定義されたscene-plan payloadだけにする。CandidateResponse envelopeや保存記録のmetadataは含めない。対象座標は入力contextの `volume_number`、`chapter_number`、`scene_number` を使い、payloadへ座標や保存用識別子を追加しない。
 
 ## 入力
 

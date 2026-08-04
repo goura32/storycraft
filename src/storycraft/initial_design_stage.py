@@ -43,7 +43,7 @@ class InitialDesignStageService:
         if state["pending_commit"] is not None:
             return recover_pending_commit(self.workspace_root)
         if model is None:
-            raise ContractError("initial_design生成にはStoryModelが必要です")
+            raise ContractError("initial_design生成にはLLM modelが必要です")
         if updated_at is None:
             raise ContractError("initial_designの確定時刻が必要です")
 
@@ -106,7 +106,7 @@ class InitialDesignStageService:
         content = call_valid("generate", "initial_design", context, validator=valid_candidate)
         review_method = getattr(model, "review", None)
         if not callable(review_method):
-            raise ContractError("initial_design確認にはreview可能なStoryModelが必要です")
+            raise ContractError("initial_design確認にはreview可能なLLM modelが必要です")
 
         initial_design_id = f"initial-design-{reserve_counter(self.workspace_root, 'next_initial_design'):06d}"
         generation_id = f"gen-{reserve_counter(self.workspace_root, 'next_generation'):06d}"

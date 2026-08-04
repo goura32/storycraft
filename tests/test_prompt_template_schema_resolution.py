@@ -40,7 +40,7 @@ class PromptTemplateSchemaResolutionTests(
 
             schema = loader.load_schema_object(
                 "critique",
-                "initial_concept",
+                "initial_design",
             )
 
             self.assertEqual(
@@ -58,7 +58,7 @@ class PromptTemplateSchemaResolutionTests(
 
             schema = loader.load_schema_object(
                 "critique",
-                "initial_characters",
+                "initial_design",
             )
 
             self.assertEqual(

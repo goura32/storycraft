@@ -1,4 +1,4 @@
-"""run-state v3 の閉じた形と工程横断の不変条件を検証する。"""
+"""閉じたrun-state保存形式と工程横断の不変条件を検証する。"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -85,7 +85,7 @@ def make_pending_target(artifact_id: str, artifact_kind: str, staging_path: str,
 
 
 def validate_run_state(state: object) -> dict[str, Any]:
-    """Validate the exact persisted v3 run-state contract."""
+    """保存済みrun-stateが定義済みの閉じた契約と一致することを検証する。"""
     if not isinstance(state, dict):
         raise ContractError("run-stateはオブジェクトでなければなりません")
     _require_exact_fields(state, _REQUIRED_FIELDS, "run-state")
@@ -121,7 +121,7 @@ def _validate_completed(state: dict[str, Any]) -> None:
 def _validate_current_work(state: dict[str, Any], *, allow_null_selection: bool) -> None:
     stage = state["current_stage"]
     if stage not in RUNNING_STAGES:
-        raise ContractError(f"run-state.current_stageがV3工程ではありません: {stage!r}")
+        raise ContractError(f"run-state.current_stageが現行工程ではありません: {stage!r}")
     _validate_target(stage, state["current_target"])
     selection_id = state["current_selection_id"]
     if selection_id is None:
@@ -381,7 +381,7 @@ def is_stale_scene_commit_recovery_state(state: object) -> bool:
 
 
 class RunStateStore:
-    """runtime/run-state.json の原子的な v3 永続化。"""
+    """runtime/run-state.json を原子的に永続化する。"""
 
     def __init__(self, workspace_root: Path) -> None:
         self.workspace_root = workspace_root.expanduser()

@@ -2,7 +2,7 @@
 
 ## 目的
 
-依頼、採用済みInitial Design、Initial Generationを基準に、
+依頼と採用済みInitial Designを基準に、
 全Volumeを通したSeries Plan Candidateを作成する。
 
 ## 必須条件
@@ -25,19 +25,9 @@
 - `character_arc_map`、`relationship_arc_map`、
   `thread_progression` の巻番号は昇順で重複させない
 
-## 禁止metadata
+## 出力形式
 
-Candidateへ次を含めない。
-
-- `schema_version`
-- `series_plan_id`
-- `version`
-- `status`
-- `basis_generation_id`
-- `parent_plan_id`
-- `created_at`
-
-これらは採用処理が付与する。
+出力は出力スキーマに定義されたseries-plan payloadだけにする。CandidateResponse envelopeや保存記録のmetadataを含めず、入力にない座標や保存用識別子を追加しない。
 
 ## 入力
 

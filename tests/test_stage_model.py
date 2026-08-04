@@ -7,7 +7,7 @@ from storycraft.stages import STAGES, Stage
 
 
 class StageModelTests(unittest.TestCase):
-    def test_current_stage_set_has_no_handoff_or_completion(self) -> None:
+    def test_current_stage_set_is_closed(self) -> None:
         self.assertEqual(
             STAGES,
             (

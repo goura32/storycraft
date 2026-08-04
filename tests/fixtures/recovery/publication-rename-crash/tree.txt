@@ -1,2 +1,0 @@
-publications/pub-000001/
-runtime/run-state.json

@@ -93,7 +93,7 @@ ID は採番後に変更しません。
 | 場面確定単位 | `scene-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene` |
 | 場面確定記録 | `scene-commit-v{巻番号2桁}-c{章番号2桁}-s{場面番号2桁}-{通番6桁}` | `next_scene_commit` |
 
-V1 の workspace には `handoffs/`、`completion/`、全巻を結合した `series.md` を保存しません。
+V1 の workspace には、未定義の巻間要約、シリーズ完結成果物、全巻を結合した原稿を保存しません。
 
 ## 3. 不変確定の共通手順
 

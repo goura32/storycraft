@@ -168,10 +168,10 @@ class InitialDesignStageTests(unittest.TestCase):
             root = Path(temporary)
             request, settings = _workspace(root)
             # These unsupported paths must neither supply input nor be read by the adapter.
-            _write_json(root / "input/brief.json", {"title": "UNSUPPORTED BRIEF"})
+            _write_json(root / "input/unselected_request.json", {"title": "UNSUPPORTED REQUEST"})
             _write_json(root / "runtime/config.json", {"model": "UNSUPPORTED MODEL"})
             model = FakeInitialDesignModel()
-            unsupported_paths = {root / "input/brief.json", root / "runtime/config.json"}
+            unsupported_paths = {root / "input/unselected_request.json", root / "runtime/config.json"}
             original_read_text = Path.read_text
 
             def reject_unsupported_reads(path: Path, *args: Any, **kwargs: Any) -> str:
@@ -226,7 +226,7 @@ class InitialDesignStageTests(unittest.TestCase):
                 "review_record_ids": ["review-000001"], "revision_count": 0, "result": "accepted",
                 "remaining_major_issues": [], "created_at": TIMESTAMP,
             })
-            self.assertTrue((root / "input/brief.json").read_text(encoding="utf-8"))
+            self.assertTrue((root / "input/unselected_request.json").read_text(encoding="utf-8"))
             self.assertTrue((root / "runtime/config.json").read_text(encoding="utf-8"))
 
     def test_initial_design_quality_reviews_only_the_final_revision_candidate(self) -> None:

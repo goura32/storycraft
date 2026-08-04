@@ -62,13 +62,13 @@ class RawLogMarkdownTests(unittest.TestCase):
 
         client.save_raw(
             CallRecord(
-                kind="generate", phase="brief", ref="v:-/-", attempt=1, seed=1, content="{}",
+                kind="generate", phase="request_intake", ref="v:-/-", attempt=1, seed=1, content="{}",
             ),
             [],
         )
 
-        self.assertTrue((raw_dir / "0000_generate_brief.json").exists())
-        self.assertTrue((raw_dir / "0000_generate_brief.md").exists())
+        self.assertTrue((raw_dir / "0000_generate_request_intake.json").exists())
+        self.assertTrue((raw_dir / "0000_generate_request_intake.md").exists())
 
     def test_save_raw_includes_stage_and_available_coordinates_for_scene_stage(self) -> None:
         raw_dir = Path(tempfile.mkdtemp(prefix="storycraft-raw-scene-"))
