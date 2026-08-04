@@ -10,6 +10,7 @@
 - Markdown 文書内へ巨大な JSON 例を複製しない。
 - 入力・成果物の不正なテスト用資料の多くは `invalid/`、入力条件だけの不正資料は `brief/` と `input/` に置く。LLM 提供者の失敗応答は `provider/` に置く。
 - テスト用資料内の識別子と参照は、同じ試験場面の中で一貫させる。
+- `plans/` のシリーズ・巻・章・場面計画は、保存済み成果物と同じartifact record envelopeで保持し、payload内へ座標・状態・識別子を重複保存しない。
 - 認証情報、実際の LLM 提供者名、実際の API キーを含めない。
 - ハッシュ値や成果物の関係図は、最小資料の前提にしない。公開用資料は確定済み入力を前提とする。`catalog.json` に含まれる `handoff/summary.md`、`publication/*/series.md`、`completion/`、V1のrun-stateにない構造の資料は、受理しない入力を確認する負例であり、公開経路の入力や製品契約ではない。
 
