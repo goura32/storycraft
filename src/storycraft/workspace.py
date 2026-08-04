@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import json
-import ipaddress
 import math
 import os
 from pathlib import Path
 import re
-import socket
 import tempfile
 import unicodedata
 from typing import Any, Optional
@@ -16,6 +14,8 @@ from urllib.parse import urlsplit
 from .artifact_ids import initial_counters
 from .artifact_record import validate_call_record, validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_registry import ARTIFACT_SPECS
+from .endpoint_security import resolve_allowed_addresses
+from .filesystem_security import assert_no_symlink_path
 from .input_normalization import normalize_request, normalize_settings
 from .publication_builder import validate_volume_publication_files
 from .review_contracts import validate_critique_fields
@@ -61,8 +61,10 @@ def create_workspace(
     _validate_settings(settings)
     if not isinstance(workspace_id, str) or not workspace_id.startswith("ws-"):
         raise ContractError("workspace_idが不正です")
-    root.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=root.parent))
+    parent = assert_no_symlink_path(root.parent)
+    parent.mkdir(parents=True, exist_ok=True)
+    parent = assert_no_symlink_path(parent, require_directory=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=parent))
     try:
         for relative in _WORKSPACE_DIRECTORIES:
             (staging / relative).mkdir(parents=True, exist_ok=True)
@@ -147,6 +149,7 @@ def create_workspace(
 def validate_workspace(workspace_root: Path) -> None:
     """providerを初期化せず、V1保存形式の正本・参照を静的に検証する。"""
     root = workspace_root.expanduser()
+    assert_no_symlink_path(root, require_directory=True)
     if not root.is_dir() or root.is_symlink():
         raise ContractError("workspace directoryが存在しません")
     for relative in _WORKSPACE_DIRECTORIES:
@@ -448,7 +451,11 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
     entries = state["published_volumes"]
     assert isinstance(entries, list)
     expected = {entry["publication_id"] for entry in entries}
-    actual = {child.name for child in root.joinpath("publications").iterdir() if child.is_dir() and not child.is_symlink()}
+    publication_root = root.joinpath("publications")
+    children = list(publication_root.iterdir())
+    if any(child.is_symlink() or not child.is_dir() for child in children):
+        raise ContractError("publications直下は通常directoryだけでなければなりません")
+    actual = {child.name for child in children}
     if actual != expected:
         raise ContractError("published_volumesと公開record集合が一致しません")
     if state["status"] == "completed":
@@ -461,7 +468,11 @@ def _validate_published_publications(root: Path, state: dict[str, Any], resolved
         directory = root / "publications" / entry["publication_id"]
         if directory.is_symlink() or not directory.is_dir() or {path.name for path in directory.iterdir()} != {"record.json", "manuscript.md"}:
             raise ContractError("published publicationファイル構成が不正です")
-        try: files = {"record.json": json.loads((directory / "record.json").read_text(encoding="utf-8")), "manuscript.md": (directory / "manuscript.md").read_text(encoding="utf-8")}
+        record_path = directory / "record.json"
+        manuscript_path = directory / "manuscript.md"
+        if any(path.is_symlink() or not path.is_file() for path in (record_path, manuscript_path)):
+            raise ContractError("published publicationのleaf fileは通常fileでなければなりません")
+        try: files = {"record.json": json.loads(record_path.read_text(encoding="utf-8")), "manuscript.md": manuscript_path.read_text(encoding="utf-8")}
         except (OSError, json.JSONDecodeError) as exc: raise ContractError("published publicationを読めません") from exc
         validate_volume_publication_files(files)
         from .commit_recovery import _validate_publication_source_evidence
@@ -551,27 +562,9 @@ def _validate_endpoint(endpoint: object) -> None:
         raise ContractError("#/config/endpoint: userinfo、query、fragmentなしのLANまたはloopback HTTP URLが必要です")
     host = parsed.hostname
     try:
-        addresses = {ipaddress.ip_address(host)}
-    except ValueError:
-        try:
-            addresses = {
-                ipaddress.ip_address(entry[4][0])
-                for entry in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-            }
-        except (OSError, ValueError) as exc:
-            raise ContractError("#/config/endpoint: hostを解決できません") from exc
-    if not addresses or any(not (address.is_loopback or _is_private_lan_address(address)) for address in addresses):
-        raise ContractError("#/config/endpoint: loopbackまたはプライベートLANのhostだけが許可されます")
-
-
-def _is_private_lan_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    if address.version == 4:
-        return any(address in network for network in (
-            ipaddress.ip_network("10.0.0.0/8"),
-            ipaddress.ip_network("172.16.0.0/12"),
-            ipaddress.ip_network("192.168.0.0/16"),
-        ))
-    return address in ipaddress.ip_network("fc00::/7")
+        resolve_allowed_addresses(host, parsed.port)
+    except ContractError as exc:
+        raise ContractError("#/config/endpoint: loopbackまたはプライベートLANのhostだけが許可されます") from exc
 
 
 def _validate_request_options(options: object) -> None:

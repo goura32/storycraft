@@ -2,7 +2,6 @@
 
 __version__ = "1.0.0"
 
-from .config import Settings
 from .log import logger
 
-__all__ = ["Settings", "logger"]
+__all__ = ["logger"]

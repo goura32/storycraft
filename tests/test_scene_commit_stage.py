@@ -70,7 +70,11 @@ def workspace() -> tuple[tempfile.TemporaryDirectory[str], Path]:
         "content": {"title": "題", "genre": ["fantasy"], "premise": "前提", "required_elements": [], "avoid": [], "ending_preference": "希望", "volume_count": 4, "language": "ja"},
     })
     write_json(root / "runtime/settings/settings-000001/record.json", {
-        "schema_version": 1, "settings_id": "settings-000001", "payload": {"invalid_response_limit": 5}, "created_at": NOW,
+        "schema_version": 1, "settings_id": "settings-000001", "payload": {
+            "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "m",
+            "technical_retry_limit": 3, "quality_revision_limit": 1, "invalid_response_limit": 5,
+            "chapter_per_volume_range": [1, 2], "chapter_scene_range": [1, 2], "scene_text_char_range": [1, 100]
+        }, "created_at": NOW,
     })
     selections = SelectionSnapshotStore(root)
     base = selections.create(slots={"request": "request-000001", "settings": "settings-000001"}, created_at=NOW)

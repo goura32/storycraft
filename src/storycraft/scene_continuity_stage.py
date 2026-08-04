@@ -6,6 +6,7 @@ from typing import Any
 
 from .artifact_ids import reserve_counter
 from .candidate_stage import CandidateStageRunner, CandidateStageSpec
+from .continuity_paths import binding as continuity_binding
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore
 from .series_contracts import ContractError
@@ -91,15 +92,6 @@ class SceneContinuityStageService:
     def _content_id(self, _root: Path, target: dict[str, Any]) -> str:
         return f"continuity-v{target['volume_number']:02d}-c{target['chapter_number']:02d}-s{target['scene_number']:02d}-{reserve_counter(self.workspace_root, 'next_continuity'):06d}"
 
-    @staticmethod
-    def _path_binding(target: str, path: str) -> tuple[str, str]:
-        prefix = f"$.{target}."
-        if not path.startswith(prefix):
-            raise ContractError("continuity_update pathが不正です")
-        parts = path[len(prefix):].split(".")
-        if not parts or any(not part for part in parts):
-            raise ContractError("continuity_update pathが不正です")
-        return parts[0], parts[1] if len(parts) > 1 else "value"
 
     @staticmethod
     def _evidence_is_in_prose(location: object, text: str) -> bool:
@@ -163,11 +155,16 @@ class SceneContinuityStageService:
             if not isinstance(change["path"], str):
                 raise ContractError("continuity_update pathが不正です")
             if change["target"] == "timeline_position":
-                if change["path"] != "$.timeline_position" or not isinstance(change["value"], int) or isinstance(change["value"], bool) or change["value"] < timeline:
+                if change["path"] not in {"$.timeline_position", "/timeline_position"} or not isinstance(change["value"], int) or isinstance(change["value"], bool) or change["value"] < timeline:
                     raise ContractError("timeline_positionは非負整数のsetによる単調増加だけを許可します")
                 target_id, field = "timeline_position", "value"
             else:
-                target_id, field = SceneContinuityStageService._path_binding(change["target"], change["path"])
+                try:
+                    target_id, field, _tokens = continuity_binding(current_state, change["target"], change["path"], change["op"])
+                except ContractError as exc:
+                    if change["target"] == "unresolved_thread_states":
+                        raise ContractError("continuity_updateのthread targetがcanonical state外です") from exc
+                    raise ContractError("continuity_updateがscene-cardのallowed_updates外です") from exc
                 if change["target"] == "unresolved_thread_states":
                     if (
                         target_id not in thread_states

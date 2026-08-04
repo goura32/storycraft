@@ -25,8 +25,6 @@ Review issuesを解消した、完全な置換本文を返す。
 
 {{ context | tojson }}
 
-## 出力スキーマ
+## 出力形式
 
-以下のSchemaは応答値の型を示す。JSON文字列としてquoteせず、本文そのものだけを返す。
-
-{{ output_schema }}
+完成したScene本文のみを返す（JSONでも配列でもなく、プレーンテキスト）。

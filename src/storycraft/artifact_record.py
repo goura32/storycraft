@@ -41,6 +41,8 @@ def validate_record(artifact_kind: str, artifact_id: str, record: object) -> dic
     elif artifact_kind == "settings":
         _require(record, {"schema_version", "settings_id", "payload", "created_at"})
         _equal(record, "settings_id", artifact_id)
+        from .workspace import _validate_settings
+        _validate_settings(record["payload"])
     elif artifact_kind == "keywords":
         _require(record, {"schema_version", "keywords_id", "keywords", "language", "created_at"})
         _equal(record, "keywords_id", artifact_id)
@@ -134,7 +136,7 @@ def validate_call_record(call_id: str, record: object) -> dict[str, Any]:
         return record
     if result == "invalid" and failure in {"json_parse", "schema_invalid"} and record["transport"] == "success" and record["response"] is not None:
         return record
-    if result == "not_applicable" and failure is None and record["transport"] == "failure" and (record["response"] is None or isinstance(record["response"], str)):
+    if result == "not_applicable" and failure in {"connection_error", "http_error", "timeout", "provider_error"} and record["transport"] == "failure" and (record["response"] is None or isinstance(record["response"], str)):
         return record
     raise ContractError("call recordのvalidation/transport相関が不正です")
 
@@ -230,17 +232,28 @@ def validate_quality_evidence(
     candidate_payload: dict[str, Any],
     review_records: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    """Bind remaining quality issues to valid candidate evidence and reviews."""
-    if record["result"] != "accepted_with_notice":
+    """Bind quality disposition to the referenced candidate reviews fail-closed."""
+    if review_records is None:
+        raise ContractError("quality-dispositionのreview記録が必要です")
+    if any(review.get("candidate_id") != record.get("candidate_id") for review in review_records.values()):
+        raise ContractError("quality-dispositionのreviewが採用candidateと一致しません")
+    critical_reviews = [
+        issue
+        for review in review_records.values()
+        for issue in review["response"]["issues"]
+        if issue["severity"] == "critical"
+    ]
+    if record["result"] == "accepted":
+        if critical_reviews:
+            raise ContractError("accepted qualityに重大指摘を含むreviewがあります")
         return
+    if record["result"] != "accepted_with_notice":
+        raise ContractError("quality-dispositionのresultが不正です")
     from .review_contracts import validate_critique_fields
-    critical_signatures: set[tuple[str, tuple[object, ...]]] | None = None
-    if review_records is not None:
-        critical_signatures = set()
-        for review in review_records.values():
-            for issue in review["response"]["issues"]:
-                if issue["severity"] == "critical":
-                    critical_signatures.add((issue["explanation"], tuple(issue["evidence_locations"])))
+    critical_signatures: set[tuple[str, tuple[object, ...]]] = {
+        (issue["explanation"], tuple(issue["evidence_locations"]))
+        for issue in critical_reviews
+    }
     for issue in record["remaining_major_issues"]:
         response = {
             "schema_version": "review-response-v1",
@@ -252,7 +265,7 @@ def validate_quality_evidence(
             }],
         }
         validate_critique_fields(response, candidate_payload)
-        if critical_signatures is not None and (issue["message"], tuple(issue["evidence_locations"])) not in critical_signatures:
+        if (issue["message"], tuple(issue["evidence_locations"])) not in critical_signatures:
             raise ContractError("quality-dispositionの重大指摘がreview記録に存在しません")
 
 

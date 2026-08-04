@@ -9,7 +9,9 @@ from typing import Any
 
 from .artifact_ids import reserve_counter
 from .artifact_registry import artifact_directory
+from .artifact_record import validate_record
 from .commit_recovery import recover_pending_commit
+from .continuity_paths import apply_change, binding
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
 from .selection_snapshot import SelectionSnapshotStore, validate_selection_snapshot
@@ -194,6 +196,8 @@ class SceneCommitStageService:
         required = {"story_facts", "character_knowledge", "reader_disclosures", "unresolved_thread_states", "timeline_position"}
         if not isinstance(old_state, dict) or set(old_state) != required:
             raise ContractError("current_state contentが不正です")
+        if not isinstance(old_state["story_facts"], list) or not isinstance(old_state["character_knowledge"], dict) or not isinstance(old_state["reader_disclosures"], list):
+            raise ContractError("current_stateのcollectionが不正です")
         thread_states = old_state.get("unresolved_thread_states")
         if not isinstance(thread_states, dict) or any(
             not isinstance(state, dict) or set(state) != {"status"} or state.get("status") not in {"open", "progressed", "resolved"}
@@ -208,44 +212,23 @@ class SceneCommitStageService:
             if not isinstance(change, dict) or set(change) != {"op", "target", "path", "value", "evidence_locations"}:
                 raise ContractError("continuity_update changeが不正です")
             target, path, operation = change["target"], change["path"], change["op"]
-            if target not in required or not isinstance(path, str) or not path.startswith(f"$.{target}") or operation not in {"set", "add", "remove"}:
+            if target not in required or not isinstance(path, str) or operation not in {"set", "add", "remove"}:
                 raise ContractError("continuity_update changeが不正です")
+            if not isinstance(change["evidence_locations"], list) or not change["evidence_locations"] or any(not isinstance(item, str) or not item for item in change["evidence_locations"]):
+                raise ContractError("continuity_update evidence_locationsが不正です")
             if target == "timeline_position":
                 value = change["value"]
-                if operation != "set" or path != "$.timeline_position" or not isinstance(value, int) or isinstance(value, bool) or value < result["timeline_position"]:
+                if operation != "set" or path not in {"$.timeline_position", "/timeline_position"} or not isinstance(value, int) or isinstance(value, bool) or value < result["timeline_position"]:
                     raise ContractError("timeline_positionは非負整数のsetによる単調増加だけを許可します")
-            keys = path[2:].split(".")
-            if any(not key for key in keys):
-                raise ContractError("continuity_update pathが不正です")
+            target_id, field, _tokens = binding(result, target, path, operation)
             if target == "unresolved_thread_states" and (
                 operation != "set"
-                or len(keys) != 3
-                or keys[1] not in canonical_thread_names
-                or keys[2] != "status"
+                or target_id not in canonical_thread_names
+                or field != "status"
                 or change["value"] not in {"open", "progressed", "resolved"}
             ):
                 raise ContractError("continuity_updateのthread targetがcanonical state外です")
-            parent: Any = result
-            for key in keys[:-1]:
-                if not isinstance(parent, dict) or key not in parent:
-                    raise ContractError("continuity_update pathが現在stateにありません")
-                parent = parent[key]
-            key = keys[-1]
-            if not isinstance(parent, dict):
-                raise ContractError("continuity_update pathが現在stateにありません")
-            if operation == "set":
-                parent[key] = deepcopy(change["value"])
-            elif operation == "add":
-                if key not in parent:
-                    parent[key] = deepcopy(change["value"])
-                elif isinstance(parent[key], list):
-                    parent[key].append(deepcopy(change["value"]))
-                else:
-                    raise ContractError("continuity_update add先が不正です")
-            else:
-                if key not in parent:
-                    raise ContractError("continuity_update remove先がありません")
-                del parent[key]
+            apply_change(result, target, path, operation, change["value"])
         if set(result) != required:
             raise ContractError("continuity_update適用後のcurrent_stateが不正です")
         if set(result["unresolved_thread_states"]) != canonical_thread_names:

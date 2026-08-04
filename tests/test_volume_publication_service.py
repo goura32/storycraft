@@ -386,6 +386,37 @@ class VolumePublicationServiceTests(unittest.TestCase):
         manuscript = (publication / "manuscript.md").read_text(encoding="utf-8")
         self.assertEqual(manuscript, "編集上の注意があります。\n\n本文 1-1\n\n本文 1-2\n\n本文 2-1\n")
 
+    def test_publication_record_and_manuscript_must_be_regular_files(self) -> None:
+        temporary, root = workspace()
+        self.addCleanup(temporary.cleanup)
+        VolumePublicationStageService(root).run(updated_at=NOW)
+        publication = root / "publications/volume-pub-v01-000001"
+        external = root.parent / "publication-record-outside.json"
+        external.write_text((publication / "record.json").read_text(encoding="utf-8"), encoding="utf-8")
+        self.addCleanup(lambda: external.unlink(missing_ok=True))
+        record_path = publication / "record.json"
+        record_path.unlink()
+        record_path.symlink_to(external)
+        with self.assertRaisesRegex(ContractError, "leaf file"):
+            from storycraft.workspace import validate_workspace
+            validate_workspace(root)
+
+        temporary2, root2 = workspace()
+        self.addCleanup(temporary2.cleanup)
+        with patch("storycraft.volume_publication_stage.recover_pending_commit", side_effect=RuntimeError("staged")):
+            with self.assertRaisesRegex(RuntimeError, "staged"):
+                VolumePublicationStageService(root2).run(updated_at=NOW)
+        pending = RunStateStore(root2).load()["pending_commit"]
+        assert isinstance(pending, dict)
+        staged_record = root2 / pending["targets"][0]["staging_path"] / "record.json"
+        staged_external = root2.parent / "staged-publication-record-outside.json"
+        staged_external.write_text(staged_record.read_text(encoding="utf-8"), encoding="utf-8")
+        self.addCleanup(lambda: staged_external.unlink(missing_ok=True))
+        staged_record.unlink()
+        staged_record.symlink_to(staged_external)
+        with self.assertRaisesRegex(ContractError, "leaf file"):
+            recover_pending_commit(root2)
+
     def test_recovery_rejects_a_forged_publication_source_reference(self) -> None:
         temporary, root = workspace()
         self.addCleanup(temporary.cleanup)

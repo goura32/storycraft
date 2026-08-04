@@ -95,7 +95,8 @@ class PromptTemplateSchemaResolutionTests(
             stage = relative.parts[1]
             filename = relative.name
             kind = filename.split("_", 1)[0]
-            expected = {"context", "output_schema"}
+            raw_prose = stage == "scene_prose" and kind in {"generate", "fix"}
+            expected = {"context"} if raw_prose else {"context", "output_schema"}
             if kind in {"critique", "fix"}:
                 expected.add("candidate")
             if kind == "fix":
@@ -108,10 +109,9 @@ class PromptTemplateSchemaResolutionTests(
                 )
                 self.assertEqual(actual, expected)
 
-                values = {
-                    "context": {"__context_placeholder__": stage},
-                    "output_schema": '{"__schema_placeholder__":true}',
-                }
+                values: dict[str, object] = {"context": {"__context_placeholder__": stage}}
+                if not raw_prose:
+                    values["output_schema"] = '{"__schema_placeholder__":true}'
                 if kind in {"critique", "fix"}:
                     values["candidate"] = (
                         "__candidate_placeholder__"
@@ -127,7 +127,10 @@ class PromptTemplateSchemaResolutionTests(
                 self.assertNotIn("{{", rendered)
                 self.assertNotIn("{%", rendered)
                 self.assertIn("__context_placeholder__", rendered)
-                self.assertIn("__schema_placeholder__", rendered)
+                if raw_prose:
+                    self.assertNotIn("__schema_placeholder__", rendered)
+                else:
+                    self.assertIn("__schema_placeholder__", rendered)
                 if kind in {"critique", "fix"}:
                     self.assertIn("__candidate_placeholder__", rendered)
                 if kind == "fix":

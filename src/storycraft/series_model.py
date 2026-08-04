@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 from .log import logger
 from .llm import LLMClient
@@ -15,8 +18,8 @@ from .stages import ACTIVE_TEMPLATE_STAGES
 class OpenAIStoryModel:
     """Jinjaテンプレートと工程別外部スキーマから実送信プロンプトを構築する。"""
 
-    def __init__(self, settings, raw_dir) -> None:
-        self.client = LLMClient(settings, raw_dir)
+    def __init__(self, settings, raw_dir, workspace_root=None) -> None:
+        self.client = LLMClient(settings, raw_dir, workspace_root=workspace_root)
         self._seed_sequence = 0
         self._format_attempt = 1
 
@@ -51,7 +54,9 @@ class OpenAIStoryModel:
         return self._call("generate", stage, self._render("generate", stage, context=context))
 
     def critique(self, stage: str, candidate: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
-        return self._call("critique", stage, self._render("critique", stage, candidate=candidate, context=context))
+        # Legacy method name retained only as a Python adapter.  The persisted
+        # provider operation is always the canonical ``review`` operation.
+        return self.review(stage, context, candidate)
 
     def revision(self, stage: str, candidate: dict[str, Any], critique: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
         # Keep the method name used by the reviewed stage as an alias to the
@@ -75,7 +80,6 @@ class OpenAIStoryModel:
             "generate",
             stage,
             self._render("generate", stage, context=context),
-            invalid_limit=1,
         )
 
     def critique_prose(
@@ -112,7 +116,6 @@ class OpenAIStoryModel:
                 critique=critique,
                 context=context,
             ),
-            invalid_limit=1,
         )
 
     @staticmethod
@@ -125,6 +128,10 @@ class OpenAIStoryModel:
             "revise": "fix",
             "revision": "fix",
         }.get(kind, kind)
+        if stage == "scene_prose" and kind in {"generate", "revise", "revision"}:
+            # Scene prose is the one raw-text transport.  It must never receive
+            # a CandidateResponse schema or be prompted to emit JSON.
+            return loader.render_user(template_kind, stage, **kwargs)
         schema_kind = "revise" if kind == "revision" else kind
         output_schema = json.dumps(OpenAIStoryModel._response_schema(schema_kind, stage), ensure_ascii=False, indent=2)
         return loader.render_user(template_kind, stage, output_schema=output_schema, **kwargs)
@@ -136,13 +143,15 @@ class OpenAIStoryModel:
 
     @staticmethod
     def _response_schema(kind: str, stage: str) -> dict[str, Any]:
+        if stage == "scene_prose" and kind in {"generate", "revise", "revision"}:
+            raise ContractError("scene_proseの生成・修正はraw textでありresponse schemaを持ちません")
         if kind in {"generate", "revise"}:
             payload_schema = get_template_loader().load_schema_object("generate", stage)
             artifact_kind = {
                 "request_intake": "request",
                 "scene_continuity": "continuity-update",
             }.get(stage, stage.replace("_", "-"))
-            return {
+            wrapper = {
                 "type": "object", "additionalProperties": False,
                 "required": ["schema_version", "artifact_kind", "payload"],
                 "properties": {
@@ -151,6 +160,18 @@ class OpenAIStoryModel:
                     "payload": payload_schema,
                 },
             }
+            payload_defs = payload_schema.get("$defs")
+            if payload_defs is not None:
+                if not isinstance(payload_defs, dict):
+                    raise ContractError(f"{stage} schemaの$defsが不正です")
+                # A $ref inside a subschema resolves against the wrapper root,
+                # not against the nested payload object.  Keep the payload
+                # schema intact for direct validation and mirror its definitions
+                # at the wrapper root for OpenAI/JSON-Schema validators.
+                wrapper["$defs"] = deepcopy(payload_defs)
+            Draft202012Validator.check_schema(wrapper)
+            Draft202012Validator.check_schema(payload_schema)
+            return wrapper
         if kind in {"review", "critique"}:
             return get_template_loader().load_schema_object("critique", stage)
         return get_template_loader().load_schema_object(kind, stage)
@@ -166,8 +187,10 @@ class OpenAIStoryModel:
     def _response_format(
         kind: str,
         stage: str,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """工程に応じたOpenAI互換response formatを返す。"""
+        if stage == "scene_prose" and kind in {"generate", "revise", "revision"}:
+            return None
         schema = OpenAIStoryModel._response_schema(kind, stage)
 
         return {
@@ -246,7 +269,7 @@ class OpenAIStoryModel:
     ) -> str:
         attempts = max(int(self.client.settings.retry.get("max_attempts", 1)), 1)
         if invalid_limit is None:
-            invalid_limit = max(int(self.client.settings.llm.get("invalid_response_limit", 5)), 1)
+            invalid_limit = max(int(getattr(self.client.settings, "llm", {}).get("invalid_response_limit", 5)), 1)
         elif not isinstance(invalid_limit, int) or isinstance(invalid_limit, bool) or invalid_limit < 1:
             raise ContractError("本文invalid_response_limitが不正です")
         ref = getattr(self, "_log_ref", stage)

@@ -7,9 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .artifact_record import validate_record
+from .artifact_record import validate_candidate_record, validate_quality_evidence, validate_record, validate_review_record
 from .artifact_ids import reserve_counter
 from .commit_recovery import recover_pending_commit
+from .filesystem_security import assert_no_symlink_path
 from .publication_builder import build_volume_publication_files, validate_volume_publication_files
 from .run_state import RunStateStore, make_pending_target
 from .selection_authority import resolve_selection
@@ -243,10 +244,14 @@ class VolumePublicationStageService:
             raise ContractError("巻公開の確定場面入力selectionにcurrent_stateがありません")
         return state_id
 
-    @staticmethod
-    def _validate_quality_record(record: dict[str, Any], slot_name: str) -> None:
+    def _validate_quality_record(self, record: dict[str, Any], slot_name: str) -> None:
         if not isinstance(record, dict) or record.get("result") not in {"accepted", "accepted_with_notice"}:
             raise ContractError(f"{slot_name}の品質判定が不正です")
+        root = assert_no_symlink_path(self.workspace_root, require_directory=True)
+        quality_id = record.get("quality_id")
+        if not isinstance(quality_id, str):
+            raise ContractError(f"{slot_name}のquality_idが不正です")
+        validate_record("quality-disposition", quality_id, record)
         issues = record.get("remaining_major_issues")
         if not isinstance(issues, list):
             raise ContractError(f"{slot_name}のremaining_major_issuesが不正です")
@@ -254,6 +259,32 @@ class VolumePublicationStageService:
             raise ContractError(f"{slot_name}のaccepted判定が不正です")
         if record["result"] == "accepted_with_notice" and (not issues or record.get("notice_type") != "編集"):
             raise ContractError(f"{slot_name}のaccepted_with_notice判定が不正です")
+        candidate_id = record.get("candidate_id")
+        review_ids = record.get("review_record_ids")
+        if not isinstance(candidate_id, str) or not isinstance(review_ids, list) or not review_ids or len(review_ids) != len(set(review_ids)):
+            raise ContractError(f"{slot_name}のcandidate/review参照が不正です")
+        candidate = self._load_json_record(root / "candidates" / candidate_id / "record.json")
+        validate_candidate_record(candidate_id, candidate)
+        reviews: dict[str, dict[str, Any]] = {}
+        for review_id in review_ids:
+            if not isinstance(review_id, str):
+                raise ContractError(f"{slot_name}のreview参照が不正です")
+            review = self._load_json_record(root / "reviews" / review_id / "record.json")
+            validate_review_record(review_id, review)
+            reviews[review_id] = review
+        validate_quality_evidence(record, candidate["payload"], reviews)
+
+    @staticmethod
+    def _load_json_record(path: Path) -> dict[str, Any]:
+        if path.is_symlink() or not path.is_file():
+            raise ContractError(f"品質参照recordが通常fileではありません: {path.name}")
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError("品質参照recordを読めません") from exc
+        if not isinstance(value, dict):
+            raise ContractError("品質参照recordがobjectではありません")
+        return value
 
     @staticmethod
     def _validate_committed_source(

@@ -18,7 +18,7 @@ ID 予約、一時保存作成、最終配置への原子的な名前変更、ru
 | 場面確定 | 場面、作品状態、場面確定、後続選択を参照し、現在の作品状態 / 選択と次対象を更新 |
 | 巻公開 | 公開記録、原稿を参照し、公開済み巻と次巻対象または完了を更新 |
 
-状態更新前に最終配置の成果物が不正なら停止します。状態更新後に最終配置の成果物が失われた場合も停止します。
+`pending_commit` の各 target はdirectory全体を通常fileとして検証します。publication directoryは`record.json`と`manuscript.md`だけを持ち、directory自身、両leaf、親pathのいずれもsymlinkではありません。symlink、workspace外参照、manifest外の追加file、staging/final同時存在、final親directory不在は移動前に拒否し、一つも部分確定しません。
 
 ## 4. 候補採用の詳細
 

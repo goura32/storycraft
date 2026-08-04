@@ -82,7 +82,7 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 completion = next(call for call in calls if call["operation"] == "generate")
                 self.assertEqual(completion["transport"], "failure")
                 self.assertEqual(completion["validation"]["result"], "not_applicable")
-                self.assertEqual(completion["validation"]["failure_code"], None)
+                self.assertEqual(completion["validation"]["failure_code"], "provider_error")
                 self.assertEqual(json.loads(completion["response"])["error"]["message"], "provider busy")
         finally:
             handler.capability_response = None

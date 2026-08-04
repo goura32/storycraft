@@ -19,6 +19,7 @@ class WorkflowSettingsTests(unittest.TestCase):
                 "endpoint": "http://127.0.0.1:11434/v1",
                 "model": "test-model",
                 "technical_retry_limit": 3,
+                "invalid_response_limit": 5,
                 "request_options": {"temperature": 0.4},
             },
             "settings-000001",

@@ -1,28 +1,30 @@
 # V1 Scene継続性更新の修正
 
-Review issuesを解消した完全な置換Candidateを返す。
+Review issuesを解消した、完全な継続性更新候補を返す。
 
 ## 修正方針
 
-- 問題のないoperationとEvidenceを保持する
-- old_valueはcurrent_stateの完全なfield値へ戻す
-- 本文に存在しない変化は削除する
-- allowed_updates外の変更を追加しない
-- 曖昧な変化を断定しない
-- Evidence quoteとoccurrenceを本文へ再照合する
-- 差分、説明、採用metadata、永続IDを返さない
+- `coordinate` を維持する
+- `changes` の各要素を `op`、`target`、`path`、`value`、`evidence_locations` のactive形式へ統一する
+- pathはJSON Pointerにし、配列要素はindexまたはcanonical IDで決定的に指定する
+- 問題のないchangeを保持する
+- 本文に存在しない変化、allowed_updates外の変更、no-opを削除する
+- 各changeのevidence_locationsを本文の `prose:<offset>` または `paragraph:<index>` へ再照合する
+- unresolved_thread_statesはcanonical thread nameのstatusだけをsetする
+- timeline_positionは単調増加するsetだけにする
+- 差分、説明、採用metadata、永続ID、Review結果を返さない
 
-## 元Candidate
+## Continuity Context
+
+{{ context | tojson }}
+
+## Current Candidate
 
 {{ candidate | tojson }}
 
 ## Review issues
 
 {{ critique | tojson }}
-
-## Continuity Context
-
-{{ context | tojson }}
 
 ## 出力スキーマ
 

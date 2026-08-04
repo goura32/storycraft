@@ -48,6 +48,8 @@ publications/
 - 各場面の `continuity_disposition.{coordinate}` slot にも品質判定が一件だけ存在し、`result` が `accepted | accepted_with_notice` であることを確認する。継続性品質判定は本文品質判定と別に検証するが、巻全体の公開注意へ集約しない。
 - `remaining_major_issues` の非空判定は `critical` 指摘だけを対象とし、`notice` 指摘は公開注意の集約対象にしない。
 
+巻公開サービスは`validate_workspace()`を経由しない直接呼出しでも、各品質判定のcandidate・review recordをworkspaceから再読込し、record自身のschema、candidate ID一致、review ID一致、critical evidence bindingを再検証してから公開stagingを作成します。
+
 コードは `input_selection_id` から対象の計画・状態・場面・本文・継続性品質判定・設定を導出し、欠落・重複・列挙外の参照がないことを検証します。本文・継続性品質判定の集合と `publication_notice_type` が決定的な集約規則に一致しない場合は公開を拒否します。その後、計画順、全場面の採用済み状態、決定的に構築した原稿、公開注意、作者用情報の不在を検証します。公開記録には導出可能な ID 群を再保存しません。
 
 ## 3. 結末必須事項の扱い

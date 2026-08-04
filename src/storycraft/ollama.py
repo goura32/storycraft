@@ -7,18 +7,23 @@ one immutable audit record for each physical HTTP call when given a call directo
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from collections.abc import Callable
+import socket
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from jsonschema import Draft202012Validator, ValidationError
 
 from .artifact_ids import reserve_counter
+from .endpoint_security import pinned_http_request
+from .error_sanitizer import redact_value
+from .filesystem_security import assert_no_symlink_path
 from .series_contracts import ContractError
 
 
@@ -30,9 +35,35 @@ class OllamaResponseFormatError(ContractError):
     """The provider replied, but its capability or structured response was malformed."""
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise HTTPError(req.full_url, code, "provider redirect is not allowed", headers, fp)
+
+
+_HTTP_OPENER = build_opener(_NoRedirectHandler)
+
+
+def urlopen(request: Request, timeout: float):
+    """Open only the address resolved and validated immediately for this call."""
+    return _HTTP_OPENER.open(pinned_http_request(request), timeout=timeout)
+
+
+def _failure_code(error: BaseException) -> str:
+    if isinstance(error, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(error, HTTPError):
+        return "http_error"
+    if isinstance(error, (URLError, OSError)):
+        return "connection_error"
+    return "connection_error"
+
+
 def normalized_v1_base_url(endpoint: str) -> str:
     """Return exactly one OpenAI-compatible ``/v1`` path suffix."""
-    parsed = urlsplit(endpoint)
+    try:
+        parsed = urlsplit(endpoint)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("provider endpointのURLが不正です") from exc
     path = parsed.path.rstrip("/")
     if not path.endswith("/v1"):
         path = f"{path}/v1" if path else "/v1"
@@ -69,6 +100,10 @@ def _write_record(
     if directory is None:
         return None
     _require_settings_id(settings_id)
+    directory = Path(directory)
+    assert_no_symlink_path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    assert_no_symlink_path(directory, require_directory=True)
     counters = directory.parent / "counters.json"
     if directory.name == "calls" and counters.is_file():
         call_id = f"call-{reserve_counter(directory.parent.parent, 'next_call'):06d}"
@@ -78,6 +113,8 @@ def _write_record(
     target = directory / call_id
     # A newly-created directory gives each physical call a write-once namespace.
     target.mkdir(parents=True, exist_ok=False)
+    redacted_request = redact_value(request)
+    redacted_response = redact_value(response)
     record = {
         "schema_version": 1,
         "call_id": call_id,
@@ -91,12 +128,28 @@ def _write_record(
         "endpoint": endpoint,
         "model": model,
         "settings_id": settings_id,
-        "request": request,
-        "response": response,
+        "request": redacted_request,
+        "response": redacted_response,
         "transport": transport,
         "validation": validation,
     }
-    (target / "record.json").write_text(_canonical_json(record) + "\n", encoding="utf-8")
+    record_path = target / "record.json"
+    temporary = target / f".record.json.{uuid4().hex}.tmp"
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            handle.write(_canonical_json(record) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, record_path)
+        if os.name == "posix":
+            descriptor = os.open(target, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
     return call_id
 
 
@@ -119,7 +172,7 @@ def _capability(
     except (HTTPError, URLError, OSError) as exc:
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=None, transport="failure",
-                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      validation={"result": "not_applicable", "checks": [], "failure_code": _failure_code(exc)},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
         raise OllamaTechnicalError("Ollamaモデル情報取得に失敗しました") from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -131,7 +184,7 @@ def _capability(
     if isinstance(payload, dict) and "error" in payload:
         _write_record(call_record_dir, operation="model_capability", endpoint=base_url, model=model,
                       request=None, response=raw, transport="failure",
-                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      validation={"result": "not_applicable", "checks": [], "failure_code": "provider_error"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed, settings_id=settings_id)
         raise OllamaTechnicalError("Ollama provider error envelope")
     valid = (
@@ -215,7 +268,7 @@ def generate(
     except (HTTPError, URLError, OSError) as exc:
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=None, transport="failure",
-                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      validation={"result": "not_applicable", "checks": [], "failure_code": _failure_code(exc)},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                       settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:
@@ -224,7 +277,7 @@ def generate(
     except OllamaTechnicalError as exc:
         call_id = _write_record(call_record_dir, operation=operation, endpoint=base_url, model=model,
                       request=body, response=raw, transport="failure",
-                      validation={"result": "not_applicable", "checks": [], "failure_code": None},
+                      validation={"result": "not_applicable", "checks": [], "failure_code": "provider_error"},
                       technical_attempt=technical_attempt, format_attempt=format_attempt, seed=seed,
                       settings_id=settings_id, input_refs=input_refs, target_candidate_id=target_candidate_id)
         if call_id is not None and call_id_sink is not None:

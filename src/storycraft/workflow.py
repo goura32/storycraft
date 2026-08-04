@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .commit_recovery import recover_pending_commit
+from .artifact_registry import artifact_spec
 from .ollama import OllamaResponseFormatError
 from .run_state import RunStateStore
 from .series_contracts import ContractError, LLMCallError
@@ -55,9 +56,9 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
     from .series_model import OpenAIStoryModel
 
     try:
-        return OpenAIStoryModel(_model_settings_from_payload(payload, settings_id), root / "runtime/raw_logs")
+        return OpenAIStoryModel(_model_settings_from_payload(payload, settings_id), root / "runtime/raw_logs", workspace_root=root)
     except ContractError as exc:
-        # Settings have already passed static workspace validation.  A failure
+        # The canonical settings payload has already passed static workspace validation.  A failure
         # while constructing the provider is therefore a transport failure,
         # not an authority inconsistency in the immutable workspace.
         raise LLMCallError("LLM provider initialization failed") from exc
@@ -65,14 +66,15 @@ def _default_model_factory(root: Path, state: dict[str, Any]) -> Any:
 
 def _model_settings_from_payload(payload: dict[str, Any], settings_id: str) -> Any:
     """Adapt immutable settings at the provider boundary."""
-    class SettingsWrapper:
+    artifact_spec("settings").match_id(settings_id)
+    class ProviderRuntimeConfiguration:
         def __init__(self, llm: dict[str, Any], retry: dict[str, Any], settings_id: str) -> None:
             self.llm = llm
             self.retry = retry
             self.settings_id = settings_id
 
     try:
-        return SettingsWrapper(
+        return ProviderRuntimeConfiguration(
             {
                 "provider": payload["provider"],
                 "base_url": payload["endpoint"],
@@ -82,6 +84,7 @@ def _model_settings_from_payload(payload: dict[str, Any], settings_id: str) -> A
                 "first_event_timeout_seconds": 3600,
                 "idle_timeout_seconds": 600,
                 "stream_progress_log_interval_seconds": 60,
+                "invalid_response_limit": payload["invalid_response_limit"],
                 "request_options": payload.get("request_options"),
                 "ollama_http_boundary": True,
             },

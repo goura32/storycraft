@@ -97,7 +97,7 @@
 
 ## 3. LLM 応答
 
-構造化工程のLLMはJSONオブジェクトを返し、未知項目は拒否します。場面本文の生成・修正だけはraw textを返し、コードが座標付きscene-prose payloadへ包んでから共通候補検証へ渡します。保存成果物は `schema_version` を必須とします。
+構造化工程のLLMはJSONオブジェクトを返し、未知項目は拒否します。場面本文の生成・修正だけはwire上raw textを返し、promptへCandidateResponse schemaを提示しません。コードは本文を保存時の座標付き`scene-prose` contentへ変換してから共通候補検証へ渡します。保存成果物は `schema_version` を必須とします。
 
 ### 3.1 CandidateResponse (生成・修正の応答)
 
@@ -114,19 +114,9 @@
 
 ### 3.2 ReviewResponse (確認の応答)
 
-ここに記す `ReviewResponse` が唯一のスキーマ正本である。品質ループ上の利用規則は `llm-and-validation.md` を参照する。
+ここで説明する `ReviewResponse` の機械検証の正本は [`templates/prompts/schemas/critique.json`](../../templates/prompts/schemas/critique.json) です。文書内に別のJSON schemaを複製しません。品質ループ上の利用規則は `llm-and-validation.md` を参照します。
 
-```json
-{
-  "schema_version": "review-response-v1",
-  "decision": "pass | issues",
-  "issues": [{
-    "severity": "critical | notice",
-    "evidence_locations": ["$.path | paragraph:N | prose:N"],
-    "explanation": "..."
-  }]
-}
-```
+機械schemaが要求する外枠は `schema_version="review-response-v1"`、`decision`（`pass` または `issues`）、`issues`（`severity`、`evidence_locations`、`explanation`）です。
 
 - `decision`: `pass` は有効指摘が空、`issues` は有効指摘が 1 件以上でなければならない。根拠位置の検証に一つでも失敗した応答は形式不正として扱い、`invalid_response_limit` を消費する。`pass` へ正規化して採用してはならない
 - `severity`: `critical`（修正必須・上限判定対象）、`notice`（採用可・注意記録のみ）
@@ -178,7 +168,7 @@
     {
       "op": "set | add | remove",
       "target": "story_facts | character_knowledge | reader_disclosures | unresolved_thread_states | timeline_position",
-      "path": "$.character_knowledge.character-000001",
+      "path": "/character_knowledge/character-main",
       "value": "new value",
       "evidence_locations": ["prose:456"]
     }
@@ -186,7 +176,7 @@
 }
 ```
 
-`timeline_position` は正本作品状態の非負整数です。`scene_continuity` の変更でこのtargetを指定する場合、`op="set"`、`path="$.timeline_position"`、`value` はbooleanでない非負整数とし、適用後の値は適用前以上でなければなりません。`add`、`remove`、任意の深いpath、後退値は形式不正です。物語上の回想・フラッシュバックは本文の `story_time` と根拠で表し、正本の現在時系列値を後退させません。
+`path` はJSON Pointer（例: `/story_facts/fact-000001/value`、`/story_facts/0/value`、`/reader_disclosures/0/value`、`/unresolved_thread_states/塔の試練/status`）で、配列要素はindexまたは要素のcanonical IDで一意に指定します。`timeline_position` は正本作品状態の非負整数です。`scene_continuity` の変更でこのtargetを指定する場合、`op="set"`、`path="/timeline_position"`、`value` はbooleanでない非負整数とし、適用後の値は適用前以上でなければなりません。`add`、`remove`、任意の深いpath、後退値は形式不正です。物語上の回想・フラッシュバックは本文の `story_time` と根拠で表し、正本の現在時系列値を後退させません。
 
 ### 3.6 scene-card ペイロード
 
@@ -234,11 +224,11 @@ call record は `runtime/calls/call-{通番6桁}/record.json` のみに保存す
   "request": "送信本文 | null",
   "response": "受信本文 | null",
   "transport": "success | failure",
-  "validation": {"result": "valid | invalid | not_applicable", "checks": [], "failure_code": "string | null"}
+  "validation": {"result": "valid | invalid | not_applicable", "checks": [], "failure_code": "null | json_parse | schema_invalid | connection_error | http_error | timeout | provider_error"}
 }
 ```
 
-`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response` は通常nullとする。ただしHTTP 200のprovider error envelopeは raw bodyを `response` に保存してよい。`request_intake` のcallは `input_selection_id` を持たず、`input_refs` にkeywords IDとsettings IDを含める。`validation.result="valid"` では `failure_code=null`、`invalid` では provider response の `json_parse` または `schema_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` と `failure_code=null` を必須とし、技術的再試行だけを消費する。候補・確認の意味検証に失敗した応答は candidate/review record を作らず、その物理 call record と raw response を残して形式不正再呼出しを行う。認証情報と接続秘密値を request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
+`technical_attempt` と `format_attempt` は1以上の整数、`input_refs` は重複なしの既存ID、`transport="success"` では `response` が必須、`transport="failure"` では `response` は通常nullとする。ただしHTTP 200のprovider error envelopeは、秘密値をredactしたraw bodyを `response` に保存してよい。`request_intake` のcallは `input_selection_id` を持たず、`input_refs` にkeywords IDとsettings IDを含める。`validation.result="valid"` では `failure_code=null`、`invalid` では provider response の `json_parse` または `schema_invalid` のいずれかを必須とする。`transport="failure"` では `validation.result="not_applicable"` とし、`failure_code` は `connection_error`、`http_error`、`timeout`、`provider_error` のいずれかを保存して技術的再試行だけを消費する。候補・確認の意味検証に失敗した応答は candidate/review record を作らず、その物理 call record とredact済みraw responseを残して形式不正再呼出しを行う。認証情報と接続秘密値を request・response・endpoint を含めどのフィールドにも保存しない。`target_candidate_id` は `review` と `revise` で必須、`generate` と `model_capability` では `null` とする。`model_capability` は `GET /v1/models/{model}` の各物理試行を記録し、`input_refs=[]`、`format_attempt` は当該形式不正再試行の通番（1から `invalid_response_limit` まで）、`request=null` とする。
 
 ### 3.8 adoption record（採用記録）
 

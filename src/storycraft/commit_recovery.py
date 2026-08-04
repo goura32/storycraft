@@ -216,8 +216,12 @@ def _target_validator(root: Path, target: dict[str, Any], input_selection_id: st
                 raise ContractError("volume publication targetがdirectoryではありません")
             if {path.name for path in directory.iterdir()} != {"record.json", "manuscript.md"}:
                 raise ContractError("volume publication targetのfile構成が不正です")
+            record_path = directory / "record.json"
+            manuscript_path = directory / "manuscript.md"
+            if any(path.is_symlink() or not path.is_file() for path in (record_path, manuscript_path)):
+                raise ContractError("volume publication targetのleaf fileは通常fileでなければなりません")
             try:
-                files = {"record.json": json.loads((directory / "record.json").read_text(encoding="utf-8")), "manuscript.md": (directory / "manuscript.md").read_text(encoding="utf-8")}
+                files = {"record.json": json.loads(record_path.read_text(encoding="utf-8")), "manuscript.md": manuscript_path.read_text(encoding="utf-8")}
             except (OSError, json.JSONDecodeError) as exc:
                 raise ContractError("volume publication targetを読めません") from exc
             validate_volume_publication_files(files)
@@ -249,6 +253,9 @@ def _target_validator(root: Path, target: dict[str, Any], input_selection_id: st
         def validate_content(directory: Path) -> None:
             record = _single_record(directory)
             validate_record(kind, artifact_id, record)
+            if kind == "settings":
+                from .workspace import _validate_settings
+                _validate_settings(record["payload"])
         return validate_content
     raise ContractError("pending_commit target kindが未定義です")
 

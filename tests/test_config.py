@@ -1,37 +1,42 @@
-"""設定の品質ゲート契約。"""
+"""Canonical flat settings payload contract."""
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 
-from storycraft.config import Settings
 from storycraft.series_contracts import ContractError
+from storycraft.workspace import _validate_settings
+
+
+BASE = {
+    "provider": "ollama",
+    "endpoint": "http://127.0.0.1:11434",
+    "model": "test",
+    "technical_retry_limit": 1,
+    "quality_revision_limit": 1,
+    "invalid_response_limit": 3,
+    "chapter_per_volume_range": [4, 8],
+    "chapter_scene_range": [2, 5],
+    "scene_text_char_range": [1200, 2400],
+}
 
 
 class QualityConfigurationTests(unittest.TestCase):
-    def test_default_uses_one_critique_revision_pass(self) -> None:
-        config = Path(tempfile.mkdtemp()) / "storycraft.yaml"
-        config.write_text("llm:\n  base_url: http://localhost:11434\n  model: test\nquality:\n  max_critique_passes: 1\n", encoding="utf-8")
+    def test_flat_settings_accepts_positive_quality_revision_limit(self) -> None:
+        payload = dict(BASE)
+        _validate_settings(payload)
 
-        self.assertEqual(Settings.load(str(config)).quality["max_critique_passes"], 1)
+    def test_flat_settings_can_increase_quality_revision_limit(self) -> None:
+        payload = {**BASE, "quality_revision_limit": 2}
+        _validate_settings(payload)
 
-    def test_config_can_increase_critique_revision_pass_limit(self) -> None:
-        config = Path(tempfile.mkdtemp()) / "storycraft.yaml"
-        config.write_text("llm:\n  base_url: http://localhost:11434\n  model: test\nquality:\n  max_critique_passes: 2\n", encoding="utf-8")
+    def test_flat_settings_rejects_zero_quality_revision_limit(self) -> None:
+        with self.assertRaisesRegex(ContractError, "quality_revision_limit"):
+            _validate_settings({**BASE, "quality_revision_limit": 0})
 
-        self.assertEqual(Settings.load(str(config)).quality["max_critique_passes"], 2)
+    def test_flat_settings_rejects_legacy_nested_yaml_shape(self) -> None:
+        with self.assertRaises(ContractError):
+            _validate_settings({"llm": {"base_url": "http://localhost:11434"}})
 
-    def test_config_rejects_zero_critique_revision_pass_limit(self) -> None:
-        config = Path(tempfile.mkdtemp()) / "storycraft.yaml"
-        config.write_text("llm:\n  base_url: http://localhost:11434\n  model: test\nquality:\n  max_critique_passes: 0\n", encoding="utf-8")
 
-        with self.assertRaisesRegex(ContractError, "1以上"):
-            Settings.load(str(config))
-
-    def test_config_rejects_negative_critique_revision_pass_limit(self) -> None:
-        config = Path(tempfile.mkdtemp()) / "storycraft.yaml"
-        config.write_text("llm:\n  base_url: http://localhost:11434\n  model: test\nquality:\n  max_critique_passes: -1\n", encoding="utf-8")
-
-        with self.assertRaisesRegex(ContractError, "1以上"):
-            Settings.load(str(config))
+if __name__ == "__main__":
+    unittest.main()

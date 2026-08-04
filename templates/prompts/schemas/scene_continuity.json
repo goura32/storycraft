@@ -33,7 +33,11 @@
               "timeline_position"
             ]
           },
-          "path": {"type": "string", "minLength": 1},
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "JSON Pointer。配列要素はindexまたはcanonical IDで指定する"
+          },
           "value": {},
           "evidence_locations": {
             "type": "array",

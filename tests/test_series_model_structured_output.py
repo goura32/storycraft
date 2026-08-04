@@ -138,20 +138,26 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertIsNone(client.calls[0]["response_format"])
         self.assertEqual(client.calls[0]["messages"][2]["__kind"], "revise")
         self.assertIn("本文候補", client.calls[0]["messages"][1]["content"])
-        self.assertIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
+        self.assertNotIn("candidate-response-v1", client.calls[0]["messages"][1]["content"])
 
     def test_every_public_llm_stage_has_all_templates_and_a_candidate_schema(self) -> None:
         self.assertIn("request_intake", ACTIVE_TEMPLATE_STAGES)
         for stage in ACTIVE_TEMPLATE_STAGES:
             with self.subTest(stage=stage, operation="generate"):
                 rendered = OpenAIStoryModel._render("generate", stage, context={})
-                self.assertIn("candidate-response-v1", rendered)
+                if stage == "scene_prose":
+                    self.assertNotIn("candidate-response-v1", rendered)
+                else:
+                    self.assertIn("candidate-response-v1", rendered)
             with self.subTest(stage=stage, operation="review"):
                 rendered = OpenAIStoryModel._render("review", stage, context={}, candidate={})
                 self.assertIn("review-response-v1", rendered)
             with self.subTest(stage=stage, operation="revise"):
                 rendered = OpenAIStoryModel._render("revise", stage, context={}, candidate={}, critique={})
-                self.assertIn("candidate-response-v1", rendered)
+                if stage == "scene_prose":
+                    self.assertNotIn("candidate-response-v1", rendered)
+                else:
+                    self.assertIn("candidate-response-v1", rendered)
     def test_response_format_uses_strict_stage_schema(
         self,
     ) -> None:

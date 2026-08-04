@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from queue import Empty, Queue
 import re
 import threading
@@ -18,22 +19,27 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from .config import resolve_llm_credentials
 from .error_sanitizer import (
+    redact_secrets,
+    redact_value,
     safe_exception_message,
     sanitize_text,
 )
+from .filesystem_security import assert_no_symlink_path, assert_within
 from .log import logger
-from .ollama import OllamaResponseFormatError, generate as ollama_generate
+from .ollama import OllamaResponseFormatError, OllamaTechnicalError, generate as ollama_generate
 from .series_contracts import ContractError
 
 STATUS_THINKING = "thinking"
 STATUS_CONTENT = "content"
 STATUS_SAVING = "saving"
+_RAW_LOG_LOCK = threading.Lock()
 
 
 def _positive_seconds(
@@ -130,10 +136,12 @@ class LLMClient:
         self,
         settings,
         raw_dir: Path,
+        workspace_root: Path | None = None,
     ) -> None:
         self.settings = settings
         self.settings_id = getattr(settings, "settings_id", None)
-        self.raw_dir = raw_dir
+        self.raw_dir = Path(raw_dir)
+        self.workspace_root = Path(workspace_root) if workspace_root is not None else None
 
         llm = settings.llm
         # The Ollama HTTP boundary in storycraft.ollama performs
@@ -516,6 +524,8 @@ class LLMClient:
                 duration,
                 content_chars,
             )
+        except ContractError:
+            raise
         except Exception as error:
             rec.error = safe_exception_message(
                 error
@@ -559,7 +569,13 @@ class LLMClient:
         except OllamaResponseFormatError:
             rec.finished_at = time.time()
             raise
+        except OllamaTechnicalError as error:
+            rec.error = safe_exception_message(error)
+        except ContractError:
+            raise
         except Exception as error:
+            if self.settings.llm.get("ollama_http_boundary", False):
+                raise
             rec.error = safe_exception_message(error)
         rec.finished_at = time.time()
         return rec
@@ -581,27 +597,63 @@ class LLMClient:
 
     def save_raw(self, rec: CallRecord, prompt_messages: list) -> None:
         """送受信生データと、人間向けMarkdownを同じstemで保存。thinking本文は除く。"""
-        self.raw_dir.mkdir(parents=True, exist_ok=True)
-        idx = len(list(self.raw_dir.glob("*.json")))
-        sent_messages = [
-            m for m in prompt_messages
-            if not (isinstance(m, dict) and "__" in "".join(m.keys()))
-        ]
-        received = rec.to_dict()
-        if received["error"] is not None:
-            received["error"] = sanitize_text(
-                received["error"]
-            )
+        with _RAW_LOG_LOCK:
+            raw_dir = assert_no_symlink_path(self.raw_dir)
+            workspace_root = getattr(self, "workspace_root", None)
+            if workspace_root is not None:
+                assert_within(workspace_root, raw_dir)
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            raw_dir = assert_no_symlink_path(raw_dir, require_directory=True)
+            idx = 0
+            while True:
+                stem = _raw_filename(rec, idx)
+                json_path = raw_dir / f"{stem}.json"
+                markdown_path = json_path.with_suffix(".md")
+                reservation = raw_dir / f".{stem}.reserve"
+                try:
+                    with reservation.open("x", encoding="utf-8"):
+                        pass
+                except FileExistsError:
+                    idx += 1
+                    continue
+                if json_path.exists() or markdown_path.exists():
+                    reservation.unlink(missing_ok=True)
+                    idx += 1
+                    continue
+                break
 
-        out = {
-            "index": idx,
-            "sent_messages": sent_messages,
-            "received": received,
-            "content": rec.content,
-        }
-        json_path = self.raw_dir / f"{_raw_filename(rec, idx)}.json"
-        json_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-        json_path.with_suffix(".md").write_text(
-            self._raw_markdown(json_path.with_suffix(".md").name, sent_messages, rec.content),
-            encoding="utf-8",
-        )
+            try:
+                sent_messages_value = redact_value([
+                    m for m in prompt_messages
+                    if not (isinstance(m, dict) and "__" in "".join(m.keys()))
+                ])
+                assert isinstance(sent_messages_value, list)
+                sent_messages = sent_messages_value
+                received = redact_value(rec.to_dict())
+                assert isinstance(received, dict)
+                if received["error"] is not None:
+                    received["error"] = sanitize_text(received["error"])
+                content = redact_secrets(rec.content)
+                out = {
+                    "index": idx,
+                    "sent_messages": sent_messages,
+                    "received": received,
+                    "content": content,
+                }
+                self._write_raw_file(json_path, json.dumps(out, ensure_ascii=False, indent=2))
+                self._write_raw_file(markdown_path, self._raw_markdown(markdown_path.name, sent_messages, content))
+            finally:
+                reservation.unlink(missing_ok=True)
+
+    @staticmethod
+    def _write_raw_file(path: Path, content: str) -> None:
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            with temporary.open("x", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            raise

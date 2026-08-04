@@ -119,7 +119,7 @@ V1 の workspace には、未定義の巻間要約、シリーズ完結成果物
 - `runtime/adoptions/<adoption-id>/record.json`: `schema_version`、`adoption_id`、採用 candidate ID、quality ID、確定する成果物 ID 列、後続 selection ID、作成時刻を持つ不変採用記録。これは内容やLLM要約の正本ではなく、候補・品質・selectionを一つの原子的確定へ束ねる監査・復旧用の参照束です。品質判定の生成は採用記録を参照しません。
 - `quality/<quality-id>/record.json`: 採用候補 ID、確認記録 ID 列、修正回数、結果、残存重大指摘、注意種別を持つ不変品質判定。`quality-id` は `quality-{通番6桁}`。採用記録はこの ID を一つだけ参照し、本文採用では `scene_prose_disposition.vNN.cMM.sKK` slot、継続性更新採用では `continuity_disposition.vNN.cMM.sKK` slot に固定する。ReviewResponse 全体の正本は `reviews` 記録であり、品質判定の `remaining_major_issues` は公開可否を再検証するための critical 指摘の決定的な派生値だけを持つ。品質判定は監査記録であり、採用済み内容成果物の共通外枠を持たない。
 
-`runtime/raw_logs/<stem>.json` と同名の `.md` は、境界処理から戻った物理呼出しの送受信を人が確認するための非正本補助ログです。形式不正で境界が例外終了した呼出しは `runtime/calls` の記録だけが残ることがあります。機械的な監査・復旧・`validate` が参照する正本は `runtime/calls/<call-id>/record.json` だけで、raw log を後続工程の入力・内容判定・公開原稿に使いません。送信内容から内部 marker 付きのメッセージと thinking 本文を除外し、認証情報は保存しません。call ID、設定参照、endpoint、model などの呼出しメタデータは補助ログに含まれ得ます。公開ディレクトリへコピーしません。
+`runtime/raw_logs/<stem>.json` と同名の `.md` は、境界処理から戻った物理呼出しの送受信を人が確認するための非正本補助ログです。形式不正で境界が例外終了した呼出しは `runtime/calls` の記録だけが残ることがあります。機械的な監査・復旧・`validate` が参照する正本は `runtime/calls/<call-id>/record.json` だけで、raw log を後続工程の入力・内容判定・公開原稿に使いません。raw log directoryとその全親pathは通常directoryでworkspace root内でなければならず、symlink経由の外部書込みを拒否します。送信内容から内部 marker付きのメッセージとthinking本文を除外し、prompt/response/exception中のcredential-shaped valueとJSON文字列内のquoted secret fieldを`[REDACTED]`へredactします。JSONとMarkdownは同一の予約stemを排他予約してtemporary fileからatomic renameで保存し、同時呼出しで上書きしません。call ID、設定参照、endpoint、modelなどの呼出しメタデータは補助ログに含まれ得ます。公開ディレクトリへコピーしません。
 
 依頼/応答に認証情報、Authorization、secret header、思考過程を保存しません。呼出し記録は作品状態や公開原稿の正本ではありません。
 

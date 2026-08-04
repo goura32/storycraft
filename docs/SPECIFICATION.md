@@ -128,11 +128,11 @@ flowchart TD
 
 指摘の重要度は、上限前は修正対象となる「重大」、採用は止めない「注意」の二つです。修正上限に達して採用する重大な指摘は、注意付き採用の根拠として記録します。LLM が重要度を提案し、コードは値と根拠位置を検証します。解決できない根拠位置が一つでもある確認応答は形式不正として採用せず、`invalid_response_limit` の対象にします。確定済み成果物を、別結果を探すために作り直してはなりません。
 
-この共通品質ループ（生成→確認→必要時の修正→再確認）は、**全 LLM 工程**（依頼取り込み、初期設計、シリーズ計画、巻計画、章計画、場面計画、場面カード、場面本文、継続性更新）に適用されます。構造化成果物の生成・修正は CandidateResponse、確認は ReviewResponse を使います。場面本文だけはraw textを生成・修正のtransportとし、コードが座標付きscene-prose CandidateResponse payloadへ包み、確認はReviewResponseで行います。場面の確定（`scene_commit`）と巻公開（`volume_publication`）は決定的なコード処理であり、LLM を呼びません。
+この共通品質ループ（生成→確認→必要時の修正→再確認）は、**全 LLM 工程**（依頼取り込み、初期設計、シリーズ計画、巻計画、章計画、場面計画、場面カード、場面本文、継続性更新）に適用されます。構造化成果物の生成・修正は CandidateResponse、確認は ReviewResponse を使います。場面本文だけはwire上の生成・修正transportをraw textとし、promptにもresponse schemaにもCandidateResponseを提示しません。コードは受信した本文を保存時の`scene-prose` content（座標とtext）へ変換し、確認だけはReviewResponseで行います。場面の確定（`scene_commit`）と巻公開（`volume_publication`）は決定的なコード処理であり、LLM を呼びません。
 
 システムプロンプトは単一の共通ファイル（`system/common.j2`）を使用します。確認用スキーマは共通（`critique.json`）を使用します。修正用スキーマは生成用スキーマと同一です（再利用）。ユーザープロンプトは各工程ごとに `generate_{stage}.j2`、`critique_{stage}.j2`、`fix_{stage}.j2` を持ちます。スキーマは `{stage}.json`（各工程分）と共通の `critique.json`、修正は生成スキーマを再利用します。
 
-各テンプレートのJinjaプレースホルダーは、対応するLLM呼出しが宣言された全root値（`context`、必要な`candidate`・`critique`、`output_schema`、system用の`response_mode`）を必ず供給します。未定義値は空文字へ補完せず、テンプレートrenderをfail-closedで失敗させます。render後にJinjaトークンを残してLLMへ送ってはなりません。構造化値はテンプレートのJSON位置へcanonical JSONとして置き、場面本文の`candidate`だけはraw text transportとして置きます。
+各テンプレートのJinjaプレースホルダーは、対応するLLM呼出しが宣言された全root値（`context`、必要な`candidate`・`critique`、構造化工程だけの`output_schema`、system用の`response_mode`）を必ず供給します。未定義値は空文字へ補完せず、テンプレートrenderをfail-closedで失敗させます。render後にJinjaトークンを残してLLMへ送ってはなりません。構造化値はテンプレートのJSON位置へcanonical JSONとして置き、場面本文の生成・修正はraw text本文を置きます。
 
 ## 7. 入力範囲と秘密
 各 LLM 操作には、必要な根拠だけを読み取り用入力として渡します。これは正本ではありません。作者用情報、人物が知る情報、読者に開示済みの情報を区別します。本文を書く LLM には、視点外の秘密や未許可の開示を渡さず、LLM 提供者へ認証情報を渡しません。

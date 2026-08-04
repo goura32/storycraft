@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from .artifact_registry import artifact_directory, artifact_spec
+from .filesystem_security import assert_no_symlink_path
 from .series_contracts import ContractError
 from .time_contract import parse_utc_timestamp
 
@@ -389,9 +390,10 @@ class RunStateStore:
         self.path = self.runtime_root / "run-state.json"
 
     def exists(self) -> bool:
-        return self.path.is_file()
+        return self.path.is_file() and not self.path.is_symlink()
 
     def _read(self) -> object:
+        assert_no_symlink_path(self.runtime_root, require_directory=True)
         if not self.exists():
             raise ContractError("run-stateがありません")
         try:
@@ -409,10 +411,14 @@ class RunStateStore:
 
     def save(self, state: dict[str, Any]) -> None:
         validate_run_state(state)
+        assert_no_symlink_path(self.runtime_root)
         self.runtime_root.mkdir(parents=True, exist_ok=True)
+        assert_no_symlink_path(self.runtime_root, require_directory=True)
+        if self.path.is_symlink():
+            raise ContractError("run-stateはsymlinkであってはなりません")
         temporary = self.path.with_suffix(".json.tmp")
         try:
-            with temporary.open("w", encoding="utf-8") as handle:
+            with temporary.open("x", encoding="utf-8") as handle:
                 json.dump(state, handle, ensure_ascii=False, indent=2)
                 handle.write("\n")
                 handle.flush()

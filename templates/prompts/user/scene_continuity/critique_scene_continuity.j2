@@ -1,32 +1,29 @@
-# V1 Scene継続性更新の批評
+# V1 Scene継続性更新の確認
 
-候補を凍結本文、allowed_updates、current_stateへ照合し、
-修正可能で具体的な問題だけをissuesへ出す。
-問題がなければ空配列を返す。
+候補の `coordinate` と `changes` を、凍結済み本文・current_state・Scene Cardと照合する。
 
-## Review観点
+## 確認項目
 
-- 本文に書かれた変化だけである
+- `changes` の各要素が `op`、`target`、`path`、`value`、`evidence_locations` だけを持つ
+- pathがJSON Pointerとして解釈でき、対象stateに存在するfieldまたは許可された追加先を決定的に指している
+- 配列要素のindexまたはcanonical IDが一意で、現在stateの対象と一致する
 - allowed_updates外のtargetまたはfieldがない
-- old_valueがcurrent_stateと完全一致する
-- new_valueがfieldの型と不変条件を守る
-- no-op更新がない
-- Evidence quoteが本文へ完全一致する
-- occurrenceが正しい
-- Evidenceが対応する更新対象と一致する
-- 曖昧な変化を断定していない
-- 将来Plan、Ending、作者用秘密を新事実として追加していない
-- operationsが空でも、本文上変更なしなら正当な候補として扱う
+- `op` とvalueが対象fieldの型・不変条件を守っている
+- 本文に書かれた変化だけである
+- 各 `evidence_locations` が本文の `prose:<offset>` または `paragraph:<index>` を指している
+- 本文で根拠を確認できない変更、no-op、曖昧な変更がない
+- 将来Plan、Ending条件、作者用秘密、本文にない因果を新事実として追加していない
+- changesが空でも本文上変更なしなら正当な候補として扱う
 
-`evidence_locations`には候補内の実在するJSON path（例: `$.changes[0].value`）を指定し、説明は`explanation`へ書く。`field`、`description`、`suggestion`は出力しない。
-
-## Continuity Candidate
-
-{{ candidate | tojson }}
+確認の根拠は候補内の実在するJSON path（例: `$.changes[0].value`）を指定し、説明は `explanation` に書く。出力はactive形式の項目だけに限定する。
 
 ## Continuity Context
 
 {{ context | tojson }}
+
+## Candidate
+
+{{ candidate | tojson }}
 
 ## 出力スキーマ
 
