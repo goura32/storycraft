@@ -422,23 +422,194 @@ def rename_noreplace_at(src_dir_fd: int, src_name: str, dst_dir_fd: int, dst_nam
     raise OSError(error_number, os.strerror(error_number))
 
 
-def remove_directory_at(parent_fd: int, name: str) -> None:
-    """Remove a directory tree through an already opened parent directory."""
-    child_fd = os.open(
-        name,
-        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        dir_fd=parent_fd,
-    )
+def _open_cleanup_directory(parent_fd: int) -> tuple[str, int, tuple[int, int]]:
+    """Create a private per-operation directory used to quarantine one entry."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    for _ in range(16):
+        cleanup_name = f".storycraft-cleanup-{uuid4().hex}"
+        try:
+            os.mkdir(cleanup_name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            continue
+        cleanup_fd: int | None = None
+        try:
+            cleanup_fd = os.open(cleanup_name, flags, dir_fd=parent_fd)
+            cleanup_stat = os.fstat(cleanup_fd)
+            if not stat.S_ISDIR(cleanup_stat.st_mode):
+                raise ContractError("cleanup directoryが通常directoryではありません")
+            return cleanup_name, cleanup_fd, (cleanup_stat.st_dev, cleanup_stat.st_ino)
+        except Exception:
+            if cleanup_fd is not None:
+                try:
+                    os.close(cleanup_fd)
+                except OSError:
+                    pass
+            # 作成直後のentryをpathnameで回収すると、差替え後の競合者を
+            # 消す可能性がある。未処理entryは診断対象として残す。
+            raise
+    raise ContractError("cleanup directory名を確保できません")
+
+
+def _close_cleanup_directory(parent_fd: int, cleanup_name: str, cleanup_fd: int, cleanup_identity: tuple[int, int]) -> None:
+    """Remove an empty private cleanup directory, otherwise leave evidence intact.
+
+    We intentionally do NOT rmdir by pathname because of TOCTOU: an attacker
+    could swap the directory between stat and rmdir. Leaving the uniquely-named
+    cleanup directory as evidence is safer than potentially deleting a competitor's
+    directory. The cleanup directory name uses uuid4 making collision negligible.
+    """
     try:
-        for child in os.listdir(child_fd):
-            child_stat = os.stat(child, dir_fd=child_fd, follow_symlinks=False)
-            if stat.S_ISDIR(child_stat.st_mode) and not stat.S_ISLNK(child_stat.st_mode):
-                remove_directory_at(child_fd, child)
-            else:
-                os.unlink(child, dir_fd=child_fd)
+        if os.listdir(cleanup_fd):
+            return
+        # Verify identity via the held fd (no pathname lookup)
+        current_stat = os.fstat(cleanup_fd)
+        if not stat.S_ISDIR(current_stat.st_mode) or (current_stat.st_dev, current_stat.st_ino) != cleanup_identity:
+            return
+        # Intentionally NOT calling os.rmdir(cleanup_name, dir_fd=parent_fd) here.
+        # A stale private directory is safer than deleting a directory that another
+        # writer put at this name.
+    except OSError:
+        # Cleanup itself is fail-closed.
+        return
+
+
+def _restore_quarantined_entry(
+    cleanup_fd: int,
+    slot_name: str,
+    parent_fd: int,
+    original_name: str,
+) -> None:
+    """Restore a quarantined competitor without replacing a new entry."""
+    try:
+        rename_noreplace_at(cleanup_fd, slot_name, parent_fd, original_name)
+    except (ContractError, OSError):
+        # If the original name is occupied, retain both entries and let the
+        # read-only validator diagnose the incomplete/tampered state.
+        return
+
+
+def unlink_if_identity_at(directory_fd: int, name: str, expected_identity: tuple[int, int]) -> bool:
+    """Remove one owned regular file without deleting a swapped competitor.
+
+    A pathname ``stat`` followed by ``unlink`` is not an ownership test: the
+    name can be replaced in between.  Move the current entry, without replace,
+    into a private directory first.  If the moved inode is not ours, restore it
+    without replace and leave it alone.  Only the verified owner is removed,
+    and a failed quarantine cleanup is intentionally left for validation.
+    """
+    try:
+        initial = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    if not stat.S_ISREG(initial.st_mode) or (initial.st_dev, initial.st_ino) != expected_identity:
+        return False
+
+    cleanup_name, cleanup_fd, cleanup_identity = _open_cleanup_directory(directory_fd)
+    slot_name = f"entry-{uuid4().hex}"
+    moved = False
+    owner_removed = False
+    try:
+        # stat直後: rename前にregular-file/directory競合差替えを検知
+        try:
+            pre_rename = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except OSError:
+            return False
+        if not stat.S_ISREG(pre_rename.st_mode) or (pre_rename.st_dev, pre_rename.st_ino) != expected_identity:
+            return False
+        try:
+            rename_noreplace_at(directory_fd, name, cleanup_fd, slot_name)
+            moved = True
+        except (ContractError, OSError):
+            return False
+        try:
+            descriptor = os.open(
+                slot_name,
+                os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=cleanup_fd,
+            )
+        except OSError:
+            return False
+        try:
+            moved_stat = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        moved_identity = (moved_stat.st_dev, moved_stat.st_ino)
+        if not stat.S_ISREG(moved_stat.st_mode) or moved_identity != expected_identity:
+            return False
+        try:
+            os.unlink(slot_name, dir_fd=cleanup_fd)
+        except OSError:
+            return False
+        owner_removed = True
+        return True
     finally:
-        os.close(child_fd)
-    os.rmdir(name, dir_fd=parent_fd)
+        try:
+            if moved and not owner_removed:
+                _restore_quarantined_entry(cleanup_fd, slot_name, directory_fd, name)
+        finally:
+            try:
+                _close_cleanup_directory(directory_fd, cleanup_name, cleanup_fd, cleanup_identity)
+            finally:
+                os.close(cleanup_fd)
+
+
+def remove_empty_directory_if_identity_at(directory_fd: int, name: str, expected_identity: tuple[int, int]) -> bool:
+    """Remove one owned empty directory without deleting a swapped directory."""
+    try:
+        initial = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(initial.st_mode) or (initial.st_dev, initial.st_ino) != expected_identity:
+        return False
+
+    cleanup_name, cleanup_fd, cleanup_identity = _open_cleanup_directory(directory_fd)
+    slot_name = f"directory-{uuid4().hex}"
+    moved = False
+    owner_removed = False
+    try:
+        # stat直後: rename前にregular-file/directory競合差替えを検知
+        try:
+            pre_rename = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except OSError:
+            return False
+        if not stat.S_ISDIR(pre_rename.st_mode) or (pre_rename.st_dev, pre_rename.st_ino) != expected_identity:
+            return False
+        try:
+            rename_noreplace_at(directory_fd, name, cleanup_fd, slot_name)
+            moved = True
+        except (ContractError, OSError):
+            return False
+        try:
+            descriptor = os.open(
+                slot_name,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=cleanup_fd,
+            )
+        except OSError:
+            return False
+        try:
+            moved_stat = os.fstat(descriptor)
+            is_empty = not os.listdir(descriptor)
+        finally:
+            os.close(descriptor)
+        moved_identity = (moved_stat.st_dev, moved_stat.st_ino)
+        if not stat.S_ISDIR(moved_stat.st_mode) or moved_identity != expected_identity or not is_empty:
+            return False
+        try:
+            os.rmdir(slot_name, dir_fd=cleanup_fd)
+        except OSError:
+            return False
+        owner_removed = True
+        return True
+    finally:
+        try:
+            if moved and not owner_removed:
+                _restore_quarantined_entry(cleanup_fd, slot_name, directory_fd, name)
+        finally:
+            try:
+                _close_cleanup_directory(directory_fd, cleanup_name, cleanup_fd, cleanup_identity)
+            finally:
+                os.close(cleanup_fd)
 
 
 def _open_directory_chain(
@@ -491,23 +662,34 @@ def atomic_write_text(path: Path, content: str) -> None:
     directory_fd = _open_directory_chain(target.parent, expected_identity=directory_identity(target.parent))
     temporary_name = f".{target.name}.{uuid4().hex}.tmp"
     temporary_fd: int | None = None
+    temporary_identity: tuple[int, int] | None = None
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         temporary_fd = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
+        temporary_stat = os.fstat(temporary_fd)
+        if not stat.S_ISREG(temporary_stat.st_mode):
+            raise ContractError("atomic公開temporaryが通常fileではありません")
+        temporary_identity = (temporary_stat.st_dev, temporary_stat.st_ino)
         with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
             temporary_fd = None
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
+        # rename前にtemporary identityを再確認（competitor差替え防止）
+        check_fd = os.open(temporary_name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd)
+        try:
+            current_stat = os.fstat(check_fd)
+            if not stat.S_ISREG(current_stat.st_mode) or (current_stat.st_dev, current_stat.st_ino) != temporary_identity:
+                raise ContractError("atomic公開temporaryがrename前に置換されました")
+        finally:
+            os.close(check_fd)
         os.rename(temporary_name, target.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
         os.fsync(directory_fd)
     except Exception:
         if temporary_fd is not None:
             os.close(temporary_fd)
-        try:
-            os.unlink(temporary_name, dir_fd=directory_fd)
-        except FileNotFoundError:
-            pass
+        if temporary_identity is not None:
+            unlink_if_identity_at(directory_fd, temporary_name, temporary_identity)
         raise
     finally:
         os.close(directory_fd)
@@ -524,20 +706,24 @@ def atomic_write_text_noreplace(path: Path, content: str) -> tuple[int, int]:
     temporary_fd: int | None = None
     published = False
     published_identity: tuple[int, int] | None = None
+    temporary_identity: tuple[int, int] | None = None
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         temporary_fd = os.open(temporary_name, flags, 0o600, dir_fd=directory_fd)
+        temporary_stat = os.fstat(temporary_fd)
+        if not stat.S_ISREG(temporary_stat.st_mode):
+            raise ContractError("atomic公開temporaryが通常fileではありません")
+        temporary_identity = (temporary_stat.st_dev, temporary_stat.st_ino)
         with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
             temporary_fd = None
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         rename_noreplace_at(directory_fd, temporary_name, directory_fd, target.name)
-        target_stat = os.stat(target.name, dir_fd=directory_fd, follow_symlinks=False)
-        if not stat.S_ISREG(target_stat.st_mode):
-            raise ContractError("atomic公開targetが通常fileではありません")
-        published_identity = (target_stat.st_dev, target_stat.st_ino)
+        published_identity = temporary_identity
         published = True
+        assert published_identity is not None
+        assert_file_identity_at(directory_fd, target.name, published_identity)
         os.fsync(directory_fd)
         return published_identity
     except Exception as exc:
@@ -546,10 +732,8 @@ def atomic_write_text_noreplace(path: Path, content: str) -> tuple[int, int]:
             setattr(exc, "_storycraft_published_identity", published_identity)
         if temporary_fd is not None:
             os.close(temporary_fd)
-        try:
-            os.unlink(temporary_name, dir_fd=directory_fd)
-        except FileNotFoundError:
-            pass
+        if temporary_identity is not None:
+            unlink_if_identity_at(directory_fd, temporary_name, temporary_identity)
         raise
     finally:
         os.close(directory_fd)
@@ -563,21 +747,6 @@ def assert_file_identity_at(directory_fd: int, name: str, expected_identity: tup
         raise ContractError("公開後のfile identityを検証できません") from exc
     if not stat.S_ISREG(target_stat.st_mode) or (target_stat.st_dev, target_stat.st_ino) != expected_identity:
         raise ContractError("公開後のfileが置換されました")
-
-
-def unlink_if_identity_at(directory_fd: int, name: str, expected_identity: tuple[int, int]) -> bool:
-    """Unlink a regular file only while its inode is still the published inode."""
-    try:
-        target_stat = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-    except OSError:
-        return False
-    if not stat.S_ISREG(target_stat.st_mode) or (target_stat.st_dev, target_stat.st_ino) != expected_identity:
-        return False
-    try:
-        os.unlink(name, dir_fd=directory_fd)
-    except OSError:
-        return False
-    return True
 
 
 def open_nofollow(path: Path, flags: int, mode: int = 0o600) -> int:
@@ -652,20 +821,6 @@ def read_text_at(
                 os.close(descriptor)
     finally:
         os.close(current_fd)
-
-
-def unlink_nofollow(path: Path, *, missing_ok: bool = False) -> None:
-    """Remove one leaf through a no-follow directory descriptor."""
-    target = assert_no_symlink_file_path(path)
-    directory_fd = _open_directory_chain(target.parent, expected_identity=directory_identity(target.parent))
-    try:
-        try:
-            os.unlink(target.name, dir_fd=directory_fd)
-        except FileNotFoundError:
-            if not missing_ok:
-                raise
-    finally:
-        os.close(directory_fd)
 
 
 def assert_within(root: Path, child: Path) -> None:

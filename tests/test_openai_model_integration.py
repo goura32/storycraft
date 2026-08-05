@@ -134,6 +134,9 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 runtime.mkdir(parents=True, exist_ok=True)
                 (runtime / "calls").mkdir()
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+                candidate = Path(temporary) / "candidates/candidate-000001"
+                candidate.mkdir(parents=True)
+                (candidate / "record.json").write_text("{}\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
                     llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
                          "model": "fake-model", "api_key_env": None, "headers_env": {},
@@ -173,6 +176,9 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                 runtime.mkdir(parents=True, exist_ok=True)
                 (runtime / "calls").mkdir()
                 (runtime / "counters.json").write_text(json.dumps(initial_counters()) + "\n", encoding="utf-8")
+                candidate = Path(temporary) / "candidates/candidate-000001"
+                candidate.mkdir(parents=True)
+                (candidate / "record.json").write_text("{}\n", encoding="utf-8")
                 model = OpenAIStoryModel(SimpleNamespace(
                     llm={"ollama_http_boundary": True, "provider": "ollama", "base_url": endpoint,
                          "model": "fake-model", "api_key_env": None, "headers_env": {},
@@ -182,6 +188,11 @@ class OpenAIStoryModelIntegrationTests(unittest.TestCase):
                     retry={"max_attempts": 1},
                     settings_id="settings-000001",
                 ), runtime / "raw_logs", Path(temporary))
+                model.set_call_context(
+                    settings_id="settings-000001",
+                    input_refs=["candidate-000001"],
+                    target_candidate_id="candidate-000001",
+                )
                 response = model.critique_prose("scene_prose", "本文", {"scene": "context"})
                 self.assertEqual(response["decision"], "pass")
                 calls = [json.loads(path.read_text(encoding="utf-8")) for path in (runtime / "calls").glob("*/record.json")]

@@ -38,7 +38,7 @@ recovery、workspace検証、巻公開は共通の決定的導出器で入力gen
 
 ロックの契約（仕様レベル）:
 
-- `run` だけがOSの非ブロッキング排他ロックを取得する。取得中の別 `run` があれば `lock_unavailable` で終了する。
+- `run` だけがworkspace全体のOS非ブロッキング排他ロックを取得する。取得中の別 `run` があれば `lock_unavailable` で終了する。provider境界が取得する`runtime/calls` directoryのseed排他lockは、workspace全体の実行ロックとは別の局所的な監査記録保護である。
 - `status` と `validate` はロックを取得・読取・削除せず、状態を変更しない。
 - PID、取得時刻、run ID、残存lock判定・削除は持たない。プロセス終了後はOSロックが解放される。
 

@@ -148,9 +148,13 @@ flowchart TD
 ## 8. LLM 呼出しと失敗
 LLM 提供者は、構造化工程でCandidateResponseまたはReviewResponseを扱い、場面本文工程では生成・修正のraw textとReviewResponseを扱う9工程（依頼取り込み、初期設計、シリーズ計画、巻計画、章計画、場面計画、場面カード、場面本文、継続性更新）でだけ初期化します。場面本文の生成・修正呼出しには `response_format` を付けません。`status`、`validate`、保留中確定の収束、採用、場面確定、巻公開では初期化しません。
 
-通信失敗、時間切れ、形式不正、意味上の重大な指摘、内部エラーを区別します。形式不正は**形式不正再呼出し上限**までのシード変更再呼出し対象であり、意味上の重大な指摘は修正対象です。通信失敗と時間切れは共通の技術的再試行設定に従って再試行し、上限に達したら `blocked` にします。内部エラーは直ちに `blocked` にします。これらの失敗では応答を候補として採用せず、公開も次工程への進行もしません。再試行は同じ候補を壊さず、回数、シード、結果を記録します。ローカル LLM 専用の V1 では、トークン量、費用、予算、通常の LLM 呼出し数による工程停止や見積りを行いません。形式不正再呼出しと技術的再試行は、費用管理ではなく、不正または未到達の応答を採用しないための安全制御です。
+通信失敗、時間切れ、形式不正、意味上の重大な指摘、内部エラーを区別します。形式不正は**形式不正再呼出し上限**までのシード変更再呼出し対象であり、意味上の重大な指摘は修正対象です。通信失敗と時間切れは共通の技術的再試行設定に従って再試行し、上限に達したら `blocked` にします。内部エラーは直ちに `blocked` にします。これらの失敗では応答を候補として採用せず、公開も次工程への進行もしません。再試行は同じ候補を壊さず、回数、シード、結果を記録します。provider endpointはHTTPのloopbackまたはprivate LANだけを許可し、明示portは1以上65535以下（port `0`は不正）とします。ローカル LLM 専用の V1 では、トークン量、費用、予算、通常の LLM 呼出し数による工程停止や見積りを行いません。形式不正再呼出しと技術的再試行は、費用管理ではなく、不正または未到達の応答を採用しないための安全制御です。
 
 ## 9. 中断と復旧
+LLM 境界の各物理呼出しで使う seed は正の非 bool 整数とし、同一 workspace の全 `runtime/calls/<call-id>/record.json` で一意にします。能力取得と completion は別 seed を使います。provider は HTTP 開始前に `runtime/calls` の全 entry を canonical な call ID と完全な call-record schemaで検証し、既存recordと新規requestの各`input_refs`が既存のcanonical artifactまたはcall recordを参照することも確認します。不正なentry、存在しない参照、既存 record 間の重複、要求 seedとの重複を一つでも検出したら停止します。この走査からHTTP、call record公開までを安定した `runtime/calls` directory descriptorへのOS排他ロックでプロセス間も直列化し、scan→publish競合を許可しません。
+
+filesystemのatomic公開は、temporary file FDの`fstat()`で自分のregular-file identityをrename前に固定し、rename後も同じdirectory FDからそのidentityを検証します。検証後のleaf差し替えを競合者として扱い、競合者のinodeを正本・rollback対象に採用しません。temporary leaf、raw reservation、call record、raw log pairのcleanupは、保持しているowner identityを確認したうえで、元のleaf名を直接`stat`後`unlink`せず、directory-FD相対の隔離entryへno-replaceで移してから移動後identityを再確認します。競合者、非empty directory、隔離後のidentity不一致、または隔離cleanupの失敗時は何も削除せず、競合者・owner・不完全entryを`validate`の診断対象として残します。call recordとraw log pairはこのno-replace契約に従い、`validate` は不正entryや不完全pairを削除せず診断だけを返します。workspace初期化に失敗した未公開stagingも、再帰的pathname削除で競合者の証跡を消さないため削除せず残します。
+
 作業場所の書込み操作は排他的に行います。起動時は、実行状態、参照、保留中の確定、一時保存場所、確定済みの保存場所を検証します。`status` と `validate` は提供者を呼ばない読取り専用操作で、書込みロックを取得・読取・削除しません。
 
 - **継続実行（`run`）**: 健全で一意な保留中確定だけを収束し、次の安全な工程から続ける。

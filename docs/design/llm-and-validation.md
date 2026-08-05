@@ -20,6 +20,11 @@ provider境界ではworkspace rootだけでなく`runtime`とcanonicalな`runtim
 
 各provider anchorはpath順序に依存せず、安定したworkspace root descriptorから`runtime`、`runtime/calls`、`runtime/raw_logs`の順にentry identityを取得してから各descriptorを開きます。既存entryはidentity一致を必須とし、欠落した`raw_logs`だけはruntime descriptor相対のnofollow createを許可します。`raw_dir`に別directoryを指定する低層呼出しはcanonical契約違反として拒否します。seedの既存record走査、HTTP、call record公開は同一workspace内で排他し、並行呼出しのscan→publish競合を許可しません。既存recordはseed比較前に完全なcall-record schemaで検証し、不正recordが一つでもあればfail-closedで停止します。provider endpointのpathは正規化後にちょうど一つの`/v1` suffixを持ち、`/v1/v1`の重複はcanonical pathへ畳み込みます。
 
+seed検証は正の非`bool`整数に限定し、要求seedだけでなく既存record集合内の重複も検出します。`runtime/calls`直下の未知entry、canonicalでないcall ID、record.json以外のleaf、schemaまたはoperationごとのrequest意味が不正なrecordは、seed比較より前に拒否します。既存call recordだけでなく、これから保存するcapability/completion callのoperation、target、重複のないinput_refs、attempt、seed、request/response/transport/validation相関も、最初の能力取得HTTPより前に同じcall-record契約で検証します。既存call recordと新規requestの`input_refs`はartifact registryでID形式を確認し、anchor root descriptorから対応するrecord.jsonの存在を検証します。provider callの直列化はPython thread lockだけに依存せず、anchorが保持する同一calls directory FDへOS排他lockを取得し、seed走査・能力取得・completion・全call record公開をprocess間でも同じ区間に含めます。
+
+provider endpointはHTTPのloopback/private LANに限定し、明示port `0`を拒否します。portが省略された場合だけdefault portを使い、接続先URLとHost headerのauthorityを一致させます。
+
+atomic publishはtemporary fileのopen FDからregular-file identityをrename前に取得します。rename後にtarget pathnameからidentityを再取得して競合者を正本扱いすることは禁止し、保持したtemporary identityを同じdirectory FDから検証します。検証後にleafが差し替わった場合はfail-closedとし、自分のidentityと一致しないleafをrollbackで削除しません。
 
 ### 1.2 決定的応答検証
 

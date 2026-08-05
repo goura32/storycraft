@@ -45,9 +45,12 @@ def pinned_http_request(request: Request) -> Request:
     """
     try:
         parsed = urlsplit(request.full_url)
-        port = parsed.port or 80
+        explicit_port = parsed.port
     except (TypeError, ValueError) as exc:
         raise ContractError("provider endpointのURLが不正です") from exc
+    if explicit_port == 0:
+        raise ContractError("provider endpointのportは1以上でなければなりません")
+    port = explicit_port if explicit_port is not None else 80
     if parsed.scheme != "http" or not parsed.hostname:
         raise ContractError("provider endpointはHTTP URLが必要です")
     if parsed.username is not None or parsed.password is not None:

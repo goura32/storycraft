@@ -31,7 +31,6 @@ from .filesystem_security import (
     open_nofollow,
     owned_directory_fd_path,
     read_text_nofollow,
-    remove_directory_at,
     rename_noreplace_at,
 )
 from .input_normalization import normalize_request, normalize_settings
@@ -191,16 +190,14 @@ def create_workspace(
         _assert_directory_fd_identity(parent, parent_descriptor)
         rename_noreplace_at(parent_descriptor, staging_name, parent_descriptor, root.name)
         os.fsync(parent_descriptor)
+        # staging rename後のidentity再確認（competitor差替え防止）
         _assert_directory_fd_identity(parent, parent_descriptor)
         result = owned_directory_fd_path(staging_descriptor)
         descriptor_transferred = True
         return result
     except Exception:
-        # staging はこの関数だけが作った未公開領域。失敗時に残さない。
-        try:
-            remove_directory_at(parent_descriptor, staging_name)
-        except OSError:
-            pass
+        # 未公開stagingの再帰的pathname削除は、競合者の証跡を消し得る。
+        # stagingは公開されていないため、削除せずvalidate/次回initの診断対象に残す。
         raise
     finally:
         if not descriptor_transferred:
@@ -268,6 +265,10 @@ def _validate_runtime_fixed_paths(root: Path) -> None:
                 entry_stat = os.stat(name, dir_fd=raw_descriptor, follow_symlinks=False)
             except OSError as exc:
                 raise ContractError("runtime/raw_logsのentryを検証できません") from exc
+            # Cleanup directories (.storycraft-cleanup-*) are intentionally left as evidence
+            # of incomplete operations and should be ignored by validation.
+            if name.startswith(".storycraft-cleanup-"):
+                continue
             if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
                 raise ContractError("runtime/raw_logsに通常file以外のentryがあります")
             if name.startswith("."):
@@ -672,6 +673,7 @@ def _validate_endpoint(endpoint: object) -> None:
     if (
         parsed.scheme != "http"
         or not parsed.hostname
+        or (port is not None and port == 0)
         or (port is None and parsed.netloc.endswith(":"))
         or parsed.username is not None
         or parsed.password is not None

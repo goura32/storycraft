@@ -72,7 +72,7 @@ workspace/
 
 ID は採番後に変更しません。
 
-`runtime/raw_logs` は同じstemのJSON/Markdownを必ず一組で保存します。片方だけのpair、temporary entry、symlink、未定義の追加fileはworkspace検証で拒否します。record、run-state、counter、raw logはtemporary fileをfsyncしてから同一directory-handle内でatomic renameします。raw logのJSON/Markdown公開は既存targetを置換しないため、reservation後に同名entryが作られた場合も上書きせずfail-closedで停止します。公開後にも各leafのidentityを同じdirectory FDから再検証し、差替えを検知した場合は競合者を削除せず不完全transactionとして停止します。JSONの公開後にMarkdown書込みが失敗した場合は、当該処理が自分で公開したJSONだけをrollbackします。プロセス中断でreservationと不完全pairが残った場合も、`validate` は削除・rollbackを行わず、証跡を保持したまま不完全transactionとして拒否します。
+`runtime/raw_logs` は同じstemのJSON/Markdownを必ず一組で保存します。片方だけのpair、temporary entry、symlink、未定義の追加fileはworkspace検証で拒否します。record、run-state、counter、raw logはtemporary fileをfsyncし、temporary file FDのregular-file identityを保持してから、同一directory-handle内でatomic renameします。rename後のtarget pathnameから競合者のidentityを採用せず、保持したidentityを同じdirectory FDから検証します。raw logのJSON/Markdown公開は既存targetを置換しないため、reservation後に同名entryが作られた場合も上書きせずfail-closedで停止します。公開後にも各leafのidentityを同じdirectory FDから再検証し、差替えを検知した場合は競合者を削除せず不完全transactionとして停止します。JSONの公開後にMarkdown書込みが失敗した場合は、当該処理が自分で公開したJSONだけを、元のleaf名を直接`stat`後`unlink`せず隔離entryへno-replaceで移したうえでidentityを再検証してrollbackします。移動後に競合者と判定された場合、移動先・元の競合者・不完全pairを削除せず残します。temporary leafとreservationのcleanupも同じfail-closed cleanupを使い、プロセス中断でreservationと不完全pairが残った場合も、`validate` は削除・rollbackを行わず、証跡を保持したまま不完全transactionとして拒否します。
 
 | 種類 | 形式 | カウンタ |
 |---|---|---|

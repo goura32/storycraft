@@ -51,6 +51,8 @@ def _validate_base_url(value: object) -> str:
         raise ContractError("llm.base_urlのURLが不正です") from exc
     if parsed.scheme != "http" or not parsed.netloc:
         raise ContractError("llm.base_urlはhttp URLが必要です")
+    if port == 0:
+        raise ContractError("llm.base_urlのportは1以上でなければなりません")
     if parsed.username is not None or parsed.password is not None:
         raise ContractError("llm.base_urlへcredentialを埋め込むことはできません")
     for name, _value in parse_qsl(parsed.query, keep_blank_values=True):

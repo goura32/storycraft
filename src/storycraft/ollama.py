@@ -6,6 +6,7 @@ one immutable audit record for each physical HTTP call when given a call directo
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -24,6 +25,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from .artifact_ids import reserve_counter_at
 from .artifact_record import validate_call_record
+from .artifact_registry import ARTIFACT_SPECS
 from .endpoint_security import pinned_http_request
 from .error_sanitizer import redact_value
 from .filesystem_security import (
@@ -40,7 +42,8 @@ from .filesystem_security import (
     ensure_directory_at,
     open_directory_at,
     read_text_at,
-    remove_directory_at,
+    remove_empty_directory_if_identity_at,
+    unlink_if_identity_at,
 )
 from .series_contracts import ContractError, EndpointResolutionError, LLMCallError
 
@@ -98,6 +101,11 @@ def _canonical_json(value: Any) -> str:
 def _require_settings_id(settings_id: str | None) -> None:
     if not isinstance(settings_id, str) or re.fullmatch(r"settings-[0-9]{6}", settings_id) is None:
         raise ContractError("call recordを保存するには有効なsettings_idが必要です")
+
+
+def _require_seed(seed: int) -> None:
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 1:
+        raise ContractError("provider callのseedは正の整数でなければなりません")
 
 
 @dataclass
@@ -197,15 +205,67 @@ class _RecordAnchor:
                 pass
 
 
-def _assert_seed_available(directory_fd: int, seed: int) -> None:
-    """Reject a physical provider call seed already persisted in this workspace."""
+def _artifact_record_exists_at(root_descriptor: int, relative: Path) -> bool:
+    """Check one canonical artifact directory through an anchored FD chain."""
+    current_fd = os.dup(root_descriptor)
+    try:
+        for part in relative.parts:
+            try:
+                entry = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return False
+            if stat.S_ISLNK(entry.st_mode) or not stat.S_ISDIR(entry.st_mode):
+                raise ContractError("artifact referenceのdirectoryが通常directoryではありません")
+            next_fd = open_directory_at(
+                current_fd,
+                (part,),
+                expected_identity=(entry.st_dev, entry.st_ino),
+            )
+            os.close(current_fd)
+            current_fd = next_fd
+        try:
+            record = os.stat("record.json", dir_fd=current_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(record.st_mode) or not stat.S_ISREG(record.st_mode):
+            raise ContractError("artifact referenceのrecord.jsonが通常fileではありません")
+        return True
+    finally:
+        os.close(current_fd)
+
+
+def _assert_reference_exists(root_descriptor: int, reference: str) -> None:
+    special_paths = (
+        (r"call-[0-9]{6}", Path("runtime/calls")),
+        (r"candidate-[0-9]{6}", Path("candidates")),
+        (r"review-[0-9]{6}", Path("reviews")),
+    )
+    candidates: list[Path] = []
+    for pattern, directory in special_paths:
+        if re.fullmatch(pattern, reference):
+            candidates.append(directory / reference)
+            break
+    else:
+        for spec in ARTIFACT_SPECS.values():
+            try:
+                spec.match_id(reference)
+            except ContractError:
+                continue
+            candidates.append(spec.directory_for(reference))
+    if not candidates or not any(_artifact_record_exists_at(root_descriptor, candidate) for candidate in candidates):
+        raise ContractError(f"call recordのinput_refsが存在しないartifactを参照しています: {reference}")
+
+
+def _assert_seed_available(directory_fd: int, root_descriptor: int, seed: int) -> None:
+    """Reject malformed, duplicate, or already-used physical call seeds."""
     try:
         entries = os.listdir(directory_fd)
     except OSError as exc:
         raise ContractError("call record directoryを列挙できません") from exc
+    seen_seeds: set[int] = set()
     for name in entries:
         if re.fullmatch(r"call-[0-9]{6}", name) is None:
-            continue
+            raise ContractError("call record directoryに不正なentryがあります")
         try:
             call_descriptor = os.open(
                 name,
@@ -213,14 +273,63 @@ def _assert_seed_available(directory_fd: int, seed: int) -> None:
                 dir_fd=directory_fd,
             )
             try:
+                if set(os.listdir(call_descriptor)) != {"record.json"}:
+                    raise ContractError("既存call recordの配置が不正です")
                 record = json.loads(read_text_at(call_descriptor, Path("record.json")))
             finally:
                 os.close(call_descriptor)
             validated = validate_call_record(name, record)
-        except (OSError, json.JSONDecodeError, ContractError) as exc:
+        except Exception as exc:
             raise ContractError("既存call recordのseedを検証できません") from exc
-        if validated["seed"] == seed:
+        existing_seed = validated["seed"]
+        for reference in validated["input_refs"]:
+            _assert_reference_exists(root_descriptor, reference)
+        target_reference = validated["target_candidate_id"]
+        if target_reference is not None:
+            _assert_reference_exists(root_descriptor, target_reference)
+        if existing_seed in seen_seeds:
+            raise ContractError("既存call record間でseedが重複しています")
+        seen_seeds.add(existing_seed)
+        if existing_seed == seed:
             raise ContractError("provider callのseedが既存物理callと重複しています")
+
+
+def _validate_prospective_call(
+    *,
+    operation: str,
+    endpoint: str,
+    model: str,
+    settings_id: str | None,
+    target_candidate_id: str | None,
+    input_refs: list[str] | None,
+    technical_attempt: int,
+    format_attempt: int,
+    seed: int,
+    request: str | None,
+    response: str | None,
+    transport: str,
+    validation: dict[str, Any],
+) -> None:
+    """Apply the persisted call-record contract before any provider HTTP."""
+    record = {
+        "schema_version": 1,
+        "call_id": "call-000001",
+        "operation": operation,
+        "role": "provider",
+        "target_candidate_id": target_candidate_id,
+        "input_refs": [] if input_refs is None else input_refs,
+        "technical_attempt": technical_attempt,
+        "format_attempt": format_attempt,
+        "seed": seed,
+        "endpoint": endpoint,
+        "model": model,
+        "settings_id": settings_id,
+        "request": request,
+        "response": response,
+        "transport": transport,
+        "validation": validation,
+    }
+    validate_call_record("call-000001", record)
 
 
 def _write_record(
@@ -265,6 +374,7 @@ def _write_record(
         except FileExistsError as exc:
             raise ContractError("call counterのrecord directoryが既に存在します") from exc
         target_name = call_id
+        target_directory_identity: tuple[int, int] | None = None
         record_identity: tuple[int, int] | None = None
         try:
             target_descriptor = os.open(
@@ -272,6 +382,10 @@ def _write_record(
                 os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
                 dir_fd=anchor.directory_descriptor,
             )
+            target_stat = os.fstat(target_descriptor)
+            if not stat.S_ISDIR(target_stat.st_mode):
+                raise ContractError("call record directoryが通常directoryではありません")
+            target_directory_identity = (target_stat.st_dev, target_stat.st_ino)
             try:
                 redacted_request = redact_value(request)
                 redacted_response = redact_value(response)
@@ -293,6 +407,7 @@ def _write_record(
                     "transport": transport,
                     "validation": validation,
                 }
+                validate_call_record(call_id, record)
                 record_identity = atomic_write_text_noreplace(
                     directory_fd_path(target_descriptor) / "record.json",
                     _canonical_json(record) + "\n",
@@ -305,8 +420,8 @@ def _write_record(
             return call_id
         except Exception as error:
             record_identity = getattr(error, "_storycraft_published_identity", record_identity)
-            remove_target = False
-            if record_identity is None:
+            removed_record = record_identity is None
+            if record_identity is not None and target_directory_identity is not None:
                 try:
                     probe_descriptor = os.open(
                         target_name,
@@ -314,30 +429,19 @@ def _write_record(
                         dir_fd=anchor.directory_descriptor,
                     )
                     try:
-                        remove_target = not os.listdir(probe_descriptor)
+                        probe_stat = os.fstat(probe_descriptor)
+                        if stat.S_ISDIR(probe_stat.st_mode) and (probe_stat.st_dev, probe_stat.st_ino) == target_directory_identity:
+                            removed_record = unlink_if_identity_at(probe_descriptor, "record.json", record_identity)
                     finally:
                         os.close(probe_descriptor)
                 except OSError:
-                    remove_target = False
-            else:
-                try:
-                    probe_descriptor = os.open(
-                        target_name,
-                        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-                        dir_fd=anchor.directory_descriptor,
-                    )
-                    try:
-                        assert_file_identity_at(probe_descriptor, "record.json", record_identity)
-                        remove_target = True
-                    finally:
-                        os.close(probe_descriptor)
-                except (OSError, ContractError):
-                    remove_target = False
-            if remove_target:
-                try:
-                    remove_directory_at(anchor.directory_descriptor, target_name)
-                except OSError:
-                    pass
+                    removed_record = False
+            if target_directory_identity is not None and removed_record:
+                remove_empty_directory_if_identity_at(
+                    anchor.directory_descriptor,
+                    target_name,
+                    target_directory_identity,
+                )
             raise
     finally:
         if owns_anchor:
@@ -357,6 +461,21 @@ def _capability(
     record_anchor: _RecordAnchor,
 ) -> int:
     url = f"{base_url}/models/{quote(model, safe='')}"
+    _validate_prospective_call(
+        operation="model_capability",
+        endpoint=base_url,
+        model=model,
+        settings_id=settings_id,
+        target_candidate_id=None,
+        input_refs=[],
+        technical_attempt=technical_attempt,
+        format_attempt=format_attempt,
+        seed=seed,
+        request=None,
+        response=None,
+        transport="failure",
+        validation={"result": "not_applicable", "checks": [], "failure_code": "connection_error"},
+    )
     raw = ""
     try:
         with urlopen(Request(url, method="GET"), timeout=30) as response:
@@ -418,10 +537,30 @@ def _generate_with_anchor_impl(
     record_anchor: _RecordAnchor,
 ) -> dict[str, Any] | str:
     """Invoke the non-streaming OpenAI-compatible structured or prose endpoint."""
+    _require_seed(seed)
     base_url = normalized_v1_base_url(endpoint)
+    _validate_prospective_call(
+        operation=operation,
+        endpoint=base_url,
+        model=model,
+        settings_id=settings_id,
+        target_candidate_id=target_candidate_id,
+        input_refs=input_refs,
+        technical_attempt=technical_attempt,
+        format_attempt=format_attempt,
+        seed=seed,
+        request="pending-provider-request",
+        response="pending-provider-response",
+        transport="success",
+        validation={"result": "valid", "checks": [], "failure_code": None},
+    )
+    for reference in input_refs or []:
+        _assert_reference_exists(record_anchor.root_descriptor, reference)
+    if target_candidate_id is not None:
+        _assert_reference_exists(record_anchor.root_descriptor, target_candidate_id)
     capability_seed = seed + 1
-    _assert_seed_available(record_anchor.directory_descriptor, capability_seed)
-    _assert_seed_available(record_anchor.directory_descriptor, seed)
+    _assert_seed_available(record_anchor.directory_descriptor, record_anchor.root_descriptor, capability_seed)
+    _assert_seed_available(record_anchor.directory_descriptor, record_anchor.root_descriptor, seed)
     context_length = _capability(base_url, model, call_record_dir=call_record_dir,
                                  technical_attempt=technical_attempt, format_attempt=format_attempt, seed=capability_seed,
                                  settings_id=settings_id, workspace_root=workspace_root, record_anchor=record_anchor)
@@ -443,6 +582,21 @@ def _generate_with_anchor_impl(
     if schema is not None:
         body_value["response_format"] = {"type": "json_schema", "json_schema": {"name": "storycraft_response", "strict": True, "schema": schema}}
     body = _canonical_json(body_value)
+    _validate_prospective_call(
+        operation=operation,
+        endpoint=base_url,
+        model=model,
+        settings_id=settings_id,
+        target_candidate_id=target_candidate_id,
+        input_refs=input_refs,
+        technical_attempt=technical_attempt,
+        format_attempt=format_attempt,
+        seed=seed,
+        request=body,
+        response="pending-provider-response",
+        transport="success",
+        validation={"result": "valid", "checks": [], "failure_code": None},
+    )
     raw = ""
     try:
         request = Request(f"{base_url}/chat/completions", data=body.encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
@@ -508,9 +662,22 @@ def _generate_with_anchor_impl(
 
 
 def _generate_with_anchor(*args: Any, **kwargs: Any) -> dict[str, Any] | str:
-    """Serialize seed check, provider calls, and their immutable records."""
+    """Serialize seed check, provider calls, and their immutable records across processes."""
+    anchor = kwargs.get("record_anchor")
+    if not isinstance(anchor, _RecordAnchor):
+        raise ContractError("provider callにはrecord anchorが必要です")
     with _SEED_RESERVATION_LOCK:
-        return _generate_with_anchor_impl(*args, **kwargs)
+        try:
+            fcntl.flock(anchor.directory_descriptor, fcntl.LOCK_EX)
+        except OSError as exc:
+            raise ContractError("call record directoryのseed lockを取得できません") from exc
+        try:
+            return _generate_with_anchor_impl(*args, **kwargs)
+        finally:
+            try:
+                fcntl.flock(anchor.directory_descriptor, fcntl.LOCK_UN)
+            except OSError:
+                pass
 
 
 def generate(
@@ -540,6 +707,7 @@ def generate(
     if workspace_root is None:
         raise ContractError("call recordを保存するにはworkspace_rootが必要です")
     _require_settings_id(settings_id)
+    _require_seed(seed)
     anchor = _RecordAnchor.open(
         Path(workspace_root),
         Path(call_record_dir),

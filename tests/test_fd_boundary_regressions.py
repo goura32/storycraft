@@ -212,6 +212,42 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             finally:
                 client.close()
 
+    def test_identity_cleanup_does_not_remove_competitor_after_identity_probe(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            target = parent / "leaf"
+            target.write_text("owner", encoding="utf-8")
+            directory_fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                owner_stat = os.stat("leaf", dir_fd=directory_fd, follow_symlinks=False)
+                expected = (owner_stat.st_dev, owner_stat.st_ino)
+                original_stat = filesystem_module.os.stat
+                original_unlink = filesystem_module.os.unlink
+                injected = False
+
+                def stat_then_replace(name, *args, **kwargs):
+                    nonlocal injected
+                    result = original_stat(name, *args, **kwargs)
+                    if name == "leaf" and kwargs.get("dir_fd") == directory_fd and not injected:
+                        original_unlink("leaf", dir_fd=directory_fd)
+                        descriptor = os.open(
+                            "leaf",
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                            0o600,
+                            dir_fd=directory_fd,
+                        )
+                        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                            handle.write("competitor")
+                        injected = True
+                    return result
+
+                with patch.object(filesystem_module.os, "stat", side_effect=stat_then_replace):
+                    removed = filesystem_module.unlink_if_identity_at(directory_fd, "leaf", expected)
+                self.assertFalse(removed)
+                self.assertEqual(target.read_text(encoding="utf-8"), "competitor")
+            finally:
+                os.close(directory_fd)
+
     def test_workspace_returns_fd_anchored_root_after_parent_alias_swap(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -296,6 +332,26 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
                     parent.rename(external)
                 if backup.exists():
                     backup.rename(parent)
+
+    def test_atomic_publish_rejects_interstitial_leaf_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "record.json"
+            original_rename = filesystem_module.rename_noreplace_at
+            swapped = False
+
+            def swap_after_rename(source_fd, source_name, destination_fd, destination_name):
+                nonlocal swapped
+                original_rename(source_fd, source_name, destination_fd, destination_name)
+                if not swapped:
+                    swapped = True
+                    published = filesystem_module.directory_fd_path(destination_fd) / destination_name
+                    published.unlink()
+                    published.write_text('{"attacker":true}\n', encoding="utf-8")
+
+            with patch.object(filesystem_module, "rename_noreplace_at", side_effect=swap_after_rename):
+                with self.assertRaises(ContractError):
+                    filesystem_module.atomic_write_text_noreplace(target, "{\"owner\":true}\n")
+            self.assertEqual(target.read_text(encoding="utf-8"), '{"attacker":true}\n')
 
     def test_call_record_published_leaf_swap_is_rejected_without_deleting_competitor(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -476,7 +532,11 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
                             CallRecord(kind="generate", phase="probe", ref="probe", attempt=1, seed=1, content="ok"),
                             [{"role": "user", "content": "probe"}],
                         )
-                self.assertEqual(list((root / "runtime/raw_logs").iterdir()), [])
+                # Cleanup directories (.storycraft-cleanup-*) are intentionally left as evidence
+                # of incomplete operations. Verify only that no published files remain.
+                remaining = list((root / "runtime/raw_logs").iterdir())
+                published = [p for p in remaining if not p.name.startswith(".storycraft-cleanup-")]
+                self.assertEqual(published, [])
             finally:
                 client.close()
 
@@ -677,6 +737,10 @@ class DescriptorBoundaryRegressionTests(unittest.TestCase):
             pinned = pinned_http_request(request)
         self.assertEqual(pinned.full_url, "http://127.0.0.1:11434/v1/models/probe")
         self.assertEqual(pinned.get_header("Host"), "local.test:11434")
+
+    def test_provider_rejects_explicit_zero_port(self) -> None:
+        with self.assertRaisesRegex(ContractError, "port"):
+            pinned_http_request(Request("http://local.test:0/v1/models/probe"))
 
     def test_provider_opener_disables_environment_proxy(self) -> None:
         proxy_handlers = [handler for handler in _HTTP_OPENER.handlers if isinstance(handler, ProxyHandler)]

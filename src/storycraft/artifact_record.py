@@ -122,6 +122,11 @@ def validate_call_record(call_id: str, record: object) -> dict[str, Any]:
     refs = record["input_refs"]
     if not isinstance(refs, list) or len(refs) != len(set(refs)) or not all(isinstance(item, str) and item for item in refs):
         raise ContractError("call recordのinput_refsが不正です")
+    if record["operation"] == "model_capability":
+        if target is not None or refs or record["request"] is not None:
+            raise ContractError("model_capability call recordのrequest/参照が不正です")
+    elif not isinstance(record["request"], str) or not record["request"]:
+        raise ContractError("completion call recordのrequestが不正です")
     for field in ("technical_attempt", "format_attempt", "seed"):
         if not isinstance(record[field], int) or isinstance(record[field], bool) or record[field] < 1:
             raise ContractError(f"call recordの{field}が不正です")

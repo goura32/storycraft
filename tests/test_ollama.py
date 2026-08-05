@@ -231,6 +231,187 @@ class OllamaTests(unittest.TestCase):
             )
         self.assertEqual(Handler.paths, [])
 
+    def test_rejects_non_positive_or_bool_seed_before_http(self) -> None:
+        for seed in (0, -1, True):
+            Handler.paths = []
+            with self.assertRaisesRegex(ContractError, "seed"):
+                generate(
+                    self.endpoint,
+                    "m",
+                    "p",
+                    {"type": "object"},
+                    call_record_dir=self.records,
+                    workspace_root=self.workspace_root,
+                    settings_id="settings-000001",
+                    seed=seed,
+                )
+            self.assertEqual(Handler.paths, [])
+
+    def test_rejects_malformed_new_call_operation_before_http(self) -> None:
+        for operation in ("bogus", "review"):
+            Handler.paths = []
+            with self.assertRaises(ContractError):
+                generate(
+                    self.endpoint,
+                    "m",
+                    "p",
+                    {"type": "object"},
+                    call_record_dir=self.records,
+                    workspace_root=self.workspace_root,
+                    settings_id="settings-000001",
+                    seed=10 if operation == "bogus" else 20,
+                    operation=operation,
+                )
+            self.assertEqual(Handler.paths, [])
+
+    def test_rejects_duplicate_new_call_input_refs_before_http(self) -> None:
+        generate(
+            self.endpoint,
+            "m",
+            "p",
+            {"type": "object"},
+            call_record_dir=self.records,
+            workspace_root=self.workspace_root,
+            settings_id="settings-000001",
+            seed=1,
+        )
+        Handler.paths = []
+        with self.assertRaises(ContractError):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                seed=10,
+                input_refs=["call-000001", "call-000001"],
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_duplicate_existing_record_seed_before_http(self) -> None:
+        generate(
+            self.endpoint,
+            "m",
+            "p",
+            {"type": "object"},
+            call_record_dir=self.records,
+            workspace_root=self.workspace_root,
+            settings_id="settings-000001",
+            seed=1,
+        )
+        records = sorted(self.records.glob("call-*/record.json"))
+        first = json.loads(records[0].read_text(encoding="utf-8"))
+        second = json.loads(records[1].read_text(encoding="utf-8"))
+        second["seed"] = first["seed"]
+        records[1].write_text(json.dumps(second) + "\n", encoding="utf-8")
+        Handler.paths = []
+        with self.assertRaisesRegex(ContractError, "重複"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                seed=20,
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_malformed_existing_call_entry_before_http(self) -> None:
+        malformed = self.records / "not-a-call"
+        malformed.mkdir(parents=True)
+        (malformed / "record.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaisesRegex(ContractError, "不正"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_semantically_malformed_capability_record_before_http(self) -> None:
+        generate(
+            self.endpoint,
+            "m",
+            "p",
+            {"type": "object"},
+            call_record_dir=self.records,
+            workspace_root=self.workspace_root,
+            settings_id="settings-000001",
+        )
+        capability_path = next(
+            path for path in self.records.glob("call-*/record.json")
+            if json.loads(path.read_text(encoding="utf-8"))["operation"] == "model_capability"
+        )
+        capability = json.loads(capability_path.read_text(encoding="utf-8"))
+        capability["request"] = "malformed"
+        capability_path.write_text(json.dumps(capability) + "\n", encoding="utf-8")
+        Handler.paths = []
+        with self.assertRaisesRegex(ContractError, "検証"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                seed=20,
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_missing_input_reference_before_http(self) -> None:
+        generate(
+            self.endpoint,
+            "m",
+            "p",
+            {"type": "object"},
+            call_record_dir=self.records,
+            workspace_root=self.workspace_root,
+            settings_id="settings-000001",
+        )
+        completion_path = next(
+            path for path in self.records.glob("call-*/record.json")
+            if json.loads(path.read_text(encoding="utf-8"))["operation"] != "model_capability"
+        )
+        completion = json.loads(completion_path.read_text(encoding="utf-8"))
+        completion["input_refs"] = ["candidate-999999"]
+        completion_path.write_text(json.dumps(completion) + "\n", encoding="utf-8")
+        Handler.paths = []
+        with self.assertRaisesRegex(ContractError, "存在しないartifact"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                seed=20,
+            )
+        self.assertEqual(Handler.paths, [])
+
+    def test_rejects_missing_input_reference_on_new_call_before_http(self) -> None:
+        with self.assertRaisesRegex(ContractError, "存在しないartifact"):
+            generate(
+                self.endpoint,
+                "m",
+                "p",
+                {"type": "object"},
+                call_record_dir=self.records,
+                workspace_root=self.workspace_root,
+                settings_id="settings-000001",
+                input_refs=["candidate-999999"],
+            )
+        self.assertEqual(Handler.paths, [])
+
     def test_rejects_call_records_outside_workspace_root_before_http(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"

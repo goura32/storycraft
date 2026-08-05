@@ -67,13 +67,6 @@ def _entry_exists_at(directory_fd: int, name: str) -> bool:
     return True
 
 
-def _unlink_at(directory_fd: int, name: str) -> None:
-    try:
-        os.unlink(name, dir_fd=directory_fd)
-    except FileNotFoundError:
-        pass
-
-
 def _raw_filename_component(value: str) -> str:
     """監査メタを保ったまま、ファイル名だけを移植可能な文字列へ正規化する。"""
     # 進捗refの総数（v:1/4 等）はログ/JSONメタには残し、ファイル名では省く。
@@ -417,6 +410,8 @@ class LLMClient:
                     json_name = f"{stem}.json"
                     markdown_name = f"{stem}.md"
                     reservation_name = f".{stem}.reserve"
+                    reservation_identity: tuple[int, int] | None = None
+                    descriptor: int | None = None
                     json_path = raw_view / json_name
                     markdown_path = raw_view / markdown_name
                     try:
@@ -426,12 +421,17 @@ class LLMClient:
                             0o600,
                             dir_fd=raw_descriptor,
                         )
+                        reservation_stat = os.fstat(descriptor)
+                        if not stat.S_ISREG(reservation_stat.st_mode):
+                            raise ContractError("raw reservationが通常fileではありません")
+                        reservation_identity = (reservation_stat.st_dev, reservation_stat.st_ino)
                         with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                            descriptor = None
                             handle.write(str(os.getpid()))
                             handle.flush()
                             os.fsync(handle.fileno())
                         if _entry_exists_at(raw_descriptor, json_name) or _entry_exists_at(raw_descriptor, markdown_name):
-                            _unlink_at(raw_descriptor, reservation_name)
+                            unlink_if_identity_at(raw_descriptor, reservation_name, reservation_identity)
                             idx += 1
                             continue
                         break
@@ -439,7 +439,10 @@ class LLMClient:
                         idx += 1
                         continue
                     except Exception:
-                        _unlink_at(raw_descriptor, reservation_name)
+                        if descriptor is not None:
+                            os.close(descriptor)
+                        if reservation_identity is not None:
+                            unlink_if_identity_at(raw_descriptor, reservation_name, reservation_identity)
                         raise
 
                 json_published = False
@@ -492,7 +495,8 @@ class LLMClient:
                         unlink_if_identity_at(raw_descriptor, markdown_name, markdown_identity)
                     raise
                 finally:
-                    _unlink_at(raw_descriptor, reservation_name)
+                    if reservation_identity is not None:
+                        unlink_if_identity_at(raw_descriptor, reservation_name, reservation_identity)
             finally:
                 if temporary_anchor:
                     _close_descriptors(raw_descriptor, runtime_anchor_descriptor, root_descriptor)
