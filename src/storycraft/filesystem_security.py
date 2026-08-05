@@ -684,6 +684,19 @@ def atomic_write_text(path: Path, content: str) -> None:
         finally:
             os.close(check_fd)
         os.rename(temporary_name, target.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        # rename後に公開されたtargetのidentityを再確認（post-rename TOCTOU防止）
+        target_fd = os.open(target.name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd)
+        try:
+            target_stat = os.fstat(target_fd)
+            if not stat.S_ISREG(target_stat.st_mode) or (target_stat.st_dev, target_stat.st_ino) != temporary_identity:
+                # 公開済みcorrupted fileをbest-effortでunlink
+                try:
+                    unlink_if_identity_at(directory_fd, target.name, temporary_identity)
+                except Exception:
+                    pass
+                raise ContractError("atomic公開targetがrename後に置換されました")
+        finally:
+            os.close(target_fd)
         os.fsync(directory_fd)
     except Exception:
         if temporary_fd is not None:
@@ -730,6 +743,12 @@ def atomic_write_text_noreplace(path: Path, content: str) -> tuple[int, int]:
         if published:
             setattr(exc, "_storycraft_published_target", True)
             setattr(exc, "_storycraft_published_identity", published_identity)
+            # 公開済みfileのidentity検証失敗時はbest-effortでunlink（corrupted内容除去）
+            if published_identity is not None:
+                try:
+                    unlink_if_identity_at(directory_fd, target.name, published_identity)
+                except Exception:
+                    pass
         if temporary_fd is not None:
             os.close(temporary_fd)
         if temporary_identity is not None:
